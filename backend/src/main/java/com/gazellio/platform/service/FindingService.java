@@ -4,6 +4,8 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +31,20 @@ public class FindingService {
     public List<VulnerabilityView> library(String q,String severity,Boolean kev){
         Severity sev=null; if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")) try{sev=Severity.valueOf(severity.toUpperCase());}catch(Exception ignored){}
         String query=q==null||q.isBlank()?null:q;
-        return vulns.search(query,sev,kev).stream().map(view::vulnerability).toList();
+        Specification<VulnerabilityDefinition> spec=(root,cq,cb)->cb.conjunction();
+        if(query!=null){
+            String pattern="%"+query.toLowerCase(Locale.ROOT)+"%";
+            spec=spec.and((root,cq,cb)->cb.or(
+                    cb.like(cb.lower(root.get("cveId")),pattern),
+                    cb.like(cb.lower(root.get("titleZh")),pattern),
+                    cb.like(cb.lower(root.get("titleEn")),pattern),
+                    cb.like(cb.lower(root.get("vendor")),pattern),
+                    cb.like(cb.lower(root.get("product")),pattern)));
+        }
+        if(sev!=null){ Severity selected=sev; spec=spec.and((root,cq,cb)->cb.equal(root.get("severity"),selected)); }
+        if(kev!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("kev"),kev));
+        Sort sort=Sort.by(Sort.Order.desc("kev"),Sort.Order.desc("cvss"),Sort.Order.desc("updatedAt"));
+        return vulns.findAll(spec,sort).stream().map(view::vulnerability).toList();
     }
     public VulnerabilityView vulnerability(String cve){ return view.vulnerability(vulns.findById(cve).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND))); }
 

@@ -22,10 +22,12 @@ public class ThreatIntelSyncService {
     private final VulnerabilityDefinitionRepository repo;
     private final RestClient.Builder rest;
     @Value("${app.cisa-kev-url}") private String cisaUrl;
+    @Value("${app.cisa-kev-sync-on-startup:false}") private boolean syncOnStartupEnabled;
 
     @Async
     @EventListener(ApplicationReadyEvent.class)
     public void syncOnStartup(){
+        if (!syncOnStartupEnabled) return;
         try { syncCisaKev(); } catch(Exception ignored) {}
     }
 
@@ -42,9 +44,9 @@ public class ThreatIntelSyncService {
         while(it.hasNext()){
             JsonNode x=it.next(); String cve=text(x,"cveID"); if(cve==null)continue;
             VulnerabilityDefinition v=repo.findById(cve).orElseGet(()->VulnerabilityDefinition.builder().cveId(cve).cvss(null).severity(Severity.HIGH).patchAvailable(false).build());
-            String vendor=text(x,"vendorProject"),product=text(x,"product"),name=text(x,"vulnerabilityName");
+            String vendor=limit(text(x,"vendorProject"),160),product=limit(text(x,"product"),160),name=limit(text(x,"vulnerabilityName"),500);
             v.setVendor(vendor); v.setProduct(product); v.setKev(true); v.setRansomwareKnown("Known".equalsIgnoreCase(text(x,"knownRansomwareCampaignUse")));
-            v.setTitleEn(name==null?cve:name); v.setTitleZh((vendor==null?"":vendor+" ")+(product==null?"":product+" ")+"已知利用漏洞（"+cve+"）");
+            v.setTitleEn(name==null?cve:name); v.setTitleZh(limit((vendor==null?"":vendor+" ")+(product==null?"":product+" ")+"已知利用漏洞（"+cve+"）",500));
             v.setDescriptionEn(text(x,"shortDescription")); v.setDescriptionZh("该漏洞已被列入 CISA 已知被利用漏洞目录，需结合资产影响范围和厂商修复方案优先处置。");
             v.setReferenceUrl("https://www.cisa.gov/known-exploited-vulnerabilities-catalog");
             try{String d=text(x,"dateAdded");if(d!=null)v.setPublishedDate(LocalDate.parse(d));}catch(Exception ignored){}
@@ -54,4 +56,5 @@ public class ThreatIntelSyncService {
         return n;
     }
     private static String text(JsonNode n,String k){return n.hasNonNull(k)?n.get(k).asText():null;}
+    private static String limit(String value,int max){return value!=null&&value.length()>max?value.substring(0,max):value;}
 }
