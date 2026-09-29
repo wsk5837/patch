@@ -24,6 +24,7 @@ public class ScanJob {
     @Column(nullable=false) @Builder.Default private Integer findingsCount = 0;
     private Long requestedById;
     private Long remediationTaskId;
+    private Long automationRunId;
     @Column(length=120) private String requestedByName;
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
     private Instant startedAt;

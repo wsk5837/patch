@@ -181,6 +181,9 @@ public class WorkOrderService {
         audit.log("CHANGE", change.getId(), "CREATE",
                 "安全事件触发生产变更工单 " + change.getChangeNo(),
                 "Production change created from security incident " + change.getChangeNo(), actor());
+        audit.log("SECURITY_INCIDENT", incident.getId(), "TRIGGER_CHANGE",
+                incident.getIncidentNo()+" 已触发变更 "+change.getChangeNo(),
+                incident.getIncidentNo()+" triggered change "+change.getChangeNo(), actor());
         return view.change(change);
     }
 

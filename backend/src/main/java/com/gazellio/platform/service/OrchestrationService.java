@@ -115,7 +115,7 @@ public class OrchestrationService {
 
         for (Asset target : targets) {
             deploymentTargets.save(DeploymentTarget.builder()
-                    .deploymentId(dep.getId()).assetId(target.getId()).status("RUNNING").progress(1)
+                    .deploymentId(dep.getId()).runId(run.getId()).assetId(target.getId()).status("RUNNING").progress(1)
                     .startedAt(Instant.now()).message("Agent connected; pre-check queued").build());
         }
 
@@ -143,6 +143,36 @@ public class OrchestrationService {
                 "启动补丁自动化执行 " + run.getRunNo() + " · " + env.name(),
                 "Started patch automation " + run.getRunNo() + " · " + env.name(),
                 currentUser.name());
+        return view.run(run);
+    }
+
+    @Transactional
+    public RunView startRetestRun(RemediationTask task,String environment){
+        EnvironmentType env;
+        try{env=EnvironmentType.valueOf(environment.toUpperCase(Locale.ROOT));}
+        catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid environment");}
+        Asset source=assets.findById(task.getAssetId()).orElseThrow();
+        List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env);
+        if(targets.isEmpty()&&source.getEnvironment()==env)targets=List.of(source);
+        if(targets.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No mapped retest target");
+        OrchestrationTemplate template=templates.findByCode("PATCH-RETEST").orElseThrow();
+        OrchestrationRun run=runs.save(OrchestrationRun.builder().runNo("RET-"+System.currentTimeMillis())
+                .templateId(template.getId()).taskId(task.getId()).environment(env.name())
+                .ring("Verification only").status(RunStatus.RUNNING).currentStep(1).progress(1).startedAt(Instant.now()).build());
+        for(Asset target:targets){
+            deploymentTargets.save(DeploymentTarget.builder().runId(run.getId()).assetId(target.getId())
+                    .status("RUNNING").progress(1).startedAt(Instant.now()).message("读取补丁安装状态与验证基线").build());
+        }
+        for(OrchestrationTemplateStep step:templateSteps.findByTemplateIdOrderByStepOrderAsc(template.getId())){
+            boolean first=step.getStepOrder()==1;
+            runSteps.save(OrchestrationRunStep.builder().runId(run.getId()).stepOrder(step.getStepOrder()).code(step.getCode())
+                    .nameZh(step.getNameZh()).nameEn(step.getNameEn()).status(first?RunStepStatus.RUNNING:RunStepStatus.WAITING)
+                    .startedAt(first?Instant.now():null).messageZh(first?"正在读取验证基线":"等待复测")
+                    .messageEn(first?"Reading validation baseline":"Waiting for retest").build());
+        }
+        task.setLatestRunId(run.getId());task.setUpdatedAt(Instant.now());tasks.save(task);
+        audit.log("RUN",run.getId(),"RETEST_START",env.name()+" 环境补丁效果复测已启动",
+                "Patch effect retest started for "+env.name(),currentUser.name());
         return view.run(run);
     }
 
@@ -203,11 +233,10 @@ public class OrchestrationService {
                     (int) Math.round((currentStepOrder * 100.0) / steps.size())));
             runs.save(run);
 
-            deployments.findById(run.getDeploymentId()).ifPresent(d -> {
-                d.setProgress(run.getProgress());
-                deployments.save(d);
+            if(run.getDeploymentId()!=null)deployments.findById(run.getDeploymentId()).ifPresent(d -> {
+                d.setProgress(run.getProgress());deployments.save(d);
             });
-            for (DeploymentTarget target : deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(run.getDeploymentId())) {
+            for (DeploymentTarget target : targetsForRun(run)) {
                 target.setStatus("RUNNING");
                 target.setProgress(run.getProgress());
                 target.setMessage(next.getNameZh() + " · " + run.getProgress() + "%");
@@ -223,7 +252,12 @@ public class OrchestrationService {
         run.setCurrentStep(steps.size());
         runs.save(run);
 
-        PatchDeployment dep = deployments.findById(run.getDeploymentId()).orElse(null);
+        OrchestrationTemplate template=templates.findById(run.getTemplateId()).orElse(null);
+        boolean retest=template!=null&&"RETEST".equalsIgnoreCase(template.getType());
+
+        PatchDeployment dep = run.getDeploymentId() == null
+                ? null
+                : deployments.findById(run.getDeploymentId()).orElse(null);
         RemediationTask task = run.getTaskId() == null
                 ? null
                 : tasks.findById(run.getTaskId()).orElse(null);
@@ -234,10 +268,20 @@ public class OrchestrationService {
             dep.setSuccessCount(dep.getTargetCount());
             dep.setCompletedAt(Instant.now());
             deployments.save(dep);
-            for (DeploymentTarget target : deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(dep.getId())) {
+            for (DeploymentTarget target : targetsForRun(run)) {
                 target.setStatus("SUCCEEDED"); target.setProgress(100); target.setCompletedAt(Instant.now());
                 target.setMessage("补丁安装、健康检查与证据回写完成"); deploymentTargets.save(target);
             }
+        }
+
+        if(retest){
+            for(DeploymentTarget target:targetsForRun(run)){
+                target.setStatus("SUCCEEDED");target.setProgress(100);target.setCompletedAt(Instant.now());
+                target.setMessage("安装状态、版本标识、漏洞探针与应用健康验证通过");deploymentTargets.save(target);
+            }
+            audit.log("RUN",run.getId(),"RETEST_SUCCEEDED","补丁效果复测完成，未重复下载或安装补丁",
+                    "Patch effect retest completed without package download or reinstall","Gazellio Scanner");
+            return;
         }
 
         if (task != null) {
@@ -282,11 +326,11 @@ public class OrchestrationService {
         OrchestrationRun r = requireRun(id);
         r.setStatus(RunStatus.PAUSED);
         runs.save(r);
-        deployments.findById(r.getDeploymentId()).ifPresent(d -> {
+        if(r.getDeploymentId()!=null)deployments.findById(r.getDeploymentId()).ifPresent(d -> {
             d.setStatus(DeploymentStatus.PAUSED);
             deployments.save(d);
         });
-        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("PAUSED");t.setMessage("执行已暂停");deploymentTargets.save(t);});
+        targetsForRun(r).forEach(t->{t.setStatus("PAUSED");t.setMessage("执行已暂停");deploymentTargets.save(t);});
         return view.run(r);
     }
 
@@ -298,17 +342,21 @@ public class OrchestrationService {
         }
         r.setStatus(RunStatus.RUNNING);
         runs.save(r);
-        deployments.findById(r.getDeploymentId()).ifPresent(d -> {
+        if(r.getDeploymentId()!=null)deployments.findById(r.getDeploymentId()).ifPresent(d -> {
             d.setStatus(DeploymentStatus.RUNNING);
             deployments.save(d);
         });
-        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("RUNNING");t.setMessage("执行已恢复");deploymentTargets.save(t);});
+        targetsForRun(r).forEach(t->{t.setStatus("RUNNING");t.setMessage("执行已恢复");deploymentTargets.save(t);});
         return view.run(r);
     }
 
     @Transactional
     public RunView rollback(Long id){
         OrchestrationRun r = requireRun(id);
+        OrchestrationTemplate template=templates.findById(r.getTemplateId()).orElse(null);
+        if(template!=null&&"RETEST".equalsIgnoreCase(template.getType())){
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Retest runs do not install packages and cannot be rolled back");
+        }
         r.setStatus(RunStatus.ROLLED_BACK);
         r.setCompletedAt(Instant.now());
         runs.save(r);
@@ -337,12 +385,12 @@ public class OrchestrationService {
             tasks.save(task);
         }
 
-        deployments.findById(r.getDeploymentId()).ifPresent(d -> {
+        if(r.getDeploymentId()!=null)deployments.findById(r.getDeploymentId()).ifPresent(d -> {
             d.setStatus(DeploymentStatus.ROLLED_BACK);
             d.setCompletedAt(Instant.now());
             deployments.save(d);
         });
-        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("ROLLED_BACK");t.setCompletedAt(Instant.now());t.setMessage("已恢复至回退点");deploymentTargets.save(t);});
+        targetsForRun(r).forEach(t->{t.setStatus("ROLLED_BACK");t.setCompletedAt(Instant.now());t.setMessage("已恢复至回退点");deploymentTargets.save(t);});
 
         for (OrchestrationRunStep s : runSteps.findByRunIdOrderByStepOrderAsc(r.getId())) {
             if (s.getStatus() == RunStepStatus.RUNNING || s.getStatus() == RunStepStatus.SUCCEEDED) {
@@ -364,5 +412,11 @@ public class OrchestrationService {
     private OrchestrationRun requireRun(Long id){
         return runs.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    private List<DeploymentTarget> targetsForRun(OrchestrationRun run){
+        List<DeploymentTarget> targets=deploymentTargets.findByRunIdOrderByAssetIdAsc(run.getId());
+        if(targets.isEmpty()&&run.getDeploymentId()!=null)targets=deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(run.getDeploymentId());
+        return targets;
     }
 }

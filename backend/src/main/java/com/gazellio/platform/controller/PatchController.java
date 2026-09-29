@@ -20,6 +20,7 @@ public class PatchController {
     @GetMapping("/{id}/findings") public List<FindingView> findings(@PathVariable Long id){return service.findings(id);}
     @GetMapping("/servers") public List<PatchServerView> servers(){return service.servers();}
     @GetMapping("/deployments") public List<DeploymentView> deployments(){return service.deployments();}
+    @GetMapping("/calendar") public List<PatchCalendarEventView> calendar(@RequestParam(required=false) String month){return service.calendar(month);}
 
     @PreAuthorize("hasAnyRole('ADMIN','SECURITY','OPS')")
     @PostMapping

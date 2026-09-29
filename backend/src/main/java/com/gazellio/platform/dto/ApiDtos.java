@@ -54,7 +54,8 @@ public final class ApiDtos {
 
     public record ScanJobView(Long id, String jobNo, String name, String scanType, String targetType, String targetValue,
                               String credentialType, String targetCve, String status, Integer progress, Integer findingsCount,
-                              String requestedByName, Long remediationTaskId, String createdAt, String startedAt, String completedAt) {}
+                              String requestedByName, Long remediationTaskId, Long automationRunId, String createdAt,
+                              String startedAt, String completedAt, String errorMessage) {}
 
     public record AgentView(Long id, String agentKey, String hostname, String ipAddress, String osName, String version,
                             String status, Long assetId, String lastHeartbeatAt) {}
@@ -71,7 +72,16 @@ public final class ApiDtos {
                             String titleZh, String titleEn, String downloadUrl, String checksum, Double sizeMb,
                             boolean rebootRequired, String status, String source, String publishedDate,
                             List<String> cves, long affectedAssets, String applicabilityRule, String signatureStatus,
-                            String supersedes, String releaseNotesZh, String releaseNotesEn) {}
+                            String supersedes, String releaseNotesZh, String releaseNotesEn, String signatureIssuer,
+                            String signatureFingerprint, String integrityVerifiedAt, String vendorAdvisoryUrl,
+                            String prerequisites, String installCommand, String uninstallCommand, String testEvidence,
+                            String knownIssues) {}
+
+    public record PatchCalendarEventView(String eventId, String date, String endAt, String eventType,
+                                         Long incidentId, String incidentNo, Long taskId, String taskNo,
+                                         Long changeOrderId, String changeNo, Long patchId, String patchCode,
+                                         String cveId, String assetName, String businessService, String severity,
+                                         String priority, String status, long hoursRemaining) {}
 
     public record TaskView(Long id, String taskNo, Long findingId, String cveId, String titleZh, String titleEn,
                            Long assetId, String assetCode, String assetName, String environment, String businessService,

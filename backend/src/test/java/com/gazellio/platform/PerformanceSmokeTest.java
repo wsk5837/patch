@@ -11,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Duration;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.gazellio.platform.model.Enums.TaskStage.RELEASE_APPROVAL;
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,6 +47,7 @@ class PerformanceSmokeTest {
         findings.library(null, null, null);
         findings.list(null, null, null);
         patches.list();
+        patches.calendar(null);
         tasks.list();
         approvals.list();
         orchestration.templates();
@@ -58,6 +61,7 @@ class PerformanceSmokeTest {
         assertTimeout(TARGET, () -> findings.library(null, null, null));
         assertTimeout(TARGET, () -> findings.list(null, null, null));
         assertTimeout(TARGET, () -> patches.list());
+        assertTimeout(TARGET, () -> patches.calendar(null));
         assertTimeout(TARGET, () -> tasks.list());
         assertTimeout(TARGET, () -> approvals.list());
         assertTimeout(TARGET, () -> orchestration.templates());
@@ -72,6 +76,15 @@ class PerformanceSmokeTest {
     void vulnerabilityPatchAndWorkOrderLinksFormARealDrillDownChain() {
         assertTrue(findings.library(null, null, null).stream()
                 .allMatch(v -> v.patchAvailable() == !v.patches().isEmpty()));
+        assertTrue(findings.library(null, null, null).stream()
+                .anyMatch(v -> v.patchAvailable() && !v.patches().isEmpty()));
+        assertTrue(patches.list().stream().allMatch(p -> p.signatureIssuer() != null
+                && p.signatureFingerprint() != null && p.testEvidence() != null));
+
+        Set<String> priorities = workOrders.incidents().stream()
+                .map(SecurityIncidentView::priority).collect(Collectors.toSet());
+        assertTrue(priorities.containsAll(Set.of("P1", "P2", "P3", "P4")));
+        assertFalse(patches.calendar(null).isEmpty());
 
         SecurityIncidentView incident = workOrders.incidents().stream()
                 .filter(i -> i.remediationTaskId() == null && i.patchCandidates() != null && !i.patchCandidates().isEmpty())
@@ -90,5 +103,20 @@ class PerformanceSmokeTest {
         assertNotNull(change.approvalId());
         assertEquals(incident.id(), change.incidentId());
         assertEquals(change.id(), taskRepository.findById(task.getId()).orElseThrow().getChangeOrderId());
+    }
+
+    @Test
+    void patchInstallationAndRetestUseDifferentAutomationTemplates() {
+        var templateViews = orchestration.templates();
+        var install = templateViews.stream().filter(t -> "PATCH-STANDARD".equals(t.code())).findFirst().orElseThrow();
+        var retest = templateViews.stream().filter(t -> "PATCH-RETEST".equals(t.code())).findFirst().orElseThrow();
+        Set<String> installCodes = install.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
+        Set<String> retestCodes = retest.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
+
+        assertTrue(installCodes.containsAll(Set.of("DOWNLOAD", "INSTALL", "HEALTH", "EVIDENCE")));
+        assertFalse(installCodes.contains("RESCAN"));
+        assertTrue(retestCodes.containsAll(Set.of("INSTALL_STATE", "VERSION_PROBE", "VULN_PROBE", "EFFECT_CHECK")));
+        assertFalse(retestCodes.contains("DOWNLOAD"));
+        assertFalse(retestCodes.contains("INSTALL"));
     }
 }

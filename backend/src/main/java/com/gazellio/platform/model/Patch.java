@@ -22,6 +22,15 @@ public class Patch {
     @Column(length=160) private String supersedes;
     @Column(columnDefinition="TEXT") private String releaseNotesZh;
     @Column(columnDefinition="TEXT") private String releaseNotesEn;
+    @Column(length=240) private String signatureIssuer;
+    @Column(length=160) private String signatureFingerprint;
+    private Instant integrityVerifiedAt;
+    @Column(length=1000) private String vendorAdvisoryUrl;
+    @Column(columnDefinition="TEXT") private String prerequisites;
+    @Column(columnDefinition="TEXT") private String installCommand;
+    @Column(columnDefinition="TEXT") private String uninstallCommand;
+    @Column(columnDefinition="TEXT") private String testEvidence;
+    @Column(columnDefinition="TEXT") private String knownIssues;
     private Double sizeMb;
     @Column(nullable=false) @Builder.Default private boolean rebootRequired = false;
     @Column(nullable=false, length=30) @Builder.Default private String status = "AVAILABLE";

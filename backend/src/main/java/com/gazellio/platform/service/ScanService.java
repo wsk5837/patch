@@ -31,11 +31,14 @@ public class ScanService {
     private final WorkOrderService workOrderService;
     private final SecurityIncidentRepository incidents;
     private final ChangeWorkOrderRepository changeOrders;
+    private final OrchestrationRunRepository runs;
     private final CurrentUserService currentUser;
     private final AuditService audit;
     private final ViewService view;
 
     public List<ScanJobView> jobs(){ return scans.findTop100ByOrderByCreatedAtDesc().stream().map(view::scan).toList(); }
+    public ScanJobView job(Long id){return view.scan(scans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND)));}
+    public List<FindingView> jobFindings(Long id){scans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));return view.findingViews(findings.findByScanJobId(id));}
     public List<AgentView> agentList(){ return agents.findAllByOrderByLastHeartbeatAtDesc().stream().map(view::agent).toList(); }
 
     @Transactional
@@ -54,6 +57,11 @@ public class ScanService {
             if(j.getStatus()!=ScanStatus.RUNNING) continue;
             int next=Math.min(94,j.getProgress()+ThreadLocalRandom.current().nextInt(12,27));
             if(next<90){ j.setProgress(next); scans.save(j); continue; }
+            if(j.getAutomationRunId()!=null){
+                OrchestrationRun validation=runs.findById(j.getAutomationRunId()).orElse(null);
+                if(validation!=null&&validation.getStatus()==RunStatus.FAILED){j.setStatus(ScanStatus.FAILED);j.setErrorMessage("Retest validation failed");j.setCompletedAt(Instant.now());scans.save(j);continue;}
+                if(validation!=null&&validation.getStatus()!=RunStatus.SUCCEEDED){j.setProgress(95);scans.save(j);continue;}
+            }
             try {
                 int count=performScan(j);
                 j.setFindingsCount(count); j.setProgress(100); j.setStatus(ScanStatus.COMPLETED); j.setCompletedAt(Instant.now()); scans.save(j);
@@ -99,8 +107,8 @@ public class ScanService {
     private List<String> candidateCves(Asset a){
         String os=(a.getOsName()+" "+a.getName()).toLowerCase(Locale.ROOT);
         LinkedHashSet<String> out=new LinkedHashSet<>();
-        if(os.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2021-34527"); }
-        if(os.contains("red hat")||os.contains("ubuntu")||os.contains("rocky")||os.contains("linux")){ out.add("CVE-2024-6387"); out.add("CVE-2024-5535"); out.add("CVE-2023-38545"); out.add("CVE-2024-1086"); }
+        if(os.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2024-43451"); out.add("CVE-2021-34527"); }
+        if(os.contains("red hat")||os.contains("ubuntu")||os.contains("rocky")||os.contains("linux")){ out.add("CVE-2024-6387"); out.add("CVE-2024-6386"); out.add("CVE-2024-5535"); out.add("CVE-2023-38545"); out.add("CVE-2023-0465"); out.add("CVE-2022-0778"); out.add("CVE-2024-1086"); }
         if(os.contains("jenkins")) out.add("CVE-2024-23897");
         if(os.contains("tomcat")) out.add("CVE-2025-24813");
         if(os.contains("teamcity")) out.add("CVE-2024-27198");
@@ -126,9 +134,7 @@ public class ScanService {
             if(f.getStatus()==FindingStatus.EXEMPTED && f.getExemptionExpiresAt()!=null && !f.getExemptionExpiresAt().isAfter(Instant.now())) { f.setStatus(FindingStatus.REOPENED); f.setExemptedAt(null); f.setExemptionExpiresAt(null); f.setExemptionReason(null); }
         }
         Finding saved=findings.save(f);
-        if(v.isKev()||v.getSeverity()==Severity.CRITICAL||v.getSeverity()==Severity.HIGH){
-            workOrderService.ensureForFinding(saved);
-        }
+        workOrderService.ensureForFinding(saved);
         return saved;
     }
 
@@ -144,7 +150,8 @@ public class ScanService {
     public ScanJobView createTaskRescan(RemediationTask task,String environment){
         Asset source=assets.findById(task.getAssetId()).orElseThrow();
         Finding finding=findings.findById(task.getFindingId()).orElseThrow();
-        ScanJob j=scans.save(ScanJob.builder().jobNo("SCN-"+System.currentTimeMillis()).name("Targeted rescan · "+finding.getCveId()).scanType("TARGETED_RESCAN_"+environment).targetType("SERVICE_ENV").targetValue(source.getBusinessService()+"|"+environment).credentialType("AGENT").targetCve(finding.getCveId()).status(ScanStatus.QUEUED).progress(0).requestedByName(currentUser.name()).remediationTaskId(task.getId()).build());
+        RunView retest=orchestrationService.startRetestRun(task,environment);
+        ScanJob j=scans.save(ScanJob.builder().jobNo("SCN-"+System.currentTimeMillis()).name("Patch effect retest · "+finding.getCveId()).scanType("TARGETED_RESCAN_"+environment).targetType("SERVICE_ENV").targetValue(source.getBusinessService()+"|"+environment).credentialType("AGENT").targetCve(finding.getCveId()).status(ScanStatus.QUEUED).progress(0).requestedByName(currentUser.name()).remediationTaskId(task.getId()).automationRunId(retest.id()).build());
         audit.log("SCAN",j.getId(),"CREATE_RESCAN",environment+" 环境漏洞复测已创建","Created "+environment+" targeted vulnerability rescan",currentUser.name());
         return view.scan(j);
     }

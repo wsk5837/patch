@@ -50,6 +50,19 @@ public class ViewService {
                 p.getSignatureStatus(), p.isRebootRequired(), p.getStatus());
     }
 
+    private static boolean patchMatches(VulnerabilityDefinition vulnerability, Patch patch) {
+        String vulnerabilityProduct = normalize(vulnerability.getProduct());
+        String patchProduct = normalize(patch.getProduct());
+        if (vulnerabilityProduct.isBlank() || patchProduct.isBlank()) return false;
+        return vulnerabilityProduct.equals(patchProduct)
+                || vulnerabilityProduct.contains(patchProduct)
+                || patchProduct.contains(vulnerabilityProduct);
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
     public List<AssetView> assetViews(List<Asset> rows) {
         if (rows.isEmpty()) return List.of();
         Map<Long, Long> openCounts = findings.countOpenByAsset(CLOSED_FINDING_STATUSES).stream()
@@ -83,10 +96,19 @@ public class ViewService {
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
         }
+        List<Patch> catalog = patches.findAllByOrderByPublishedDateDesc();
+        for (VulnerabilityDefinition vulnerability : rows) {
+            if (patchCandidatesByCve.containsKey(vulnerability.getCveId())) continue;
+            List<Patch> matched = catalog.stream().filter(p -> patchMatches(vulnerability, p)).limit(4).toList();
+            if (!matched.isEmpty()) {
+                patchCodesByCve.put(vulnerability.getCveId(), matched.stream().map(Patch::getPatchId).toList());
+                patchCandidatesByCve.put(vulnerability.getCveId(), matched.stream().map(ViewService::patchCandidate).toList());
+            }
+        }
         return rows.stream().map(v -> new VulnerabilityView(
                 v.getCveId(), v.getTitleZh(), v.getTitleEn(), v.getVendor(), v.getProduct(),
                 v.getDescriptionZh(), v.getDescriptionEn(), v.getCvss(), s(v.getSeverity()), v.isKev(),
-                v.isRansomwareKnown(), v.isPatchAvailable(), v.getReferenceUrl(), s(v.getPublishedDate()),
+                v.isRansomwareKnown(), !patchCandidatesByCve.getOrDefault(v.getCveId(), List.of()).isEmpty(), v.getReferenceUrl(), s(v.getPublishedDate()),
                 s(v.getKevDueDate()), affected.getOrDefault(v.getCveId(), 0L),
                 patchCodesByCve.getOrDefault(v.getCveId(), List.of()),
                 patchCandidatesByCve.getOrDefault(v.getCveId(), List.of())
@@ -116,6 +138,15 @@ public class ViewService {
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
         }
+        List<Patch> catalog = patches.findAllByOrderByPublishedDateDesc();
+        for (VulnerabilityDefinition vulnerability : vulnerabilityById.values()) {
+            if (patchCandidatesByCve.containsKey(vulnerability.getCveId())) continue;
+            List<Patch> matched = catalog.stream().filter(p -> patchMatches(vulnerability, p)).limit(4).toList();
+            if (!matched.isEmpty()) {
+                patchCodesByCve.put(vulnerability.getCveId(), matched.stream().map(Patch::getPatchId).toList());
+                patchCandidatesByCve.put(vulnerability.getCveId(), matched.stream().map(ViewService::patchCandidate).toList());
+            }
+        }
 
         return rows.stream().map(f -> {
             VulnerabilityDefinition v = vulnerabilityById.get(f.getCveId());
@@ -142,8 +173,8 @@ public class ViewService {
     public ScanJobView scan(ScanJob x) {
         return new ScanJobView(x.getId(), x.getJobNo(), x.getName(), x.getScanType(), x.getTargetType(),
                 x.getTargetValue(), x.getCredentialType(), x.getTargetCve(), s(x.getStatus()), x.getProgress(),
-                x.getFindingsCount(), x.getRequestedByName(), x.getRemediationTaskId(), s(x.getCreatedAt()),
-                s(x.getStartedAt()), s(x.getCompletedAt()));
+                x.getFindingsCount(), x.getRequestedByName(), x.getRemediationTaskId(), x.getAutomationRunId(),
+                s(x.getCreatedAt()), s(x.getStartedAt()), s(x.getCompletedAt()), x.getErrorMessage());
     }
 
     public AgentView agent(ScanAgent x) {
@@ -169,7 +200,10 @@ public class ViewService {
                 p.getStatus(), p.getSource(), s(p.getPublishedDate()),
                 linksByPatch.getOrDefault(p.getId(), List.of()).stream().map(PatchCve::getCveId).toList(),
                 affected.getOrDefault(p.getId(), 0L), p.getApplicabilityRule(), p.getSignatureStatus(),
-                p.getSupersedes(), p.getReleaseNotesZh(), p.getReleaseNotesEn()
+                p.getSupersedes(), p.getReleaseNotesZh(), p.getReleaseNotesEn(), p.getSignatureIssuer(),
+                p.getSignatureFingerprint(), s(p.getIntegrityVerifiedAt()), p.getVendorAdvisoryUrl(),
+                p.getPrerequisites(), p.getInstallCommand(), p.getUninstallCommand(), p.getTestEvidence(),
+                p.getKnownIssues()
         )).toList();
     }
 
@@ -345,6 +379,7 @@ public class ViewService {
         Map<Long, List<OrchestrationRunStep>> stepsByRun = group(
                 runSteps.findByRunIdInOrderByRunIdAscStepOrderAsc(runIds), OrchestrationRunStep::getRunId);
         Map<Long, List<DeploymentTargetView>> targetsByDeployment = deploymentTargetViews(deploymentIds);
+        Map<Long, List<DeploymentTargetView>> targetsByRun = runTargetViews(runIds);
         return rows.stream().map(r -> {
             OrchestrationTemplate template = templateById.get(r.getTemplateId());
             RemediationTask task = r.getTaskId() == null ? null : taskById.get(r.getTaskId());
@@ -358,7 +393,8 @@ public class ViewService {
                     r.getTaskId(), task == null ? null : task.getTaskNo(), r.getDeploymentId(), r.getEnvironment(),
                     r.getRing(), s(r.getStatus()), r.getCurrentStep(), r.getProgress(), s(r.getCreatedAt()),
                     s(r.getStartedAt()), s(r.getCompletedAt()), r.getFailureReason(), steps,
-                    targetsByDeployment.getOrDefault(r.getDeploymentId(), List.of())
+                    targetsByRun.getOrDefault(r.getId(),
+                            targetsByDeployment.getOrDefault(r.getDeploymentId(), List.of()))
             );
         }).toList();
     }
@@ -396,6 +432,23 @@ public class ViewService {
         return rows.stream().map(target -> {
             Asset asset = assetById.get(target.getAssetId());
             return new AbstractMap.SimpleEntry<>(target.getDeploymentId(), new DeploymentTargetView(
+                    target.getId(), target.getAssetId(), asset == null ? null : asset.getAssetCode(),
+                    asset == null ? null : asset.getName(), asset == null ? null : s(asset.getEnvironment()),
+                    target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
+                    target.getMessage()
+            ));
+        }).collect(Collectors.groupingBy(Map.Entry::getKey, LinkedHashMap::new,
+                Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+    }
+
+    private Map<Long, List<DeploymentTargetView>> runTargetViews(Set<Long> runIds) {
+        if (runIds.isEmpty()) return Map.of();
+        List<DeploymentTarget> rows = deploymentTargets.findByRunIdInOrderByRunIdAscAssetIdAsc(runIds);
+        Set<Long> assetIds = rows.stream().map(DeploymentTarget::getAssetId).collect(Collectors.toSet());
+        Map<Long, Asset> assetById = assetIds.isEmpty() ? Map.of() : index(assets.findAllById(assetIds), Asset::getId);
+        return rows.stream().map(target -> {
+            Asset asset = assetById.get(target.getAssetId());
+            return new AbstractMap.SimpleEntry<>(target.getRunId(), new DeploymentTargetView(
                     target.getId(), target.getAssetId(), asset == null ? null : asset.getAssetCode(),
                     asset == null ? null : asset.getName(), asset == null ? null : s(asset.getEnvironment()),
                     target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),

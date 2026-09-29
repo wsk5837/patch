@@ -57,6 +57,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedPatchServers();
         seedAgentsAndScans();
         seedFindingsTasksApprovals();
+        seedLowerSeverityFindings();
         seedWorkOrders();
         seedTemplatesAndRuns();
         seedDeploymentTargets();
@@ -133,13 +134,13 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedVulnerabilities() throws IOException {
-        if (vulns.count() > 0) return;
         List<VulnerabilityDefinition> rows=new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(new ClassPathResource("seed-vulnerabilities.csv").getInputStream(), StandardCharsets.UTF_8))) {
             br.readLine(); String line;
             while((line=br.readLine())!=null){
                 String[] x=line.split(",",9);
                 if(x.length<9) continue;
+                if(vulns.existsById(x[0])) continue;
                 double cvss=Double.parseDouble(x[3]);
                 rows.add(VulnerabilityDefinition.builder().cveId(x[0]).vendor(x[1]).product(x[2]).cvss(cvss).severity(Severity.valueOf(x[4]))
                     .kev(Boolean.parseBoolean(x[5])).patchAvailable(Boolean.parseBoolean(x[6])).titleZh(x[7]).titleEn(x[8])
@@ -154,7 +155,7 @@ public class DemoDataSeeder implements CommandLineRunner {
     private void seedPatches(){
         addPatch("KB5072180","Microsoft","Windows Server","2026-09","Windows Server 2022 九月安全更新","Windows Server 2022 September security update",740.0,true,List.of("CVE-2025-29824","CVE-2025-33053"));
         addPatch("RHEL-RHSA-2026:7211","Red Hat","OpenSSH","9.4p2","RHEL OpenSSH 安全更新","RHEL OpenSSH security update",18.5,false,List.of("CVE-2024-6387","CVE-2024-6386"));
-        addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535"));
+        addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535","CVE-2023-0465","CVE-2022-0778"));
         addPatch("apache-tomcat-11.0.12","Apache","Tomcat","11.0.12","Apache Tomcat 安全版本更新","Apache Tomcat security release",14.7,true,List.of("CVE-2025-24813"));
         addPatch("jenkins-2.479.3","Jenkins","Jenkins","2.479.3","Jenkins LTS 安全更新","Jenkins LTS security update",92.0,true,List.of("CVE-2024-23897"));
         addPatch("fortios-7.4.8","Fortinet","FortiOS","7.4.8","FortiOS 安全固件更新","FortiOS security firmware update",640.0,true,List.of("CVE-2024-21762"));
@@ -164,7 +165,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("curl-8.10.1","cURL","curl","8.10.1","curl 安全更新","curl security update",4.8,false,List.of("CVE-2023-38545"));
         addPatch("confluence-8.5.15","Atlassian","Confluence","8.5.15","Confluence LTS 安全更新","Confluence LTS security update",980.0,true,List.of("CVE-2023-22518","CVE-2022-26134"));
         addPatch("linux-kernel-6.8.0-52","Linux Kernel","Kernel","6.8.0-52","Linux Kernel 安全更新","Linux Kernel security update",136.0,true,List.of("CVE-2024-1086"));
-        addPatch("KB5074122","Microsoft","Windows Server","2026-10","Windows TCP/IP 与 LDAP 累积安全更新","Windows TCP/IP and LDAP cumulative security update",812.0,true,List.of("CVE-2024-49112","CVE-2024-38063","CVE-2024-49138"));
+        addPatch("KB5074122","Microsoft","Windows Server","2026-10","Windows TCP/IP 与 LDAP 累积安全更新","Windows TCP/IP and LDAP cumulative security update",812.0,true,List.of("CVE-2024-49112","CVE-2024-38063","CVE-2024-49138","CVE-2024-43451"));
         addPatch("sharepoint-se-16.0.10417","Microsoft","SharePoint","16.0.10417","SharePoint Server 紧急安全更新","SharePoint Server emergency security update",1280.0,true,List.of("CVE-2025-53770","CVE-2025-53771"));
         addPatch("xz-5.6.1-3","Red Hat","xz Utils","5.6.1-3","xz Utils 安全回退更新","xz Utils security rollback update",3.4,false,List.of("CVE-2024-3094"));
         addPatch("panos-11.1.2-h3","Palo Alto Networks","PAN-OS","11.1.2-h3","PAN-OS GlobalProtect 热修复","PAN-OS GlobalProtect hotfix",950.0,true,List.of("CVE-2024-3400"));
@@ -190,11 +191,28 @@ public class DemoDataSeeder implements CommandLineRunner {
         p.setDownloadUrl("https://patch.gazellio.local/vendor/"+code.replace(":","-").toLowerCase(Locale.ROOT));
         p.setReleaseNotesZh("包含安全修复、安装前检查、完整性校验、失败回滚与重启策略。建议先在测试和预生产环境验证。");
         p.setReleaseNotesEn("Includes security fixes, pre-checks, integrity validation, rollback and restart policy. Validate in test and pre-production first.");
+        p.setSignatureIssuer(vendor+" Code Signing CA");
+        p.setSignatureFingerprint("SHA256:"+UUID.nameUUIDFromBytes((code+vendor).getBytes(StandardCharsets.UTF_8)).toString().replace("-","").toUpperCase(Locale.ROOT));
+        p.setIntegrityVerifiedAt(Instant.now().minus(Duration.ofHours(2)));
+        p.setVendorAdvisoryUrl(vendorAdvisory(vendor,cves.getFirst()));
+        p.setPrerequisites("Agent 1.6.0+；磁盘可用空间不少于补丁包大小的 3 倍；已生成回退点；业务健康探针可用；维护窗口已确认。");
+        p.setInstallCommand("gazellio-agent patch install --package \""+code+"\" --verify-signature --rollback-point auto");
+        p.setUninstallCommand("gazellio-agent patch rollback --package \""+code+"\" --restore-point latest");
+        p.setTestEvidence("包完整性：SHA-256 校验通过\n数字签名：可信链验证通过\n适用性：操作系统/产品版本/架构匹配\n测试安装：成功\n服务健康检查：通过\n漏洞定向复测：未再检出");
+        p.setKnownIssues(reboot?"安装完成后需要在维护窗口内重启；集群节点须按批次滚动执行。":"未发现阻断性已知问题；安装前仍需确认进程占用和依赖版本。");
         p.setUpdatedAt(Instant.now());p=patches.save(p);
         for(String c:cves){
             if(!patchCves.existsByPatchIdAndCveId(p.getId(),c))patchCves.save(PatchCve.builder().patchId(p.getId()).cveId(c).build());
             vulns.findById(c).ifPresent(v->{v.setPatchAvailable(true);v.setUpdatedAt(Instant.now());vulns.save(v);});
         }
+    }
+
+    private String vendorAdvisory(String vendor,String cve){
+        String encoded=cve==null?"":cve;
+        if("Microsoft".equalsIgnoreCase(vendor))return "https://msrc.microsoft.com/update-guide/vulnerability/"+encoded;
+        if("Red Hat".equalsIgnoreCase(vendor))return "https://access.redhat.com/security/cve/"+encoded;
+        if("Apache".equalsIgnoreCase(vendor))return "https://security.apache.org/";
+        return "https://nvd.nist.gov/vuln/detail/"+encoded;
     }
 
     private void seedPatchServers(){
@@ -256,6 +274,21 @@ public class DemoDataSeeder implements CommandLineRunner {
         }
     }
 
+    private void seedLowerSeverityFindings(){
+        ScanJob scan=scans.findTop100ByOrderByCreatedAtDesc().stream().filter(s->s.getStatus()==ScanStatus.COMPLETED).findFirst().orElse(null);
+        if(scan==null)return;
+        String[][] rows={{"APP-PROD-02","CVE-2024-6386"},{"WIN-UAT-01","CVE-2024-43451"},{"WEB-TEST-01","CVE-2023-0465"},{"APP-TEST-01","CVE-2022-0778"}};
+        for(String[] row:rows){
+            Asset asset=assets.findByAssetCode(row[0]).orElse(null);VulnerabilityDefinition vulnerability=vulns.findById(row[1]).orElse(null);
+            if(asset==null||vulnerability==null||findings.findByAssetIdAndCveId(asset.getId(),row[1]).isPresent())continue;
+            double score=Math.min(10.0,(vulnerability.getCvss()==null?4.0:vulnerability.getCvss())+(asset.getCriticality()-3)*0.25);
+            findings.save(Finding.builder().assetId(asset.getId()).cveId(row[1]).scanJobId(scan.getId()).status(FindingStatus.CONFIRMED)
+                    .riskScore(score).ownerId(asset.getOwnerId()).ownerName(asset.getOwnerName())
+                    .evidence("authenticated-package-version:"+vulnerability.getProduct()).firstSeenAt(Instant.now().minus(Duration.ofDays(8)))
+                    .lastSeenAt(Instant.now().minus(Duration.ofHours(6))).build());
+        }
+    }
+
     private void seedWorkOrders(){
         for(Finding f:findings.findAll()){
             Asset asset=assets.findById(f.getAssetId()).orElse(null);
@@ -274,7 +307,7 @@ public class DemoDataSeeder implements CommandLineRunner {
             SecurityIncident incident=incidents.findByFindingId(f.getId()).orElseGet(()->incidents.save(SecurityIncident.builder()
                     .incidentNo("SEC-MIG-"+String.format("%06d",f.getId())).externalTicketNo("AITSM-SEC-"+String.format("%06d",f.getId()))
                     .findingId(f.getId()).assetId(f.getAssetId()).priority(priority).ownerId(f.getOwnerId()).ownerName(f.getOwnerName())
-                    .dueAt(task!=null&&task.getDueAt()!=null?task.getDueAt():Instant.now().plus(Duration.ofDays(priority.equals("P1")?3:priority.equals("P2")?7:30))).build()));
+                    .dueAt(task!=null&&task.getDueAt()!=null?task.getDueAt():Instant.now().plus(Duration.ofDays(priority.equals("P1")?3:priority.equals("P2")?7:priority.equals("P3")?30:90))).build()));
             incident.setStatus(incidentStatus);incident.setRemediationTaskId(task==null?null:task.getId());incident.setUpdatedAt(Instant.now());
             if(f.getStatus()==FindingStatus.EXEMPTED)incident.setDecisionReason(f.getExemptionReason());
             if(f.getStatus()==FindingStatus.FALSE_POSITIVE)incident.setDecisionReason(f.getFalsePositiveReason());
@@ -331,6 +364,22 @@ public class DemoDataSeeder implements CommandLineRunner {
                 new String[]{"VULN_CLOSE","关闭漏洞实例","Close vulnerability finding"}
             ));
         }
+        ensureExecutionTemplate("PATCH-STANDARD","标准补丁安装编排","Standard Patch Installation","PATCH",4,List.of(
+                new String[]{"PRECHECK","执行前检查","Pre-check"},new String[]{"SNAPSHOT","快照与回退点","Snapshot & rollback point"},
+                new String[]{"DOWNLOAD","获取补丁包","Acquire package"},new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},
+                new String[]{"INSTALL","安装补丁","Install patch"},new String[]{"RESTART","服务/主机重启","Service/host restart"},
+                new String[]{"HEALTH","应用健康检查","Application health check"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
+        ensureExecutionTemplate("PATCH-EMERGENCY","紧急补丁安装编排","Emergency Patch Installation","PATCH",3,List.of(
+                new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"DOWNLOAD","获取已批准补丁","Acquire approved package"},
+                new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},new String[]{"INSTALL","安装补丁","Install patch"},
+                new String[]{"HEALTH","关键探针验证","Critical probe validation"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
+        ensureExecutionTemplate("PATCH-RETEST","补丁效果复测","Patch Effect Retest","RETEST",1,List.of(
+                new String[]{"CONNECT","连接目标与读取基线","Connect target and read baseline"},
+                new String[]{"INSTALL_STATE","校验补丁安装状态","Validate installed patch state"},
+                new String[]{"VERSION_PROBE","校验版本与修复标识","Validate version and remediation marker"},
+                new String[]{"VULN_PROBE","执行漏洞定向探测","Run targeted vulnerability probe"},
+                new String[]{"EFFECT_CHECK","验证应用健康与修复效果","Validate application health and remediation effect"},
+                new String[]{"EVIDENCE","归档复测证据","Archive retest evidence"}));
         if(runs.count()==0){
             OrchestrationTemplate tpl=templates.findByCode("PATCH-STANDARD").orElseThrow(); RemediationTask task=tasks.findTop200ByOrderByUpdatedAtDesc().stream().filter(t->t.getStage()==TaskStage.PROD_PATCH).findFirst().orElse(null);
             if(task!=null){
@@ -343,6 +392,16 @@ public class DemoDataSeeder implements CommandLineRunner {
                     runSteps.save(OrchestrationRunStep.builder().runId(run.getId()).stepOrder(s.getStepOrder()).code(s.getCode()).nameZh(s.getNameZh()).nameEn(s.getNameEn()).status(st).startedAt(st!=RunStepStatus.WAITING?Instant.now().minus(Duration.ofMinutes(20-s.getStepOrder()*2L)):null).completedAt(st==RunStepStatus.SUCCEEDED?Instant.now().minus(Duration.ofMinutes(18-s.getStepOrder()*2L)):null).messageZh(st==RunStepStatus.SUCCEEDED?"执行成功":st==RunStepStatus.RUNNING?"正在执行":"等待执行").messageEn(st==RunStepStatus.SUCCEEDED?"Succeeded":st==RunStepStatus.RUNNING?"Running":"Waiting").build());
                 }
             }
+        }
+    }
+
+    private void ensureExecutionTemplate(String code,String zh,String en,String type,int version,List<String[]> steps){
+        OrchestrationTemplate template=templates.findByCode(code).orElseGet(OrchestrationTemplate::new);
+        boolean replace=template.getId()==null||template.getVersion()==null||template.getVersion()<version;
+        template.setCode(code);template.setNameZh(zh);template.setNameEn(en);template.setType(type);template.setEnabled(true);template.setVersion(version);template.setUpdatedAt(Instant.now());template=templates.save(template);
+        if(replace){
+            if(template.getId()!=null){templateSteps.deleteByTemplateId(template.getId());templateSteps.flush();}
+            addTemplateSteps(template,steps);
         }
     }
 
@@ -363,7 +422,7 @@ public class DemoDataSeeder implements CommandLineRunner {
             List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),environment);
             if(targets.isEmpty()&&source.getEnvironment()==environment)targets=List.of(source);
             for(Asset target:targets){
-                deploymentTargets.save(DeploymentTarget.builder().deploymentId(deployment.getId()).assetId(target.getId())
+                deploymentTargets.save(DeploymentTarget.builder().deploymentId(deployment.getId()).runId(deployment.getOrchestrationRunId()).assetId(target.getId())
                         .status(deployment.getStatus().name()).progress(deployment.getProgress()).startedAt(deployment.getStartedAt())
                         .completedAt(deployment.getCompletedAt()).message(deployment.getStatus()==DeploymentStatus.RUNNING?"正在执行自动化补丁节点":"已同步部署结果").build());
             }

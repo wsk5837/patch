@@ -44,6 +44,8 @@ CVE-2024-50623,Cleo,Harmony VLTrader LexiCom,8.8,HIGH,true,true,Cleo 文件传�
 CVE-2024-49138,Microsoft,Windows CLFS,7.8,HIGH,true,true,Windows CLFS 权限提升漏洞,Windows CLFS privilege escalation vulnerability
 CVE-2024-49112,Microsoft,Windows LDAP,9.8,CRITICAL,false,true,Windows LDAP 远程代码执行漏洞,Windows LDAP remote code execution vulnerability
 CVE-2024-43451,Microsoft,Windows,6.5,MEDIUM,true,true,Windows NTLM 哈希泄露漏洞,Windows NTLM hash disclosure vulnerability
+CVE-2023-0465,OpenSSL,OpenSSL,3.7,LOW,false,true,OpenSSL 证书策略校验漏洞,OpenSSL certificate policy validation vulnerability
+CVE-2022-0778,OpenSSL,OpenSSL,5.3,MEDIUM,false,true,OpenSSL BN_mod_sqrt 拒绝服务漏洞,OpenSSL BN_mod_sqrt denial of service vulnerability
 CVE-2024-38063,Microsoft,Windows TCP/IP,9.8,CRITICAL,false,true,Windows TCP/IP 远程代码执行漏洞,Windows TCP/IP remote code execution vulnerability
 CVE-2024-38178,Microsoft,Windows Scripting Engine,7.5,HIGH,true,true,Windows 脚本引擎内存损坏漏洞,Windows scripting engine memory corruption vulnerability
 CVE-2024-7593,Ivanti,Virtual Traffic Manager,9.8,CRITICAL,true,true,Ivanti vTM 身份验证绕过漏洞,Ivanti vTM authentication bypass vulnerability

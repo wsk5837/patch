@@ -9,4 +9,6 @@ import java.util.List;
 public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarget, Long> {
     List<DeploymentTarget> findByDeploymentIdOrderByAssetIdAsc(Long deploymentId);
     List<DeploymentTarget> findByDeploymentIdInOrderByDeploymentIdAscAssetIdAsc(Collection<Long> deploymentIds);
+    List<DeploymentTarget> findByRunIdOrderByAssetIdAsc(Long runId);
+    List<DeploymentTarget> findByRunIdInOrderByRunIdAscAssetIdAsc(Collection<Long> runIds);
 }
