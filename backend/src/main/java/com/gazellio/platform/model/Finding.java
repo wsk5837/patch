@@ -29,6 +29,7 @@ public class Finding {
     private Long ownerId;
     @Column(length=120) private String ownerName;
     private Long remediationTaskId;
+    private Long securityIncidentId;
     @Column(columnDefinition="TEXT") private String evidence;
     @Column(columnDefinition="TEXT") private String falsePositiveReason;
     @Column(columnDefinition="TEXT") private String exemptionReason;

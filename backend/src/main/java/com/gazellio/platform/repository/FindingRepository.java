@@ -14,7 +14,8 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
  interface EnvironmentCount { EnvironmentType getEnvironment(); long getTotal(); }
 
  Optional<Finding> findByAssetIdAndCveId(Long assetId, String cveId);
- List<Finding> findTop200ByOrderByRiskScoreDescLastSeenAtDesc();
+    List<Finding> findTop200ByOrderByRiskScoreDescLastSeenAtDesc();
+    List<Finding> findTop200ByCveIdInOrderByRiskScoreDescLastSeenAtDesc(Collection<String> cveIds);
  List<Finding> findTop6ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(Collection<FindingStatus> statuses);
  long countByStatus(FindingStatus status);
  long countByStatusIn(Collection<FindingStatus> statuses);

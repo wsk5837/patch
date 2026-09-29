@@ -37,6 +37,9 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final OrchestrationRunRepository runs;
     private final OrchestrationRunStepRepository runSteps;
     private final PatchDeploymentRepository deployments;
+    private final DeploymentTargetRepository deploymentTargets;
+    private final SecurityIncidentRepository incidents;
+    private final ChangeWorkOrderRepository changeOrders;
     private final SystemSettingRepository settings;
     private final PasswordEncoder encoder;
 
@@ -54,7 +57,9 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedPatchServers();
         seedAgentsAndScans();
         seedFindingsTasksApprovals();
+        seedWorkOrders();
         seedTemplatesAndRuns();
+        seedDeploymentTargets();
         seedSettings();
     }
 
@@ -147,7 +152,6 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedPatches(){
-        if(patches.count()>0) return;
         addPatch("KB5072180","Microsoft","Windows Server","2026-09","Windows Server 2022 九月安全更新","Windows Server 2022 September security update",740.0,true,List.of("CVE-2025-29824","CVE-2025-33053"));
         addPatch("RHEL-RHSA-2026:7211","Red Hat","OpenSSH","9.4p2","RHEL OpenSSH 安全更新","RHEL OpenSSH security update",18.5,false,List.of("CVE-2024-6387","CVE-2024-6386"));
         addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535"));
@@ -160,11 +164,37 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("curl-8.10.1","cURL","curl","8.10.1","curl 安全更新","curl security update",4.8,false,List.of("CVE-2023-38545"));
         addPatch("confluence-8.5.15","Atlassian","Confluence","8.5.15","Confluence LTS 安全更新","Confluence LTS security update",980.0,true,List.of("CVE-2023-22518","CVE-2022-26134"));
         addPatch("linux-kernel-6.8.0-52","Linux Kernel","Kernel","6.8.0-52","Linux Kernel 安全更新","Linux Kernel security update",136.0,true,List.of("CVE-2024-1086"));
+        addPatch("KB5074122","Microsoft","Windows Server","2026-10","Windows TCP/IP 与 LDAP 累积安全更新","Windows TCP/IP and LDAP cumulative security update",812.0,true,List.of("CVE-2024-49112","CVE-2024-38063","CVE-2024-49138"));
+        addPatch("sharepoint-se-16.0.10417","Microsoft","SharePoint","16.0.10417","SharePoint Server 紧急安全更新","SharePoint Server emergency security update",1280.0,true,List.of("CVE-2025-53770","CVE-2025-53771"));
+        addPatch("xz-5.6.1-3","Red Hat","xz Utils","5.6.1-3","xz Utils 安全回退更新","xz Utils security rollback update",3.4,false,List.of("CVE-2024-3094"));
+        addPatch("panos-11.1.2-h3","Palo Alto Networks","PAN-OS","11.1.2-h3","PAN-OS GlobalProtect 热修复","PAN-OS GlobalProtect hotfix",950.0,true,List.of("CVE-2024-3400"));
+        addPatch("teamcity-2024.03.3","JetBrains","TeamCity","2024.03.3","TeamCity 安全版本更新","TeamCity security release",1100.0,true,List.of("CVE-2024-27198","CVE-2023-42793"));
+        addPatch("log4j-core-2.23.1","Apache","Log4j","2.23.1","Log4j Core 安全更新","Log4j Core security update",3.2,false,List.of("CVE-2021-44228"));
+        addPatch("httpd-2.4.62","Apache","HTTP Server","2.4.62","Apache HTTP Server 安全更新","Apache HTTP Server security update",12.8,true,List.of("CVE-2021-41773","CVE-2021-42013"));
+        addPatch("exchange-se-2026-09","Microsoft","Exchange Server","2026-09","Exchange Server 安全更新","Exchange Server security update",1620.0,true,List.of("CVE-2021-26855","CVE-2022-41040","CVE-2022-41082"));
+        // The library flag must describe an actual drill-down result, not a disconnected demo label.
+        for(VulnerabilityDefinition v:vulns.findAll()){
+            boolean available=!patchCves.findByCveId(v.getCveId()).isEmpty();
+            if(v.isPatchAvailable()!=available){v.setPatchAvailable(available);v.setUpdatedAt(Instant.now());vulns.save(v);}
+        }
     }
 
     private void addPatch(String code,String vendor,String product,String version,String zh,String en,double size,boolean reboot,List<String> cves){
-        Patch p=patches.save(Patch.builder().patchId(code).vendor(vendor).product(product).version(version).titleZh(zh).titleEn(en).sizeMb(size).rebootRequired(reboot).source("Vendor").publishedDate(LocalDate.now().minusDays(5)).checksum("sha256:"+UUID.randomUUID().toString().replace("-","")).build());
-        cves.forEach(c -> patchCves.save(PatchCve.builder().patchId(p.getId()).cveId(c).build()));
+        Patch p=patches.findByPatchId(code).orElseGet(Patch::new);
+        p.setPatchId(code);p.setVendor(vendor);p.setProduct(product);p.setVersion(version);p.setTitleZh(zh);p.setTitleEn(en);
+        p.setSizeMb(size);p.setRebootRequired(reboot);p.setSource("Vendor");p.setStatus("AVAILABLE");
+        if(p.getPublishedDate()==null)p.setPublishedDate(LocalDate.now().minusDays(5));
+        if(p.getChecksum()==null)p.setChecksum("sha256:"+UUID.randomUUID().toString().replace("-","")+UUID.randomUUID().toString().replace("-",""));
+        p.setSignatureStatus("VERIFIED");
+        p.setApplicabilityRule(product+" "+version+"；安装前校验操作系统、产品版本、架构与现有补丁替代关系。");
+        p.setDownloadUrl("https://patch.gazellio.local/vendor/"+code.replace(":","-").toLowerCase(Locale.ROOT));
+        p.setReleaseNotesZh("包含安全修复、安装前检查、完整性校验、失败回滚与重启策略。建议先在测试和预生产环境验证。");
+        p.setReleaseNotesEn("Includes security fixes, pre-checks, integrity validation, rollback and restart policy. Validate in test and pre-production first.");
+        p.setUpdatedAt(Instant.now());p=patches.save(p);
+        for(String c:cves){
+            if(!patchCves.existsByPatchIdAndCveId(p.getId(),c))patchCves.save(PatchCve.builder().patchId(p.getId()).cveId(c).build());
+            vulns.findById(c).ifPresent(v->{v.setPatchAvailable(true);v.setUpdatedAt(Instant.now());vulns.save(v);});
+        }
     }
 
     private void seedPatchServers(){
@@ -226,6 +256,51 @@ public class DemoDataSeeder implements CommandLineRunner {
         }
     }
 
+    private void seedWorkOrders(){
+        for(Finding f:findings.findAll()){
+            Asset asset=assets.findById(f.getAssetId()).orElse(null);
+            VulnerabilityDefinition vulnerability=vulns.findById(f.getCveId()).orElse(null);
+            if(asset==null||vulnerability==null)continue;
+            RemediationTask task=tasks.findByFindingId(f.getId()).orElse(null);
+            IncidentStatus incidentStatus;
+            if(f.getStatus()==FindingStatus.RESOLVED)incidentStatus=IncidentStatus.CLOSED;
+            else if(f.getStatus()==FindingStatus.FALSE_POSITIVE)incidentStatus=IncidentStatus.FALSE_POSITIVE;
+            else if(f.getStatus()==FindingStatus.EXEMPTED)incidentStatus=IncidentStatus.EXEMPTED;
+            else if(task==null)incidentStatus=IncidentStatus.ASSIGNED;
+            else if(task.getStage()==TaskStage.RELEASE_APPROVAL)incidentStatus=IncidentStatus.PENDING_CHANGE;
+            else if(List.of(TaskStage.PREPROD_PATCH,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,TaskStage.PROD_PATCH,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN).contains(task.getStage()))incidentStatus=IncidentStatus.IMPLEMENTING;
+            else incidentStatus=IncidentStatus.IN_REMEDIATION;
+            String priority=(vulnerability.isKev()||vulnerability.getSeverity()==Severity.CRITICAL)?"P1":vulnerability.getSeverity()==Severity.HIGH?"P2":vulnerability.getSeverity()==Severity.MEDIUM?"P3":"P4";
+            SecurityIncident incident=incidents.findByFindingId(f.getId()).orElseGet(()->incidents.save(SecurityIncident.builder()
+                    .incidentNo("SEC-MIG-"+String.format("%06d",f.getId())).externalTicketNo("AITSM-SEC-"+String.format("%06d",f.getId()))
+                    .findingId(f.getId()).assetId(f.getAssetId()).priority(priority).ownerId(f.getOwnerId()).ownerName(f.getOwnerName())
+                    .dueAt(task!=null&&task.getDueAt()!=null?task.getDueAt():Instant.now().plus(Duration.ofDays(priority.equals("P1")?3:priority.equals("P2")?7:30))).build()));
+            incident.setStatus(incidentStatus);incident.setRemediationTaskId(task==null?null:task.getId());incident.setUpdatedAt(Instant.now());
+            if(f.getStatus()==FindingStatus.EXEMPTED)incident.setDecisionReason(f.getExemptionReason());
+            if(f.getStatus()==FindingStatus.FALSE_POSITIVE)incident.setDecisionReason(f.getFalsePositiveReason());
+            if(f.getStatus()==FindingStatus.RESOLVED){incident.setResolvedAt(f.getResolvedAt());incident.setClosedAt(f.getResolvedAt());}
+            incidents.save(incident);f.setSecurityIncidentId(incident.getId());findings.save(f);
+            if(task!=null){task.setSecurityIncidentId(incident.getId());tasks.save(task);}
+
+            if(task!=null&&List.of(TaskStage.RELEASE_APPROVAL,TaskStage.PREPROD_PATCH,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,TaskStage.PROD_PATCH,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN,TaskStage.CLOSED).contains(task.getStage())){
+                ChangeWorkOrder change=changeOrders.findByIncidentId(incident.getId()).orElseGet(()->changeOrders.save(ChangeWorkOrder.builder()
+                        .changeNo("CHG-MIG-"+String.format("%06d",incident.getId())).externalChangeNo("AITSM-CHG-"+String.format("%06d",incident.getId())).incidentId(incident.getId()).remediationTaskId(task.getId())
+                        .approvalId(task.getApprovalId()).changeType(task.getChangeType()==null?ChangeType.NORMAL:task.getChangeType())
+                        .status(task.getStage()==TaskStage.RELEASE_APPROVAL?ChangeStatus.PENDING_APPROVAL:task.getStage()==TaskStage.CLOSED?ChangeStatus.CLOSED:ChangeStatus.IMPLEMENTING)
+                        .summary(f.getCveId()+" · "+asset.getBusinessService()+" 生产补丁发布")
+                        .riskAssessment("基于漏洞严重度、KEV 状态、资产重要度、影响范围与重启要求评估。")
+                        .implementationPlan("测试复测通过后，按 Ring 0/1/2 分批执行生产补丁并进行应用验证。")
+                        .rollbackPlan("失败时暂停后续批次，恢复快照或回退补丁版本，并重新验证服务健康状态。")
+                        .maintenanceStart(Instant.now().plus(Duration.ofDays(1))).maintenanceEnd(Instant.now().plus(Duration.ofDays(1)).plus(Duration.ofHours(4)))
+                        .build()));
+                if(change.getExternalChangeNo()==null)change.setExternalChangeNo("AITSM-CHG-"+String.format("%06d",incident.getId()));
+                changeOrders.save(change);
+                incident.setChangeOrderId(change.getId());incidents.save(incident);task.setChangeOrderId(change.getId());tasks.save(task);
+                if(task.getApprovalId()!=null)approvals.findById(task.getApprovalId()).ifPresent(a->{a.setChangeOrderId(change.getId());approvals.save(a);});
+            }
+        }
+    }
+
     private void seedTemplatesAndRuns(){
         if(templates.count()==0){
             OrchestrationTemplate standard=templates.save(OrchestrationTemplate.builder().code("PATCH-STANDARD").nameZh("标准补丁发布编排").nameEn("Standard Patch Rollout").type("PATCH").version(3).build());
@@ -276,6 +351,22 @@ public class DemoDataSeeder implements CommandLineRunner {
         for(String[] s:steps){
             templateSteps.save(OrchestrationTemplateStep.builder().templateId(t.getId()).stepOrder(i).code(s[0]).nameZh(s[1]).nameEn(s[2]).rollbackPoint(i==2).build());
             i++;
+        }
+    }
+
+    private void seedDeploymentTargets(){
+        for(PatchDeployment deployment:deployments.findTop200ByOrderByCreatedAtDesc()){
+            if(!deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(deployment.getId()).isEmpty())continue;
+            RemediationTask task=tasks.findById(deployment.getTaskId()).orElse(null);if(task==null)continue;
+            Asset source=assets.findById(task.getAssetId()).orElse(null);if(source==null)continue;
+            EnvironmentType environment;try{environment=EnvironmentType.valueOf(deployment.getEnvironment());}catch(Exception e){continue;}
+            List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),environment);
+            if(targets.isEmpty()&&source.getEnvironment()==environment)targets=List.of(source);
+            for(Asset target:targets){
+                deploymentTargets.save(DeploymentTarget.builder().deploymentId(deployment.getId()).assetId(target.getId())
+                        .status(deployment.getStatus().name()).progress(deployment.getProgress()).startedAt(deployment.getStartedAt())
+                        .completedAt(deployment.getCompletedAt()).message(deployment.getStatus()==DeploymentStatus.RUNNING?"正在执行自动化补丁节点":"已同步部署结果").build());
+            }
         }
     }
 

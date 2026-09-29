@@ -17,6 +17,11 @@ public class Patch {
     @Column(nullable=false, length=400) private String titleEn;
     @Column(length=1000) private String downloadUrl;
     @Column(length=128) private String checksum;
+    @Column(columnDefinition="TEXT") private String applicabilityRule;
+    @Column(length=30) @Builder.Default private String signatureStatus = "VERIFIED";
+    @Column(length=160) private String supersedes;
+    @Column(columnDefinition="TEXT") private String releaseNotesZh;
+    @Column(columnDefinition="TEXT") private String releaseNotesEn;
     private Double sizeMb;
     @Column(nullable=false) @Builder.Default private boolean rebootRequired = false;
     @Column(nullable=false, length=30) @Builder.Default private String status = "AVAILABLE";

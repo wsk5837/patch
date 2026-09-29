@@ -23,6 +23,7 @@ public class OrchestrationService {
     private final OrchestrationRunRepository runs;
     private final OrchestrationRunStepRepository runSteps;
     private final PatchDeploymentRepository deployments;
+    private final DeploymentTargetRepository deploymentTargets;
     private final RemediationTaskRepository tasks;
     private final FindingRepository findings;
     private final AssetRepository assets;
@@ -112,6 +113,12 @@ public class OrchestrationService {
         dep.setOrchestrationRunId(run.getId());
         deployments.save(dep);
 
+        for (Asset target : targets) {
+            deploymentTargets.save(DeploymentTarget.builder()
+                    .deploymentId(dep.getId()).assetId(target.getId()).status("RUNNING").progress(1)
+                    .startedAt(Instant.now()).message("Agent connected; pre-check queued").build());
+        }
+
         for (OrchestrationTemplateStep s : templateSteps.findByTemplateIdOrderByStepOrderAsc(tpl.getId())) {
             boolean first = s.getStepOrder() == 1;
             runSteps.save(OrchestrationRunStep.builder()
@@ -200,6 +207,12 @@ public class OrchestrationService {
                 d.setProgress(run.getProgress());
                 deployments.save(d);
             });
+            for (DeploymentTarget target : deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(run.getDeploymentId())) {
+                target.setStatus("RUNNING");
+                target.setProgress(run.getProgress());
+                target.setMessage(next.getNameZh() + " · " + run.getProgress() + "%");
+                deploymentTargets.save(target);
+            }
         }
     }
 
@@ -221,6 +234,10 @@ public class OrchestrationService {
             dep.setSuccessCount(dep.getTargetCount());
             dep.setCompletedAt(Instant.now());
             deployments.save(dep);
+            for (DeploymentTarget target : deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(dep.getId())) {
+                target.setStatus("SUCCEEDED"); target.setProgress(100); target.setCompletedAt(Instant.now());
+                target.setMessage("补丁安装、健康检查与证据回写完成"); deploymentTargets.save(target);
+            }
         }
 
         if (task != null) {
@@ -269,6 +286,7 @@ public class OrchestrationService {
             d.setStatus(DeploymentStatus.PAUSED);
             deployments.save(d);
         });
+        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("PAUSED");t.setMessage("执行已暂停");deploymentTargets.save(t);});
         return view.run(r);
     }
 
@@ -284,6 +302,7 @@ public class OrchestrationService {
             d.setStatus(DeploymentStatus.RUNNING);
             deployments.save(d);
         });
+        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("RUNNING");t.setMessage("执行已恢复");deploymentTargets.save(t);});
         return view.run(r);
     }
 
@@ -323,6 +342,7 @@ public class OrchestrationService {
             d.setCompletedAt(Instant.now());
             deployments.save(d);
         });
+        deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(r.getDeploymentId()).forEach(t->{t.setStatus("ROLLED_BACK");t.setCompletedAt(Instant.now());t.setMessage("已恢复至回退点");deploymentTargets.save(t);});
 
         for (OrchestrationRunStep s : runSteps.findByRunIdOrderByStepOrderAsc(r.getId())) {
             if (s.getStatus() == RunStepStatus.RUNNING || s.getStatus() == RunStepStatus.SUCCEEDED) {

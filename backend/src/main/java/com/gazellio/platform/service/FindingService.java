@@ -24,9 +24,11 @@ public class FindingService {
     private final PatchRepository patches;
     private final PatchCveRepository patchCves;
     private final RemediationTaskRepository tasks;
+    private final SecurityIncidentRepository incidents;
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
+    private final WorkOrderService workOrders;
 
     public List<VulnerabilityView> library(String q,String severity,Boolean kev){
         Severity sev=null; if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")) try{sev=Severity.valueOf(severity.toUpperCase());}catch(Exception ignored){}
@@ -67,18 +69,8 @@ public class FindingService {
         Finding f=findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
         if(f.getStatus()==FindingStatus.RESOLVED||f.getStatus()==FindingStatus.FALSE_POSITIVE||f.getStatus()==FindingStatus.EXEMPTED) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finding is closed");
         f.setStatus(FindingStatus.CONFIRMED); findings.save(f);
-        RemediationTask task=tasks.findByFindingId(f.getId()).orElse(null);
-        if(task==null){
-            Long patchId=req!=null?req.patchId():null;
-            if(patchId==null) patchId=patchCves.findByCveId(f.getCveId()).stream().findFirst().map(PatchCve::getPatchId).orElse(null);
-            Asset a=assets.findById(f.getAssetId()).orElseThrow(); VulnerabilityDefinition v=vulns.findById(f.getCveId()).orElseThrow();
-            String priority=(v.isKev()||v.getSeverity()==Severity.CRITICAL)?"P1":v.getSeverity()==Severity.HIGH?"P2":"P3";
-            long days=priority.equals("P1")?3:priority.equals("P2")?7:30;
-            task=tasks.save(RemediationTask.builder().taskNo("RMD-"+System.currentTimeMillis()).findingId(f.getId()).patchId(patchId).assetId(f.getAssetId()).ownerId(a.getOwnerId()).ownerName(a.getOwnerName()).priority(priority).stage(TaskStage.ASSIGNED).status(TaskStatus.OPEN).dueAt(Instant.now().plus(Duration.ofDays(days))).build());
-            f.setRemediationTaskId(task.getId()); f.setStatus(FindingStatus.IN_REMEDIATION); findings.save(f);
-            audit.log("TASK",task.getId(),"CREATE","漏洞确认后自动创建处置任务 "+task.getTaskNo(),"Remediation task automatically created after finding confirmation: "+task.getTaskNo(),currentUser.name());
-        }
-        audit.log("FINDING",f.getId(),"CONFIRM","确认漏洞并进入处置","Finding confirmed and entered remediation",currentUser.name());
+        SecurityIncident incident=workOrders.ensureForFinding(f);
+        audit.log("FINDING",f.getId(),"CONFIRM","确认漏洞并生成安全事件工单 "+incident.getIncidentNo(),"Finding confirmed and security incident created: "+incident.getIncidentNo(),currentUser.name());
         return view.finding(f);
     }
 
@@ -87,6 +79,7 @@ public class FindingService {
         Finding f=findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
         f.setStatus(FindingStatus.FALSE_POSITIVE); f.setFalsePositiveReason(req==null?null:req.reason()); findings.save(f);
         tasks.findByFindingId(id).ifPresent(t->{t.setStatus(TaskStatus.CANCELLED);t.setUpdatedAt(Instant.now());tasks.save(t);});
+        incidents.findByFindingId(id).ifPresent(i->{i.setStatus(IncidentStatus.FALSE_POSITIVE);i.setDecisionReason(req==null?null:req.reason());i.setClosedAt(Instant.now());i.setUpdatedAt(Instant.now());incidents.save(i);});
         audit.log("FINDING",f.getId(),"FALSE_POSITIVE","漏洞标记为误报","Finding marked as false positive",currentUser.name());
         return view.finding(f);
     }
@@ -104,6 +97,7 @@ public class FindingService {
             catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid exemption expiry date");}
         }
         f.setStatus(FindingStatus.EXEMPTED);f.setExemptionReason(reason);f.setExemptedAt(Instant.now());f.setExemptionExpiresAt(expires);findings.save(f);
+        incidents.findByFindingId(id).ifPresent(i->{i.setStatus(IncidentStatus.EXEMPTED);i.setDecisionReason(reason);i.setUpdatedAt(Instant.now());incidents.save(i);});
         audit.log("FINDING",f.getId(),"EXEMPT","漏洞已豁免至 "+expires,"Finding exempted until "+expires,currentUser.name());
         return view.finding(f);
     }

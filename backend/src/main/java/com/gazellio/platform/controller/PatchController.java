@@ -17,6 +17,7 @@ public class PatchController {
 
     @GetMapping public List<PatchView> list(){return service.list();}
     @GetMapping("/{id}") public PatchView get(@PathVariable Long id){return service.get(id);}
+    @GetMapping("/{id}/findings") public List<FindingView> findings(@PathVariable Long id){return service.findings(id);}
     @GetMapping("/servers") public List<PatchServerView> servers(){return service.servers();}
     @GetMapping("/deployments") public List<DeploymentView> deployments(){return service.deployments();}
 

@@ -18,6 +18,7 @@ public class PatchService {
     private final VulnerabilityDefinitionRepository vulnerabilities;
     private final PatchServerRepository servers;
     private final PatchDeploymentRepository deployments;
+    private final FindingRepository findings;
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
@@ -28,6 +29,12 @@ public class PatchService {
 
     public PatchView get(Long id){
         return view.patch(patches.findById(id).orElseThrow());
+    }
+
+    public List<FindingView> findings(Long id){
+        patches.findById(id).orElseThrow();
+        Set<String> cves=patchCves.findByPatchId(id).stream().map(PatchCve::getCveId).collect(java.util.stream.Collectors.toSet());
+        return cves.isEmpty()?List.of():view.findingViews(findings.findTop200ByCveIdInOrderByRiskScoreDescLastSeenAtDesc(cves));
     }
 
     public List<PatchServerView> servers(){
@@ -49,6 +56,11 @@ public class PatchService {
         p.setTitleEn(req.titleEn().trim());
         p.setDownloadUrl(blankToNull(req.downloadUrl()));
         p.setChecksum(blankToNull(req.checksum()));
+        p.setApplicabilityRule(blankToNull(req.applicabilityRule()));
+        p.setSupersedes(blankToNull(req.supersedes()));
+        p.setReleaseNotesZh(blankToNull(req.releaseNotesZh()));
+        p.setReleaseNotesEn(blankToNull(req.releaseNotesEn()));
+        p.setSignatureStatus(p.getChecksum()==null?"PENDING":"VERIFIED");
         p.setSizeMb(req.sizeMb());
         p.setRebootRequired(req.rebootRequired());
         p.setStatus("AVAILABLE");

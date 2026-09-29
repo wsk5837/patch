@@ -15,6 +15,8 @@ public class RemediationTask {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
     @Column(unique=true, nullable=false, length=80) private String taskNo;
     @Column(nullable=false) private Long findingId;
+    private Long securityIncidentId;
+    private Long changeOrderId;
     private Long patchId;
     @Column(nullable=false) private Long assetId;
     private Long ownerId;

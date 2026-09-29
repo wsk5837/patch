@@ -1,0 +1,21 @@
+package com.gazellio.platform.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.time.Instant;
+
+@Entity
+@Table(name = "deployment_targets", uniqueConstraints =
+        @UniqueConstraint(name = "uk_deployment_target", columnNames = {"deployment_id", "asset_id"}),
+        indexes = @Index(name = "idx_deployment_target", columnList = "deployment_id,status"))
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class DeploymentTarget {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "deployment_id", nullable = false) private Long deploymentId;
+    @Column(name = "asset_id", nullable = false) private Long assetId;
+    @Column(nullable = false, length = 30) @Builder.Default private String status = "WAITING";
+    @Column(nullable = false) @Builder.Default private Integer progress = 0;
+    private Instant startedAt;
+    private Instant completedAt;
+    @Column(columnDefinition = "TEXT") private String message;
+}

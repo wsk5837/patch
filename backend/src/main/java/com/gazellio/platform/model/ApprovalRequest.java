@@ -14,6 +14,7 @@ public class ApprovalRequest {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
     @Column(unique=true, nullable=false, length=80) private String approvalNo;
     @Column(nullable=false) private Long taskId;
+    private Long changeOrderId;
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=30) private ChangeType changeType;
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=30) @Builder.Default private ApprovalStatus status = ApprovalStatus.PENDING;
     @Column(nullable=false) @Builder.Default private Integer currentStep = 1;

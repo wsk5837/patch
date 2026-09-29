@@ -22,6 +22,8 @@ public class ApprovalService {
     private final CurrentUserService currentUser;
     private final AuditService audit;
     private final OrchestrationService orchestration;
+    private final ChangeWorkOrderRepository changes;
+    private final SecurityIncidentRepository incidents;
 
     public List<ApprovalView> list(){return view.approvalViews(approvals.findTop200ByOrderBySubmittedAtDesc());}
     public ApprovalView get(Long id){return view.approval(require(id));}
@@ -50,14 +52,15 @@ public class ApprovalService {
         if(next!=null){next.setStatus(ApprovalStepStatus.PENDING);steps.save(next);a.setCurrentStep(next.getStepOrder());approvals.save(a);}
         else{
             a.setStatus(ApprovalStatus.APPROVED);approvals.save(a); RemediationTask task=tasks.findById(a.getTaskId()).orElseThrow(); task.setStage(TaskStage.PREPROD_PATCH);task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
-            try{orchestration.startPatchRun(task,"PREPROD","Ring 0 · Pre-production");a.setStatus(ApprovalStatus.IMPLEMENTING);approvals.save(a);}
+            if(a.getChangeOrderId()!=null) changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.APPROVED);c.setUpdatedAt(Instant.now());changes.save(c);});
+            try{orchestration.startPatchRun(task,"PREPROD","Ring 0 · Pre-production");a.setStatus(ApprovalStatus.IMPLEMENTING);approvals.save(a);if(a.getChangeOrderId()!=null)changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.IMPLEMENTING);c.setUpdatedAt(Instant.now());changes.save(c);});if(task.getSecurityIncidentId()!=null)incidents.findById(task.getSecurityIncidentId()).ifPresent(i->{i.setStatus(IncidentStatus.IMPLEMENTING);i.setUpdatedAt(Instant.now());incidents.save(i);});}
             catch(Exception ex){task.setStatus(TaskStatus.BLOCKED);tasks.save(task);audit.log("TASK",task.getId(),"BLOCKED","审批通过，但未找到预生产资产映射","Approval passed, but no pre-production asset mapping was found","Gazellio");}
         }
         audit.log("APPROVAL",id,"APPROVE","审批节点已通过","Approval step approved",currentUser.name()); return view.approval(a);
     }
 
     @Transactional public ApprovalView reject(Long id,ApprovalActionRequest req){
-        ApprovalRequest a=require(id); if(a.getStatus()!=ApprovalStatus.PENDING)throw new ResponseStatusException(HttpStatus.CONFLICT); ApprovalStep current=steps.findByApprovalIdOrderByStepOrderAsc(id).stream().filter(s->s.getStatus()==ApprovalStepStatus.PENDING).findFirst().orElseThrow(); current.setStatus(ApprovalStepStatus.REJECTED);current.setComment(req==null?null:req.comment());current.setActedAt(Instant.now());current.setApproverName(currentUser.name());steps.save(current);a.setStatus(ApprovalStatus.REJECTED);a.setCompletedAt(Instant.now());approvals.save(a);RemediationTask t=tasks.findById(a.getTaskId()).orElseThrow();t.setStatus(TaskStatus.BLOCKED);t.setUpdatedAt(Instant.now());tasks.save(t);audit.log("APPROVAL",id,"REJECT","生产发布审批已驳回","Production release approval rejected",currentUser.name());return view.approval(a);
+        ApprovalRequest a=require(id); if(a.getStatus()!=ApprovalStatus.PENDING)throw new ResponseStatusException(HttpStatus.CONFLICT); ApprovalStep current=steps.findByApprovalIdOrderByStepOrderAsc(id).stream().filter(s->s.getStatus()==ApprovalStepStatus.PENDING).findFirst().orElseThrow(); current.setStatus(ApprovalStepStatus.REJECTED);current.setComment(req==null?null:req.comment());current.setActedAt(Instant.now());current.setApproverName(currentUser.name());steps.save(current);a.setStatus(ApprovalStatus.REJECTED);a.setCompletedAt(Instant.now());approvals.save(a);RemediationTask t=tasks.findById(a.getTaskId()).orElseThrow();t.setStatus(TaskStatus.BLOCKED);t.setUpdatedAt(Instant.now());tasks.save(t);if(a.getChangeOrderId()!=null)changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.REJECTED);c.setUpdatedAt(Instant.now());changes.save(c);});if(t.getSecurityIncidentId()!=null)incidents.findById(t.getSecurityIncidentId()).ifPresent(i->{i.setStatus(IncidentStatus.PENDING_CHANGE);i.setUpdatedAt(Instant.now());incidents.save(i);});audit.log("APPROVAL",id,"REJECT","生产发布审批已驳回","Production release approval rejected",currentUser.name());return view.approval(a);
     }
     private ApprovalRequest require(Long id){return approvals.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));}
 }

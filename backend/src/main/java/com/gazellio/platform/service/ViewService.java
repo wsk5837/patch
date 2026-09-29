@@ -26,10 +26,14 @@ public class ViewService {
     private final PatchRepository patches;
     private final PatchCveRepository patchCves;
     private final RemediationTaskRepository tasks;
+    private final SecurityIncidentRepository incidents;
+    private final ChangeWorkOrderRepository changeOrders;
+    private final ApprovalRequestRepository approvals;
     private final ApprovalStepRepository approvalSteps;
     private final OrchestrationTemplateRepository templates;
     private final OrchestrationTemplateStepRepository templateSteps;
     private final OrchestrationRunStepRepository runSteps;
+    private final DeploymentTargetRepository deploymentTargets;
 
     private static String s(Object value) { return value == null ? null : String.valueOf(value); }
 
@@ -39,6 +43,11 @@ public class ViewService {
 
     private static <K, V> Map<K, List<V>> group(Collection<V> values, Function<V, K> key) {
         return values.stream().collect(Collectors.groupingBy(key, LinkedHashMap::new, Collectors.toList()));
+    }
+
+    private static PatchCandidateView patchCandidate(Patch p) {
+        return new PatchCandidateView(p.getId(), p.getPatchId(), p.getTitleZh(), p.getTitleEn(), p.getVersion(),
+                p.getSignatureStatus(), p.isRebootRequired(), p.getStatus());
     }
 
     public List<AssetView> assetViews(List<Asset> rows) {
@@ -66,16 +75,21 @@ public class ViewService {
         Set<Long> patchIds = links.stream().map(PatchCve::getPatchId).collect(Collectors.toSet());
         Map<Long, Patch> patchById = patchIds.isEmpty() ? Map.of() : index(patches.findAllById(patchIds), Patch::getId);
         Map<String, List<String>> patchCodesByCve = new HashMap<>();
+        Map<String, List<PatchCandidateView>> patchCandidatesByCve = new HashMap<>();
         for (PatchCve link : links) {
             Patch patch = patchById.get(link.getPatchId());
-            if (patch != null) patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
+            if (patch != null) {
+                patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
+                patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
+            }
         }
         return rows.stream().map(v -> new VulnerabilityView(
                 v.getCveId(), v.getTitleZh(), v.getTitleEn(), v.getVendor(), v.getProduct(),
                 v.getDescriptionZh(), v.getDescriptionEn(), v.getCvss(), s(v.getSeverity()), v.isKev(),
                 v.isRansomwareKnown(), v.isPatchAvailable(), v.getReferenceUrl(), s(v.getPublishedDate()),
                 s(v.getKevDueDate()), affected.getOrDefault(v.getCveId(), 0L),
-                patchCodesByCve.getOrDefault(v.getCveId(), List.of())
+                patchCodesByCve.getOrDefault(v.getCveId(), List.of()),
+                patchCandidatesByCve.getOrDefault(v.getCveId(), List.of())
         )).toList();
     }
 
@@ -94,9 +108,13 @@ public class ViewService {
         Set<Long> patchIds = links.stream().map(PatchCve::getPatchId).collect(Collectors.toSet());
         Map<Long, Patch> patchById = patchIds.isEmpty() ? Map.of() : index(patches.findAllById(patchIds), Patch::getId);
         Map<String, List<String>> patchCodesByCve = new HashMap<>();
+        Map<String, List<PatchCandidateView>> patchCandidatesByCve = new HashMap<>();
         for (PatchCve link : links) {
             Patch patch = patchById.get(link.getPatchId());
-            if (patch != null) patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
+            if (patch != null) {
+                patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
+                patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
+            }
         }
 
         return rows.stream().map(f -> {
@@ -112,7 +130,9 @@ public class ViewService {
                     f.getOwnerName(), s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
-                    s(f.getExemptionExpiresAt()), patchCodesByCve.getOrDefault(f.getCveId(), List.of())
+                    s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(),
+                    patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
+                    patchCandidatesByCve.getOrDefault(f.getCveId(), List.of())
             );
         }).toList();
     }
@@ -148,7 +168,8 @@ public class ViewService {
                 p.getTitleEn(), p.getDownloadUrl(), p.getChecksum(), p.getSizeMb(), p.isRebootRequired(),
                 p.getStatus(), p.getSource(), s(p.getPublishedDate()),
                 linksByPatch.getOrDefault(p.getId(), List.of()).stream().map(PatchCve::getCveId).toList(),
-                affected.getOrDefault(p.getId(), 0L)
+                affected.getOrDefault(p.getId(), 0L), p.getApplicabilityRule(), p.getSignatureStatus(),
+                p.getSupersedes(), p.getReleaseNotesZh(), p.getReleaseNotesEn()
         )).toList();
     }
 
@@ -176,7 +197,7 @@ public class ViewService {
                     asset == null ? null : s(asset.getEnvironment()), asset == null ? null : asset.getBusinessService(),
                     t.getPatchId(), patch == null ? null : patch.getPatchId(), t.getOwnerName(), t.getPriority(),
                     s(t.getStage()), s(t.getStatus()), s(t.getChangeType()), t.getApprovalId(), t.getLatestRunId(),
-                    s(t.getDueAt()), s(t.getCreatedAt()), s(t.getUpdatedAt())
+                    t.getSecurityIncidentId(), t.getChangeOrderId(), s(t.getDueAt()), s(t.getCreatedAt()), s(t.getUpdatedAt())
             );
         }).toList();
     }
@@ -187,17 +208,20 @@ public class ViewService {
         if (rows.isEmpty()) return List.of();
         Set<Long> taskIds = rows.stream().map(ApprovalRequest::getTaskId).collect(Collectors.toSet());
         Set<Long> approvalIds = rows.stream().map(ApprovalRequest::getId).collect(Collectors.toSet());
+        Set<Long> changeIds = rows.stream().map(ApprovalRequest::getChangeOrderId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, RemediationTask> taskById = index(tasks.findAllById(taskIds), RemediationTask::getId);
         Set<Long> findingIds = taskById.values().stream().map(RemediationTask::getFindingId).collect(Collectors.toSet());
         Set<Long> assetIds = taskById.values().stream().map(RemediationTask::getAssetId).collect(Collectors.toSet());
         Map<Long, Finding> findingById = findingIds.isEmpty() ? Map.of() : index(findings.findAllById(findingIds), Finding::getId);
         Map<Long, Asset> assetById = assetIds.isEmpty() ? Map.of() : index(assets.findAllById(assetIds), Asset::getId);
+        Map<Long, ChangeWorkOrder> changeById = changeIds.isEmpty() ? Map.of() : index(changeOrders.findAllById(changeIds), ChangeWorkOrder::getId);
         Map<Long, List<ApprovalStep>> stepsByApproval = group(
                 approvalSteps.findByApprovalIdInOrderByApprovalIdAscStepOrderAsc(approvalIds), ApprovalStep::getApprovalId);
         return rows.stream().map(a -> {
             RemediationTask task = taskById.get(a.getTaskId());
             Finding finding = task == null ? null : findingById.get(task.getFindingId());
             Asset asset = task == null ? null : assetById.get(task.getAssetId());
+            ChangeWorkOrder change = a.getChangeOrderId() == null ? null : changeById.get(a.getChangeOrderId());
             List<ApprovalStepView> steps = stepsByApproval.getOrDefault(a.getId(), List.of()).stream()
                     .map(x -> new ApprovalStepView(x.getId(), x.getStepOrder(), x.getRoleNameZh(), x.getRoleNameEn(),
                             x.getApproverName(), s(x.getStatus()), x.getComment(), s(x.getActedAt()))).toList();
@@ -205,12 +229,95 @@ public class ViewService {
                     a.getId(), a.getApprovalNo(), a.getTaskId(), task == null ? null : task.getTaskNo(),
                     finding == null ? null : finding.getCveId(), asset == null ? null : asset.getName(),
                     s(a.getChangeType()), s(a.getStatus()), a.getCurrentStep(), a.getRequestedByName(),
-                    s(a.getSubmittedAt()), s(a.getCompletedAt()), a.getReason(), a.getRollbackPlan(), steps
+                    s(a.getSubmittedAt()), s(a.getCompletedAt()), a.getReason(), a.getRollbackPlan(),
+                    a.getChangeOrderId(), change == null ? null : change.getChangeNo(), steps
             );
         }).toList();
     }
 
     public ApprovalView approval(ApprovalRequest row) { return approvalViews(List.of(row)).getFirst(); }
+
+    public List<SecurityIncidentView> incidentViews(List<SecurityIncident> rows) {
+        if (rows.isEmpty()) return List.of();
+        Set<Long> findingIds = rows.stream().map(SecurityIncident::getFindingId).collect(Collectors.toSet());
+        Set<Long> assetIds = rows.stream().map(SecurityIncident::getAssetId).collect(Collectors.toSet());
+        Set<Long> taskIds = rows.stream().map(SecurityIncident::getRemediationTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> changeIds = rows.stream().map(SecurityIncident::getChangeOrderId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Finding> findingById = index(findings.findAllById(findingIds), Finding::getId);
+        Set<String> cveIds = findingById.values().stream().map(Finding::getCveId).collect(Collectors.toSet());
+        Map<String, VulnerabilityDefinition> vulnerabilityById = index(vulns.findAllById(cveIds), VulnerabilityDefinition::getCveId);
+        Map<Long, Asset> assetById = index(assets.findAllById(assetIds), Asset::getId);
+        Map<Long, RemediationTask> taskById = taskIds.isEmpty() ? Map.of() : index(tasks.findAllById(taskIds), RemediationTask::getId);
+        Map<Long, ChangeWorkOrder> changeById = changeIds.isEmpty() ? Map.of() : index(changeOrders.findAllById(changeIds), ChangeWorkOrder::getId);
+        List<PatchCve> links = patchCves.findByCveIdIn(cveIds);
+        Set<Long> patchIds = links.stream().map(PatchCve::getPatchId).collect(Collectors.toSet());
+        Map<Long, Patch> patchById = patchIds.isEmpty() ? Map.of() : index(patches.findAllById(patchIds), Patch::getId);
+        Map<String, List<PatchCandidateView>> candidatesByCve = new HashMap<>();
+        for (PatchCve link : links) {
+            Patch patch = patchById.get(link.getPatchId());
+            if (patch != null) candidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
+        }
+        return rows.stream().map(i -> {
+            Finding finding = findingById.get(i.getFindingId());
+            VulnerabilityDefinition vulnerability = finding == null ? null : vulnerabilityById.get(finding.getCveId());
+            Asset asset = assetById.get(i.getAssetId());
+            RemediationTask task = i.getRemediationTaskId() == null ? null : taskById.get(i.getRemediationTaskId());
+            ChangeWorkOrder change = i.getChangeOrderId() == null ? null : changeById.get(i.getChangeOrderId());
+            String cve = finding == null ? null : finding.getCveId();
+            return new SecurityIncidentView(
+                    i.getId(), i.getIncidentNo(), i.getFindingId(), cve,
+                    vulnerability == null ? cve : vulnerability.getTitleZh(),
+                    vulnerability == null ? cve : vulnerability.getTitleEn(),
+                    vulnerability == null ? null : s(vulnerability.getSeverity()),
+                    vulnerability != null && vulnerability.isKev(), i.getAssetId(),
+                    asset == null ? null : asset.getAssetCode(), asset == null ? null : asset.getName(),
+                    asset == null ? null : s(asset.getEnvironment()), asset == null ? null : asset.getBusinessService(),
+                    i.getPriority(), s(i.getStatus()), i.getOwnerId(), i.getOwnerName(), i.getRemediationTaskId(),
+                    task == null ? null : task.getTaskNo(), i.getChangeOrderId(), change == null ? null : change.getChangeNo(),
+                    s(i.getDueAt()), i.getSyncStatus(), i.getExternalTicketNo(), i.getDecisionReason(),
+                    s(i.getCreatedAt()), s(i.getUpdatedAt()), candidatesByCve.getOrDefault(cve, List.of())
+            );
+        }).toList();
+    }
+
+    public SecurityIncidentView incident(SecurityIncident row) { return incidentViews(List.of(row)).getFirst(); }
+
+    public List<ChangeWorkOrderView> changeViews(List<ChangeWorkOrder> rows) {
+        if (rows.isEmpty()) return List.of();
+        Set<Long> incidentIds = rows.stream().map(ChangeWorkOrder::getIncidentId).collect(Collectors.toSet());
+        Set<Long> taskIds = rows.stream().map(ChangeWorkOrder::getRemediationTaskId).collect(Collectors.toSet());
+        Set<Long> approvalIds = rows.stream().map(ChangeWorkOrder::getApprovalId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, SecurityIncident> incidentById = index(incidents.findAllById(incidentIds), SecurityIncident::getId);
+        Map<Long, RemediationTask> taskById = index(tasks.findAllById(taskIds), RemediationTask::getId);
+        Map<Long, ApprovalRequest> approvalById = approvalIds.isEmpty() ? Map.of() : index(approvals.findAllById(approvalIds), ApprovalRequest::getId);
+        Set<Long> findingIds = incidentById.values().stream().map(SecurityIncident::getFindingId).collect(Collectors.toSet());
+        Set<Long> assetIds = incidentById.values().stream().map(SecurityIncident::getAssetId).collect(Collectors.toSet());
+        Set<Long> patchIds = taskById.values().stream().map(RemediationTask::getPatchId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Finding> findingById = index(findings.findAllById(findingIds), Finding::getId);
+        Map<Long, Asset> assetById = index(assets.findAllById(assetIds), Asset::getId);
+        Map<Long, Patch> patchById = patchIds.isEmpty() ? Map.of() : index(patches.findAllById(patchIds), Patch::getId);
+        return rows.stream().map(c -> {
+            SecurityIncident incident = incidentById.get(c.getIncidentId());
+            RemediationTask task = taskById.get(c.getRemediationTaskId());
+            ApprovalRequest approval = c.getApprovalId() == null ? null : approvalById.get(c.getApprovalId());
+            Finding finding = incident == null ? null : findingById.get(incident.getFindingId());
+            Asset asset = incident == null ? null : assetById.get(incident.getAssetId());
+            Patch patch = task == null || task.getPatchId() == null ? null : patchById.get(task.getPatchId());
+            return new ChangeWorkOrderView(
+                    c.getId(), c.getChangeNo(), c.getIncidentId(), incident == null ? null : incident.getIncidentNo(),
+                    c.getRemediationTaskId(), task == null ? null : task.getTaskNo(), c.getApprovalId(),
+                    approval == null ? null : approval.getApprovalNo(), s(c.getChangeType()), s(c.getStatus()),
+                    c.getSummary(), finding == null ? null : finding.getCveId(), asset == null ? null : asset.getName(),
+                    asset == null ? null : asset.getBusinessService(), task == null ? null : task.getPatchId(),
+                    patch == null ? null : patch.getPatchId(), task == null ? null : task.getLatestRunId(),
+                    c.getRiskAssessment(), c.getImplementationPlan(), c.getRollbackPlan(),
+                    s(c.getMaintenanceStart()), s(c.getMaintenanceEnd()), c.getSyncStatus(), c.getExternalChangeNo(),
+                    s(c.getCreatedAt()), s(c.getUpdatedAt()), s(c.getClosedAt())
+            );
+        }).toList();
+    }
+
+    public ChangeWorkOrderView change(ChangeWorkOrder row) { return changeViews(List.of(row)).getFirst(); }
 
     public List<TemplateView> templateViews(List<OrchestrationTemplate> rows) {
         if (rows.isEmpty()) return List.of();
@@ -232,10 +339,12 @@ public class ViewService {
         Set<Long> templateIds = rows.stream().map(OrchestrationRun::getTemplateId).collect(Collectors.toSet());
         Set<Long> taskIds = rows.stream().map(OrchestrationRun::getTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> runIds = rows.stream().map(OrchestrationRun::getId).collect(Collectors.toSet());
+        Set<Long> deploymentIds = rows.stream().map(OrchestrationRun::getDeploymentId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, OrchestrationTemplate> templateById = index(templates.findAllById(templateIds), OrchestrationTemplate::getId);
         Map<Long, RemediationTask> taskById = taskIds.isEmpty() ? Map.of() : index(tasks.findAllById(taskIds), RemediationTask::getId);
         Map<Long, List<OrchestrationRunStep>> stepsByRun = group(
                 runSteps.findByRunIdInOrderByRunIdAscStepOrderAsc(runIds), OrchestrationRunStep::getRunId);
+        Map<Long, List<DeploymentTargetView>> targetsByDeployment = deploymentTargetViews(deploymentIds);
         return rows.stream().map(r -> {
             OrchestrationTemplate template = templateById.get(r.getTemplateId());
             RemediationTask task = r.getTaskId() == null ? null : taskById.get(r.getTaskId());
@@ -248,7 +357,8 @@ public class ViewService {
                     template == null ? null : template.getNameZh(), template == null ? null : template.getNameEn(),
                     r.getTaskId(), task == null ? null : task.getTaskNo(), r.getDeploymentId(), r.getEnvironment(),
                     r.getRing(), s(r.getStatus()), r.getCurrentStep(), r.getProgress(), s(r.getCreatedAt()),
-                    s(r.getStartedAt()), s(r.getCompletedAt()), r.getFailureReason(), steps
+                    s(r.getStartedAt()), s(r.getCompletedAt()), r.getFailureReason(), steps,
+                    targetsByDeployment.getOrDefault(r.getDeploymentId(), List.of())
             );
         }).toList();
     }
@@ -259,8 +369,10 @@ public class ViewService {
         if (rows.isEmpty()) return List.of();
         Set<Long> taskIds = rows.stream().map(PatchDeployment::getTaskId).collect(Collectors.toSet());
         Set<Long> patchIds = rows.stream().map(PatchDeployment::getPatchId).collect(Collectors.toSet());
+        Set<Long> deploymentIds = rows.stream().map(PatchDeployment::getId).collect(Collectors.toSet());
         Map<Long, RemediationTask> taskById = index(tasks.findAllById(taskIds), RemediationTask::getId);
         Map<Long, Patch> patchById = index(patches.findAllById(patchIds), Patch::getId);
+        Map<Long, List<DeploymentTargetView>> targetsByDeployment = deploymentTargetViews(deploymentIds);
         return rows.stream().map(d -> {
             RemediationTask task = taskById.get(d.getTaskId());
             Patch patch = patchById.get(d.getPatchId());
@@ -269,12 +381,29 @@ public class ViewService {
                     d.getPatchId(), patch == null ? null : patch.getPatchId(), d.getEnvironment(), d.getRing(),
                     s(d.getStatus()), d.getProgress(), d.getOrchestrationRunId(), d.getTargetCount(),
                     d.getSuccessCount(), d.getFailureCount(), s(d.getCreatedAt()), s(d.getStartedAt()),
-                    s(d.getCompletedAt())
+                    s(d.getCompletedAt()), targetsByDeployment.getOrDefault(d.getId(), List.of())
             );
         }).toList();
     }
 
     public DeploymentView deployment(PatchDeployment row) { return deploymentViews(List.of(row)).getFirst(); }
+
+    private Map<Long, List<DeploymentTargetView>> deploymentTargetViews(Set<Long> deploymentIds) {
+        if (deploymentIds.isEmpty()) return Map.of();
+        List<DeploymentTarget> rows = deploymentTargets.findByDeploymentIdInOrderByDeploymentIdAscAssetIdAsc(deploymentIds);
+        Set<Long> assetIds = rows.stream().map(DeploymentTarget::getAssetId).collect(Collectors.toSet());
+        Map<Long, Asset> assetById = assetIds.isEmpty() ? Map.of() : index(assets.findAllById(assetIds), Asset::getId);
+        return rows.stream().map(target -> {
+            Asset asset = assetById.get(target.getAssetId());
+            return new AbstractMap.SimpleEntry<>(target.getDeploymentId(), new DeploymentTargetView(
+                    target.getId(), target.getAssetId(), asset == null ? null : asset.getAssetCode(),
+                    asset == null ? null : asset.getName(), asset == null ? null : s(asset.getEnvironment()),
+                    target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
+                    target.getMessage()
+            ));
+        }).collect(Collectors.groupingBy(Map.Entry::getKey, LinkedHashMap::new,
+                Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+    }
 
     public AuditView audit(AuditEvent a) {
         return new AuditView(a.getId(), a.getEntityType(), a.getEntityId(), a.getAction(), a.getMessageZh(),
