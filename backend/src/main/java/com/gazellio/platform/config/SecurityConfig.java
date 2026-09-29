@@ -47,6 +47,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health/**", "/api/auth/**", "/api/agent/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .requestMatchers(
+                                "/", "/index.html", "/favicon.ico", "/gazellio-logo.png", "/assets/**", "/error",
+                                "/login", "/vulnerabilities/**", "/scans/**", "/assets", "/patches/**",
+                                "/tasks/**", "/approvals/**", "/automation/**", "/reports/**", "/audit/**",
+                                "/settings/**"
+                        ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class)
                 .build();

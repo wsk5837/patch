@@ -5,22 +5,28 @@ Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程�
 - `frontend/`：React + Vite，负责产品 UI、路由和中英文切换。
 - `backend/`：Java 21 + Spring Boot，负责认证、业务流程、扫描任务、漏洞、CMDB、补丁、审批、自动化编排和审计。
 - PostgreSQL：保存业务数据和流程状态。
-- `render.yaml`：Render Blueprint，一次创建前端、Java API 和 PostgreSQL。
+- `render.yaml`：Render Blueprint，一次创建全栈 Web Service 和 PostgreSQL。
 
 ## 直接部署到 Render
 
 1. 把本目录全部上传到一个 GitHub 仓库的根目录。
 2. 在 Render 选择 **New > Blueprint**，连接该 GitHub 仓库。
 3. Render 会读取根目录的 `render.yaml`，创建：
-   - `gazellio-web`
-   - `gazellio-api`
+   - `gazellio`（React 页面与 Java API 合并部署）
    - `gazellio-db`
 4. 首次创建时输入 `ADMIN_INITIAL_PASSWORD`。
-5. 等待三个资源部署完成，打开 `gazellio-web` 的公开地址。
+5. 等待两个资源部署完成，打开 `gazellio` 的公开地址。
 
 默认管理员账号：`admin`。密码为你在 Render 中填写的 `ADMIN_INITIAL_PASSWORD`。
 
-> Java 属于 JVM 运行时，Render 官方建议使用 Docker 部署，因此后端使用多阶段 Dockerfile 构建 Spring Boot 服务。前端通过 Render 私网访问 Java API，浏览器只访问同源 `/api`。
+> 根目录多阶段 Dockerfile 先构建 React，再把产物打入 Spring Boot 静态资源目录。浏览器页面和 `/api` 使用同一个 Render 域名，不需要额外配置跨域地址。
+
+### Render 登录与页面检查
+
+- 必须通过 **Blueprint** 首次创建，或者在 `gazellio` 服务的 Environment 中手动设置 `ADMIN_INITIAL_PASSWORD`。
+- `ADMIN_INITIAL_PASSWORD` 只用于管理员引导登录，不要提交到 Git 仓库。
+- `/actuator/health` 正常但首页是 403，通常表示部署的仍是旧版本；重新部署最新提交。
+- 页面刷新后应继续返回 React 页面，包括 `/login`、`/tasks/{id}` 和 `/automation/runs/{id}`。
 
 ## 本地运行
 

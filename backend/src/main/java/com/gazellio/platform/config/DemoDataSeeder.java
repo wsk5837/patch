@@ -41,7 +41,8 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final PasswordEncoder encoder;
 
     @Value("${app.seed-demo-data:true}") private boolean seed;
-    @Value("${ADMIN_INITIAL_PASSWORD:Gazellio@2026}") private String adminPassword;
+    @Value("${ADMIN_INITIAL_PASSWORD:}") private String adminPassword;
+    @Value("${RENDER:false}") private boolean renderEnvironment;
 
     @Override @Transactional
     public void run(String... args) throws Exception {
@@ -58,16 +59,35 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedUsers() {
-        if (users.count() > 0) return;
-        users.save(UserAccount.builder().username("admin").passwordHash(encoder.encode(adminPassword)).displayName("Gazellio Admin").email("admin@gazellio.local").role(UserRole.ADMIN).build());
-        saveUser("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
-        saveUser("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
-        saveUser("appowner", "应用负责人", "appowner@gazellio.local", UserRole.APP_OWNER);
-        saveUser("approver", "发布审批人", "approver@gazellio.local", UserRole.APPROVER);
+        users.findByUsername("admin").orElseGet(() -> users.save(UserAccount.builder()
+                .username("admin")
+                .passwordHash(encoder.encode(bootstrapAdminPassword()))
+                .displayName("Gazellio Admin")
+                .email("admin@gazellio.local")
+                .role(UserRole.ADMIN)
+                .build()));
+        saveUserIfMissing("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
+        saveUserIfMissing("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
+        saveUserIfMissing("appowner", "应用负责人", "appowner@gazellio.local", UserRole.APP_OWNER);
+        saveUserIfMissing("approver", "发布审批人", "approver@gazellio.local", UserRole.APPROVER);
     }
 
-    private void saveUser(String username,String name,String email,UserRole role){
-        users.save(UserAccount.builder().username(username).passwordHash(encoder.encode(UUID.randomUUID().toString())).displayName(name).email(email).role(role).build());
+    private String bootstrapAdminPassword() {
+        if (adminPassword != null && !adminPassword.isBlank()) return adminPassword;
+        if (renderEnvironment) {
+            throw new IllegalStateException("ADMIN_INITIAL_PASSWORD must be configured on Render");
+        }
+        return "Gazellio@2026";
+    }
+
+    private void saveUserIfMissing(String username,String name,String email,UserRole role){
+        users.findByUsername(username).orElseGet(() -> users.save(UserAccount.builder()
+                .username(username)
+                .passwordHash(encoder.encode(UUID.randomUUID().toString()))
+                .displayName(name)
+                .email(email)
+                .role(role)
+                .build()));
     }
 
     private void seedAssets() {
