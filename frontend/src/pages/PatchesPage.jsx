@@ -21,7 +21,7 @@ export default function PatchesPage(){
   const [form,setForm]=useState(emptyPatch)
   const {data:patches=[],reload}=useApiData('/api/patches',{initial:[]})
   const {data:servers=[],reload:reloadServers}=useApiData('/api/patches/servers',{initial:[]})
-  const {data:deployments=[],reload:reloadDeployments}=useApiData('/api/patches/deployments',{initial:[],poll:5000})
+  const {data:deployments=[],reload:reloadDeployments}=useApiData('/api/patches/deployments',{initial:[],poll:10000})
 
   const sync=async()=>{
     try{

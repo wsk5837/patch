@@ -8,7 +8,7 @@ import { fmtDate } from '../utils/format'
 
 export default function AuditPage(){
   const {t,lang}=useI18n()
-  const {data=[],loading,reload}=useApiData('/api/audit',{initial:[],poll:15000})
+  const {data=[],loading,reload}=useApiData('/api/audit',{initial:[],poll:30000})
   const cols=[
     {key:'createdAt',label:t('time'),render:r=>fmtDate(r.createdAt,lang)},
     {key:'entityType',label:t('entity')},
