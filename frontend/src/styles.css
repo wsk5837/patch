@@ -38,3 +38,4 @@
 @media(max-width:980px){.calendar-legend{border-radius:10px}.patch-calendar{border-top:1px solid var(--line);border-radius:12px;margin-top:9px}.workorder-chain{grid-template-columns:1fr}.workorder-chain>i{transform:rotate(90deg);padding:3px}.command-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.calendar-legend .legend-spacer{display:none}.calendar-legend{gap:11px}.workorder-chain{padding:12px}.chain-card{min-height:74px}}
 .panel-head h2{display:flex;align-items:center;gap:7px}
+.btn.next-action{box-shadow:0 0 0 3px rgba(105,65,245,.11),0 8px 20px rgba(105,65,245,.24)}

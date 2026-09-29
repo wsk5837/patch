@@ -33,12 +33,18 @@ const replacements=[
  ['任务动作：','Task action: '],['已触发变更','triggered change'],['安全事件','Security incident'],['补丁处置任务','patch remediation task']
 ]
 
+const embeddedEnglish=Object.entries(exactEnglish)
+ .filter(([source])=>/[\u3400-\u9fff]/.test(source))
+ .sort(([a],[b])=>b.length-a.length)
+
 export function localizeData(value,lang){
  if(value==null||lang==='zh')return value
- let text=String(value)
+ const original=String(value)
+ let text=original.replace(/\s+/g,' ').trim()
  if(exactEnglish[text])return exactEnglish[text]
+ for(const [zh,en] of embeddedEnglish)text=text.split(zh).join(en)
  for(const [zh,en] of replacements)text=text.split(zh).join(en)
- return text
+ return text||original
 }
 
 export function localizePayload(value,lang){

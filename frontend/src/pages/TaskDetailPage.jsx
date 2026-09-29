@@ -50,6 +50,11 @@ export default function TaskDetailPage(){
   finally{setBusy(false)}
  }
 
+ const patchRunActive=task.latestRunId&&task.status==='IN_PROGRESS'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage)
+ const retestRunActive=task.latestRunId&&task.lastRetestMode==='AUTO'&&task.lastRetestResult==='RUNNING'
+ const runIsNext=patchRunActive||retestRunActive
+ const approvalIsNext=task.stage==='RELEASE_APPROVAL'&&!!task.approvalId
+
  const actions=[]
  if(task.stage!=='CLOSED')actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
  if(task.stage==='ASSIGNED')actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>doAction('start-test')}><Play size={15}/>{t('startTestPatch')}</button>)
@@ -64,8 +69,8 @@ export default function TaskDetailPage(){
  if(task.status==='BLOCKED'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage))actions.push(<button key="retry" className="btn primary" onClick={()=>doAction('retry')}><RefreshCw size={15}/>{t('retry')}</button>)
  if(task.securityIncidentId)actions.push(<button key="incident" className={task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'btn primary':'btn'} onClick={()=>nav(`/work-orders/incidents/${task.securityIncidentId}`)}><ExternalLink size={15}/>{t(task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'createChange':'securityIncident')}</button>)
  if(task.changeOrderId)actions.push(<button key="change" className="btn" onClick={()=>nav(`/work-orders/changes/${task.changeOrderId}`)}><ExternalLink size={15}/>{t('changeOrder')}</button>)
- if(task.approvalId)actions.push(<button key="approval" className="btn" onClick={()=>nav(`/approvals/${task.approvalId}`)}><ExternalLink size={15}/>{t('linkedApproval')}</button>)
- if(task.latestRunId)actions.push(<button key="run" className="btn" onClick={()=>nav(`/automation/runs/${task.latestRunId}`)}><ExternalLink size={15}/>{t('linkedRun')}</button>)
+ if(task.approvalId)actions.push(<button key="approval" className={approvalIsNext?'btn primary next-action':'btn'} onClick={()=>nav(`/approvals/${task.approvalId}`)}><ExternalLink size={15}/>{t('linkedApproval')}</button>)
+ if(task.latestRunId)actions.push(<button key="run" className={runIsNext?'btn primary next-action':'btn'} onClick={()=>nav(`/automation/runs/${task.latestRunId}`)}><ExternalLink size={15}/>{t('linkedRun')}</button>)
 
  return <>
   <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions">{actions}</div></div>

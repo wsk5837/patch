@@ -15,6 +15,6 @@ export function OrchestrationGraph({steps=[],template=false}){
  return <div className="flow-graph">{steps.map((s,i)=>{const st=template?'WAITING':s.status;return <React.Fragment key={s.id||s.code||i}><div className={`flow-node flow-${String(st).toLowerCase()}`}><div className="flow-node-icon">{template?<span>{i+1}</span>:iconFor(st)}</div><div><b>{lang==='zh'?s.nameZh:s.nameEn}</b>{!template&&<small>{runStepStatus(t,st)}</small>}</div></div>{i<steps.length-1&&<div className="flow-edge"><span>→</span></div>}</React.Fragment>})}</div>
 }
 export function ApprovalGraph({steps=[]}){
- const {lang,t}=useI18n()
- return <div className="flow-graph approval-graph">{steps.map((s,i)=><React.Fragment key={s.id||i}><div className={`flow-node flow-${String(s.status).toLowerCase()}`}><div className="flow-node-icon">{iconFor(s.status)}</div><div><b>{lang==='zh'?s.roleNameZh:s.roleNameEn}</b><small>{s.approverName||'—'} · {approvalStepStatus(t,s.status)}</small></div></div>{i<steps.length-1&&<div className="flow-edge"><span>→</span></div>}</React.Fragment>)}</div>
+ const {lang,t,localize}=useI18n()
+ return <div className="flow-graph approval-graph">{steps.map((s,i)=><React.Fragment key={s.id||i}><div className={`flow-node flow-${String(s.status).toLowerCase()}`}><div className="flow-node-icon">{iconFor(s.status)}</div><div><b>{lang==='zh'?s.roleNameZh:s.roleNameEn}</b><small>{localize(s.approverName)||'—'} · {approvalStepStatus(t,s.status)}</small></div></div>{i<steps.length-1&&<div className="flow-edge"><span>→</span></div>}</React.Fragment>)}</div>
 }
