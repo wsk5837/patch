@@ -27,6 +27,7 @@ Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程�
 - `ADMIN_INITIAL_PASSWORD` 只用于管理员引导登录，不要提交到 Git 仓库。
 - `/actuator/health` 正常但首页是 403，通常表示部署的仍是旧版本；重新部署最新提交。
 - 页面刷新后应继续返回 React 页面，包括 `/login`、`/tasks/{id}` 和 `/automation/runs/{id}`。
+- CISA KEV 不在应用启动时自动全量同步，避免免费实例首次启动超时；登录后可在漏洞库手动同步，定时同步仍保留。
 
 ## 本地运行
 
