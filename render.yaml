@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: gazellio-api
+    name: gazellio
     runtime: docker
     plan: free
     region: singapore
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /actuator/health
     autoDeployTrigger: commit
     envVars:
@@ -39,22 +39,6 @@ services:
         value: "true"
       - key: DB_POOL_SIZE
         value: "6"
-
-  - type: web
-    name: gazellio-web
-    runtime: docker
-    plan: free
-    region: singapore
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    healthCheckPath: /
-    autoDeployTrigger: commit
-    envVars:
-      - key: BACKEND_HOSTPORT
-        fromService:
-          type: web
-          name: gazellio-api
-          property: hostport
 
 databases:
   - name: gazellio-db
