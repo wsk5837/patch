@@ -5,7 +5,13 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.FindingStatus;
 
-@Entity @Table(name="findings", uniqueConstraints=@UniqueConstraint(name="uk_finding_asset_cve", columnNames={"asset_id","cve_id"}))
+@Entity @Table(name="findings",
+        uniqueConstraints=@UniqueConstraint(name="uk_finding_asset_cve", columnNames={"asset_id","cve_id"}),
+        indexes={
+                @Index(name="idx_finding_status_risk", columnList="status,risk_score,last_seen_at"),
+                @Index(name="idx_finding_cve_status", columnList="cve_id,status"),
+                @Index(name="idx_finding_scan", columnList="scan_job_id")
+        })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Finding {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

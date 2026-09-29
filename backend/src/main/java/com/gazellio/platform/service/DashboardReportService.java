@@ -1,36 +1,119 @@
 package com.gazellio.platform.service;
 
 import com.gazellio.platform.dto.ApiDtos.*;
-import com.gazellio.platform.model.*;
+import com.gazellio.platform.model.Enums.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
-import static com.gazellio.platform.model.Enums.*;
 
-@Service @RequiredArgsConstructor
+@Service
+@RequiredArgsConstructor
 public class DashboardReportService {
- private final FindingRepository findings; private final VulnerabilityDefinitionRepository vulns; private final AssetRepository assets; private final ApprovalRequestRepository approvals; private final ScanJobRepository scans; private final OrchestrationRunRepository runs; private final RemediationTaskRepository tasks; private final ViewService view;
+    private static final List<FindingStatus> CLOSED_FINDINGS =
+            List.of(FindingStatus.RESOLVED, FindingStatus.FALSE_POSITIVE, FindingStatus.EXEMPTED);
+    private static final Duration DASHBOARD_CACHE_TTL = Duration.ofSeconds(5);
+    private static final Duration REPORT_CACHE_TTL = Duration.ofSeconds(15);
 
- public DashboardView dashboard(){
-   List<Finding> open=findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc().stream().filter(this::open).toList();
-   long critical=open.stream().filter(f->vulns.findById(f.getCveId()).map(v->v.getSeverity()==Severity.CRITICAL).orElse(false)).count();
-   long high=open.stream().filter(f->vulns.findById(f.getCveId()).map(v->v.getSeverity()==Severity.HIGH).orElse(false)).count();
-   long runningScans=scans.findTop100ByOrderByCreatedAtDesc().stream().filter(s->s.getStatus()==ScanStatus.RUNNING||s.getStatus()==ScanStatus.QUEUED).count();
-   long runningRuns=runs.findTop200ByOrderByCreatedAtDesc().stream().filter(r->r.getStatus()==RunStatus.RUNNING||r.getStatus()==RunStatus.QUEUED||r.getStatus()==RunStatus.PAUSED).count();
-   return new DashboardView(critical,high,open.size(),approvals.countByStatus(ApprovalStatus.PENDING),runningScans,runningRuns,patchCompliance(),open.stream().limit(6).map(view::finding).toList(),scans.findTop100ByOrderByCreatedAtDesc().stream().limit(5).map(view::scan).toList(),runs.findTop200ByOrderByCreatedAtDesc().stream().limit(5).map(view::run).toList());
- }
+    private final FindingRepository findings;
+    private final VulnerabilityDefinitionRepository vulns;
+    private final AssetRepository assets;
+    private final ApprovalRequestRepository approvals;
+    private final ScanJobRepository scans;
+    private final OrchestrationRunRepository runs;
+    private final RemediationTaskRepository tasks;
+    private final ViewService view;
 
- public ReportView report(){
-   List<Finding> all=findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc(); List<Finding> open=all.stream().filter(this::open).toList();
-   Map<String,Long> sev=Arrays.stream(Severity.values()).collect(Collectors.toMap(Enum::name,s->open.stream().filter(f->vulns.findById(f.getCveId()).map(v->v.getSeverity()==s).orElse(false)).count(),(a,b)->a,LinkedHashMap::new));
-   Map<String,Long> env=Arrays.stream(EnvironmentType.values()).collect(Collectors.toMap(Enum::name,e->open.stream().filter(f->assets.findById(f.getAssetId()).map(a->a.getEnvironment()==e).orElse(false)).count(),(a,b)->a,LinkedHashMap::new));
-   long success=runs.findTop200ByOrderByCreatedAtDesc().stream().filter(r->r.getStatus()==RunStatus.SUCCEEDED).count(), total=runs.count();
-   long openTasks=tasks.findTop200ByOrderByUpdatedAtDesc().stream().filter(t->t.getStatus()!=TaskStatus.COMPLETED&&t.getStatus()!=TaskStatus.CANCELLED).count();
-   return new ReportView(vulns.count(),open.size(),all.stream().filter(f->f.getStatus()==FindingStatus.RESOLVED).count(),all.stream().filter(f->f.getStatus()==FindingStatus.FALSE_POSITIVE).count(),openTasks,approvals.countByStatus(ApprovalStatus.PENDING),total,success,total==0?100.0:Math.round(success*1000.0/total)/10.0,patchCompliance(),sev,env);
- }
- private boolean open(Finding f){return f.getStatus()!=FindingStatus.RESOLVED&&f.getStatus()!=FindingStatus.FALSE_POSITIVE&&f.getStatus()!=FindingStatus.EXEMPTED;}
- private double patchCompliance(){List<Asset> list=assets.findByActiveTrueOrderByNameAsc();if(list.isEmpty())return 100.0;long compliant=list.stream().filter(a->findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc().stream().filter(f->Objects.equals(f.getAssetId(),a.getId())&&open(f)).noneMatch(f->vulns.findById(f.getCveId()).map(v->v.isPatchAvailable()&&(v.getSeverity()==Severity.CRITICAL||v.getSeverity()==Severity.HIGH)).orElse(false))).count();return Math.round(compliant*1000.0/list.size())/10.0;}
+    private volatile DashboardView cachedDashboard;
+    private volatile Instant dashboardExpiresAt = Instant.EPOCH;
+    private volatile ReportView cachedReport;
+    private volatile Instant reportExpiresAt = Instant.EPOCH;
+
+    public DashboardView dashboard() {
+        Instant now = Instant.now();
+        DashboardView cached = cachedDashboard;
+        if (cached != null && now.isBefore(dashboardExpiresAt)) return cached;
+        synchronized (this) {
+            now = Instant.now();
+            if (cachedDashboard != null && now.isBefore(dashboardExpiresAt)) return cachedDashboard;
+            Map<Severity, Long> bySeverity = severityCounts();
+            DashboardView result = new DashboardView(
+                    bySeverity.getOrDefault(Severity.CRITICAL, 0L),
+                    bySeverity.getOrDefault(Severity.HIGH, 0L),
+                    findings.countByStatusNotIn(CLOSED_FINDINGS),
+                    approvals.countByStatus(ApprovalStatus.PENDING),
+                    scans.countByStatusIn(List.of(ScanStatus.QUEUED, ScanStatus.RUNNING)),
+                    runs.countByStatusIn(List.of(RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.PAUSED)),
+                    patchCompliance(),
+                    view.findingViews(findings.findTop6ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED_FINDINGS)),
+                    scans.findTop5ByOrderByCreatedAtDesc().stream().map(view::scan).toList(),
+                    view.runViews(runs.findTop5ByOrderByCreatedAtDesc())
+            );
+            cachedDashboard = result;
+            dashboardExpiresAt = now.plus(DASHBOARD_CACHE_TTL);
+            return result;
+        }
+    }
+
+    public ReportView report() {
+        Instant now = Instant.now();
+        ReportView cached = cachedReport;
+        if (cached != null && now.isBefore(reportExpiresAt)) return cached;
+        synchronized (this) {
+            now = Instant.now();
+            if (cachedReport != null && now.isBefore(reportExpiresAt)) return cachedReport;
+            long totalRuns = runs.count();
+            long succeededRuns = runs.countByStatusIn(List.of(RunStatus.SUCCEEDED));
+            Map<String, Long> severity = new LinkedHashMap<>();
+            Map<Severity, Long> severityRaw = severityCounts();
+            for (Severity value : Severity.values()) severity.put(value.name(), severityRaw.getOrDefault(value, 0L));
+            Map<String, Long> environment = new LinkedHashMap<>();
+            Map<EnvironmentType, Long> environmentRaw = environmentCounts();
+            for (EnvironmentType value : EnvironmentType.values()) environment.put(value.name(), environmentRaw.getOrDefault(value, 0L));
+
+            ReportView result = new ReportView(
+                    vulns.count(),
+                    findings.countByStatusNotIn(CLOSED_FINDINGS),
+                    findings.countByStatus(FindingStatus.RESOLVED),
+                    findings.countByStatus(FindingStatus.FALSE_POSITIVE),
+                    tasks.countByStatusIn(List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)),
+                    approvals.countByStatus(ApprovalStatus.PENDING),
+                    totalRuns,
+                    succeededRuns,
+                    totalRuns == 0 ? 100.0 : Math.round(succeededRuns * 1000.0 / totalRuns) / 10.0,
+                    patchCompliance(),
+                    severity,
+                    environment
+            );
+            cachedReport = result;
+            reportExpiresAt = now.plus(REPORT_CACHE_TTL);
+            return result;
+        }
+    }
+
+    private Map<Severity, Long> severityCounts() {
+        EnumMap<Severity, Long> result = new EnumMap<>(Severity.class);
+        findings.countOpenBySeverity(CLOSED_FINDINGS)
+                .forEach(row -> result.put(row.getSeverity(), row.getTotal()));
+        return result;
+    }
+
+    private Map<EnvironmentType, Long> environmentCounts() {
+        EnumMap<EnvironmentType, Long> result = new EnumMap<>(EnvironmentType.class);
+        findings.countOpenByEnvironment(CLOSED_FINDINGS)
+                .forEach(row -> result.put(row.getEnvironment(), row.getTotal()));
+        return result;
+    }
+
+    private double patchCompliance() {
+        long totalAssets = assets.countByActiveTrue();
+        if (totalAssets == 0) return 100.0;
+        long nonCompliant = findings.countNonCompliantAssets(
+                CLOSED_FINDINGS, List.of(Severity.CRITICAL, Severity.HIGH));
+        long compliant = Math.max(0, totalAssets - nonCompliant);
+        return Math.round(compliant * 1000.0 / totalAssets) / 10.0;
+    }
 }

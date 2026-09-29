@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.RunStatus;
 
-@Entity @Table(name="orchestration_runs")
+@Entity @Table(name="orchestration_runs", indexes={
+        @Index(name="idx_run_status_created", columnList="status,created_at"),
+        @Index(name="idx_run_task", columnList="task_id")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class OrchestrationRun {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

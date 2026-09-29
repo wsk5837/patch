@@ -26,7 +26,7 @@ public class TaskService {
     private final AuditService audit;
     private final CurrentUserService currentUser;
 
-    public List<TaskView> list(){return tasks.findTop200ByOrderByUpdatedAtDesc().stream().map(view::task).toList();}
+    public List<TaskView> list(){return view.taskViews(tasks.findTop200ByOrderByUpdatedAtDesc());}
     public TaskView get(Long id){return view.task(require(id));}
 
     @Transactional

@@ -46,7 +46,7 @@ public class ScanService {
     @Scheduled(fixedDelay = 3500)
     @Transactional
     public void advanceQueuedAndRunningScans(){
-        for(ScanJob j: scans.findTop100ByOrderByCreatedAtDesc()){
+        for(ScanJob j: scans.findByStatusIn(List.of(ScanStatus.QUEUED,ScanStatus.RUNNING))){
             if(j.getStatus()==ScanStatus.QUEUED){ j.setStatus(ScanStatus.RUNNING); j.setStartedAt(Instant.now()); j.setProgress(8); scans.save(j); continue; }
             if(j.getStatus()!=ScanStatus.RUNNING) continue;
             int next=Math.min(94,j.getProgress()+ThreadLocalRandom.current().nextInt(12,27));

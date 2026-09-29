@@ -33,7 +33,7 @@ public class OrchestrationService {
     private final CurrentUserService currentUser;
 
     public List<TemplateView> templates(){
-        return templates.findByEnabledTrueOrderByNameZhAsc().stream().map(view::template).toList();
+        return view.templateViews(templates.findByEnabledTrueOrderByNameZhAsc());
     }
 
     public TemplateView template(Long id){
@@ -42,7 +42,7 @@ public class OrchestrationService {
     }
 
     public List<RunView> runs(){
-        return runs.findTop200ByOrderByCreatedAtDesc().stream().map(view::run).toList();
+        return view.runViews(runs.findTop200ByOrderByCreatedAtDesc());
     }
 
     public RunView run(Long id){
@@ -51,7 +51,7 @@ public class OrchestrationService {
     }
 
     public List<DeploymentView> deployments(){
-        return deployments.findTop200ByOrderByCreatedAtDesc().stream().map(view::deployment).toList();
+        return view.deploymentViews(deployments.findTop200ByOrderByCreatedAtDesc());
     }
 
     @Transactional

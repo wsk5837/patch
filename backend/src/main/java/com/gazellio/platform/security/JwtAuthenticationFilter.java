@@ -13,18 +13,18 @@ import java.io.IOException;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwt;
-    private final UserDetailsService users;
-    public JwtAuthenticationFilter(JwtService jwt, UserDetailsService users) { this.jwt = jwt; this.users = users; }
+    public JwtAuthenticationFilter(JwtService jwt) { this.jwt = jwt; }
 
     @Override protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
         String auth = req.getHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ") && SecurityContextHolder.getContext().getAuthentication() == null) {
             String token = auth.substring(7);
-            if (jwt.valid(token)) {
-                UserDetails u = users.loadUserByUsername(jwt.username(token));
+            try {
+                JwtService.TokenClaims claims = jwt.read(token);
+                UserDetails u = User.withUsername(claims.username()).password("").roles(claims.role()).build();
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(u, null, u.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
+            } catch (Exception ignored) {}
         }
         chain.doFilter(req, res);
     }

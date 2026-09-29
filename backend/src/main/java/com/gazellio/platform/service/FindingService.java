@@ -44,18 +44,21 @@ public class FindingService {
         if(sev!=null){ Severity selected=sev; spec=spec.and((root,cq,cb)->cb.equal(root.get("severity"),selected)); }
         if(kev!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("kev"),kev));
         Sort sort=Sort.by(Sort.Order.desc("kev"),Sort.Order.desc("cvss"),Sort.Order.desc("updatedAt"));
-        return vulns.findAll(spec,sort).stream().map(view::vulnerability).toList();
+        return view.vulnerabilityViews(vulns.findAll(spec,sort));
     }
     public VulnerabilityView vulnerability(String cve){ return view.vulnerability(vulns.findById(cve).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND))); }
 
     public List<FindingView> list(String status,String severity,String q){
-        return findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc().stream().filter(f->{
-            if(status!=null&&!status.isBlank()&&!status.equalsIgnoreCase("ALL")&&!f.getStatus().name().equalsIgnoreCase(status)) return false;
-            VulnerabilityDefinition v=vulns.findById(f.getCveId()).orElse(null); Asset a=assets.findById(f.getAssetId()).orElse(null);
-            if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")&&(v==null||!v.getSeverity().name().equalsIgnoreCase(severity)))return false;
-            if(q!=null&&!q.isBlank()){String z=(f.getCveId()+" "+(a==null?"":a.getName()+" "+a.getAssetCode()+" "+a.getBusinessService())+" "+(v==null?"":v.getTitleZh()+" "+v.getTitleEn())).toLowerCase(); if(!z.contains(q.toLowerCase()))return false;}
+        String needle=q==null?null:q.toLowerCase(Locale.ROOT);
+        return view.findingViews(findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc()).stream().filter(f->{
+            if(status!=null&&!status.isBlank()&&!status.equalsIgnoreCase("ALL")&&!status.equalsIgnoreCase(f.status())) return false;
+            if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")&&!severity.equalsIgnoreCase(f.severity())) return false;
+            if(needle!=null&&!needle.isBlank()){
+                String haystack=String.join(" ",Objects.toString(f.cveId(),""),Objects.toString(f.assetName(),""),Objects.toString(f.assetCode(),""),Objects.toString(f.businessService(),""),Objects.toString(f.titleZh(),""),Objects.toString(f.titleEn(),"")).toLowerCase(Locale.ROOT);
+                return haystack.contains(needle);
+            }
             return true;
-        }).map(view::finding).toList();
+        }).toList();
     }
     public FindingView get(Long id){return view.finding(findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND)));}
 

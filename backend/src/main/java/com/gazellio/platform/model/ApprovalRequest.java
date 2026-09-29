@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.*;
 
-@Entity @Table(name="approval_requests")
+@Entity @Table(name="approval_requests", indexes={
+        @Index(name="idx_approval_status_submitted", columnList="status,submitted_at"),
+        @Index(name="idx_approval_task", columnList="task_id")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ApprovalRequest {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

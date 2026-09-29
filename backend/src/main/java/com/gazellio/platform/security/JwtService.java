@@ -47,6 +47,18 @@ public class JwtService {
         return claims(token).getSubject();
     }
 
+    public TokenClaims read(String token) {
+        Claims value = claims(token);
+        Object rawUserId = value.get("uid");
+        Number userId = rawUserId instanceof Number number ? number : null;
+        return new TokenClaims(
+                value.getSubject(),
+                userId == null ? null : userId.longValue(),
+                value.get("name", String.class),
+                value.get("role", String.class)
+        );
+    }
+
     public boolean valid(String token) {
         try { claims(token); return true; } catch (Exception e) { return false; }
     }
@@ -54,4 +66,6 @@ public class JwtService {
     private Claims claims(String token) {
         return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }
+
+    public record TokenClaims(String username, Long userId, String displayName, String role) {}
 }

@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.ScanStatus;
 
-@Entity @Table(name="scan_jobs")
+@Entity @Table(name="scan_jobs", indexes={
+        @Index(name="idx_scan_status_created", columnList="status,created_at"),
+        @Index(name="idx_scan_created", columnList="created_at")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ScanJob {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

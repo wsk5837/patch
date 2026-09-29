@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.EnvironmentType;
 
-@Entity @Table(name="assets")
+@Entity @Table(name="assets", indexes={
+        @Index(name="idx_asset_active_name", columnList="active,name"),
+        @Index(name="idx_asset_service_env", columnList="business_service,environment")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Asset {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

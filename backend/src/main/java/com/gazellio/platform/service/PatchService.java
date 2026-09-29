@@ -23,7 +23,7 @@ public class PatchService {
     private final CurrentUserService currentUser;
 
     public List<PatchView> list(){
-        return patches.findAllByOrderByPublishedDateDesc().stream().map(view::patch).toList();
+        return view.patchViews(patches.findAllByOrderByPublishedDateDesc());
     }
 
     public PatchView get(Long id){
@@ -35,7 +35,7 @@ public class PatchService {
     }
 
     public List<DeploymentView> deployments(){
-        return deployments.findTop200ByOrderByCreatedAtDesc().stream().map(view::deployment).toList();
+        return view.deploymentViews(deployments.findTop200ByOrderByCreatedAtDesc());
     }
 
     @Transactional

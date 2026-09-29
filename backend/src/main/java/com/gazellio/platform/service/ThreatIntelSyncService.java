@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
 import java.time.*;
-import java.util.Iterator;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import static com.gazellio.platform.model.Enums.Severity;
 
 @Service @RequiredArgsConstructor
@@ -40,10 +42,14 @@ public class ThreatIntelSyncService {
     public int syncCisaKev(){
         JsonNode root=rest.build().get().uri(cisaUrl).retrieve().body(JsonNode.class);
         if(root==null||!root.has("vulnerabilities")) return 0;
-        int n=0; Iterator<JsonNode> it=root.get("vulnerabilities").elements();
-        while(it.hasNext()){
-            JsonNode x=it.next(); String cve=text(x,"cveID"); if(cve==null)continue;
-            VulnerabilityDefinition v=repo.findById(cve).orElseGet(()->VulnerabilityDefinition.builder().cveId(cve).cvss(null).severity(Severity.HIGH).patchAvailable(false).build());
+        List<JsonNode> entries=new ArrayList<>();
+        root.get("vulnerabilities").elements().forEachRemaining(entries::add);
+        Set<String> cves=entries.stream().map(x->text(x,"cveID")).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<String,VulnerabilityDefinition> existing=repo.findAllById(cves).stream().collect(Collectors.toMap(VulnerabilityDefinition::getCveId,Function.identity()));
+        List<VulnerabilityDefinition> updates=new ArrayList<>(entries.size());
+        for(JsonNode x:entries){
+            String cve=text(x,"cveID"); if(cve==null)continue;
+            VulnerabilityDefinition v=existing.getOrDefault(cve,VulnerabilityDefinition.builder().cveId(cve).cvss(null).severity(Severity.HIGH).patchAvailable(false).build());
             String vendor=limit(text(x,"vendorProject"),160),product=limit(text(x,"product"),160),name=limit(text(x,"vulnerabilityName"),500);
             v.setVendor(vendor); v.setProduct(product); v.setKev(true); v.setRansomwareKnown("Known".equalsIgnoreCase(text(x,"knownRansomwareCampaignUse")));
             v.setTitleEn(name==null?cve:name); v.setTitleZh(limit((vendor==null?"":vendor+" ")+(product==null?"":product+" ")+"已知利用漏洞（"+cve+"）",500));
@@ -51,9 +57,10 @@ public class ThreatIntelSyncService {
             v.setReferenceUrl("https://www.cisa.gov/known-exploited-vulnerabilities-catalog");
             try{String d=text(x,"dateAdded");if(d!=null)v.setPublishedDate(LocalDate.parse(d));}catch(Exception ignored){}
             try{String d=text(x,"dueDate");if(d!=null)v.setKevDueDate(LocalDate.parse(d));}catch(Exception ignored){}
-            v.setUpdatedAt(Instant.now()); repo.save(v); n++;
+            v.setUpdatedAt(Instant.now()); updates.add(v);
         }
-        return n;
+        repo.saveAll(updates);
+        return updates.size();
     }
     private static String text(JsonNode n,String k){return n.hasNonNull(k)?n.get(k).asText():null;}
     private static String limit(String value,int max){return value!=null&&value.length()>max?value.substring(0,max):value;}

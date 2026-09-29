@@ -129,19 +129,21 @@ public class DemoDataSeeder implements CommandLineRunner {
 
     private void seedVulnerabilities() throws IOException {
         if (vulns.count() > 0) return;
+        List<VulnerabilityDefinition> rows=new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(new ClassPathResource("seed-vulnerabilities.csv").getInputStream(), StandardCharsets.UTF_8))) {
             br.readLine(); String line;
             while((line=br.readLine())!=null){
                 String[] x=line.split(",",9);
                 if(x.length<9) continue;
                 double cvss=Double.parseDouble(x[3]);
-                vulns.save(VulnerabilityDefinition.builder().cveId(x[0]).vendor(x[1]).product(x[2]).cvss(cvss).severity(Severity.valueOf(x[4]))
+                rows.add(VulnerabilityDefinition.builder().cveId(x[0]).vendor(x[1]).product(x[2]).cvss(cvss).severity(Severity.valueOf(x[4]))
                     .kev(Boolean.parseBoolean(x[5])).patchAvailable(Boolean.parseBoolean(x[6])).titleZh(x[7]).titleEn(x[8])
                     .descriptionZh(x[7]+"，建议结合资产暴露面、业务重要度与厂商补丁状态进行处置。")
                     .descriptionEn(x[8]+". Prioritize remediation using asset exposure, business criticality and vendor patch status.")
                     .publishedDate(LocalDate.now().minusDays((long)(Math.random()*900))).referenceUrl("https://nvd.nist.gov/vuln/detail/"+x[0]).build());
             }
         }
+        vulns.saveAll(rows);
     }
 
     private void seedPatches(){

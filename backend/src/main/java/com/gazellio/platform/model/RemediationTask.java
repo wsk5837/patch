@@ -5,7 +5,11 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.*;
 
-@Entity @Table(name="remediation_tasks")
+@Entity @Table(name="remediation_tasks", indexes={
+        @Index(name="idx_task_status_updated", columnList="status,updated_at"),
+        @Index(name="idx_task_finding", columnList="finding_id"),
+        @Index(name="idx_task_asset", columnList="asset_id")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class RemediationTask {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;

@@ -23,7 +23,7 @@ public class ApprovalService {
     private final AuditService audit;
     private final OrchestrationService orchestration;
 
-    public List<ApprovalView> list(){return approvals.findTop200ByOrderBySubmittedAtDesc().stream().map(view::approval).toList();}
+    public List<ApprovalView> list(){return view.approvalViews(approvals.findTop200ByOrderBySubmittedAtDesc());}
     public ApprovalView get(Long id){return view.approval(require(id));}
 
     @Transactional

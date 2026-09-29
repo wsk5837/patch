@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.Instant;
 import static com.gazellio.platform.model.Enums.DeploymentStatus;
 
-@Entity @Table(name="patch_deployments")
+@Entity @Table(name="patch_deployments", indexes={
+        @Index(name="idx_deployment_created", columnList="created_at"),
+        @Index(name="idx_deployment_task", columnList="task_id")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class PatchDeployment {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
