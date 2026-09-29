@@ -12,6 +12,8 @@ export function approvalStatus(t,v){return t(`approval_${v}`)}
 export function approvalStepStatus(t,v){return t(`step_${v}`)}
 export function runStatus(t,v){return t(`run_${v}`)}
 export function runStepStatus(t,v){return t(`step_${v}`)}
+export function incidentStatus(t,v){const x=t(`incident_${v}`);return x===`incident_${v}`?(v||'—'):x}
+export function changeStatus(t,v){const x=t(`change_${v}`);return x===`change_${v}`?(v||'—'):x}
 
 export function scanTypeLabel(t,v){return t(`scanType_${v}`)||v}
 export function serverStatus(t,v){const x=t(`server_${v}`);return x===`server_${v}`?(v||'—'):x}

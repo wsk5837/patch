@@ -9,4 +9,30 @@ import { ApprovalGraph } from '../components/FlowGraph'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {approvalStatus,fmtDate} from '../utils/format'
 import Modal from '../components/Modal'
-export default function ApprovalDetailPage(){const {id}=useParams();const nav=useNavigate();const {t,lang}=useI18n();const toast=useToast();const {data:a,loading,reload}=useApiData(`/api/approvals/${id}`,{poll:10000});const [action,setAction]=useState(null),[comment,setComment]=useState(''),[busy,setBusy]=useState(false);if(loading&&!a)return <div className="loading">{t('loading')}</div>;if(!a)return null;const submit=async()=>{setBusy(true);try{await api(`/api/approvals/${id}/${action}`,{method:'POST',body:{comment}});setAction(null);setComment('');await reload();toast.push(t('operationSuccess'))}catch(e){toast.push(t('operationFailed'),'red')}finally{setBusy(false)}};return <><div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions"><button className="btn" onClick={()=>nav(`/tasks/${a.taskId}`)}><ExternalLink size={15}/>{t('taskNo')}</button>{a.status==='PENDING'&&<><button className="btn danger" onClick={()=>setAction('reject')}><X size={15}/>{t('reject')}</button><button className="btn primary" onClick={()=>setAction('approve')}><Check size={15}/>{t('approve')}</button></>}</div></div><section className="detail-hero"><div><div className="eyebrow"><StatusBadge tone={a.changeType==='EMERGENCY'?'critical':a.changeType==='MAJOR'?'high':'purple'}>{t(a.changeType)}</StatusBadge><StatusBadge tone={statusTone(a.status)}>{approvalStatus(t,a.status)}</StatusBadge></div><h1>{a.approvalNo}</h1><h2>{a.taskNo} · {a.cveId} · {a.assetName}</h2></div></section><div className="detail-grid"><section className="panel span-2"><div className="panel-head"><h2>{t('approvalFlow')}</h2></div><div className="panel-body"><ApprovalGraph steps={a.steps}/></div></section><section className="panel"><div className="kv-grid"><div><span>{t('requestedBy')}</span><b>{a.requestedByName}</b></div><div><span>{t('submittedAt')}</span><b>{fmtDate(a.submittedAt,lang)}</b></div><div><span>{t('changeType')}</span><b>{t(a.changeType)}</b></div></div></section><section className="panel"><div className="panel-head"><h2>{t('reason')}</h2></div><div className="panel-body text-block">{a.reason||'—'}</div><div className="panel-head top-border"><h2>{t('rollbackPlan')}</h2></div><div className="panel-body text-block">{a.rollbackPlan||'—'}</div></section></div><Modal open={!!action} title={action==='approve'?t('approve'):t('reject')} onClose={()=>setAction(null)} footer={<><button className="btn" onClick={()=>setAction(null)}>{t('cancel')}</button><button className={`btn ${action==='reject'?'danger':'primary'}`} disabled={busy} onClick={submit}>{action==='approve'?t('approve'):t('reject')}</button></>}><label className="form-field"><span>{t('comment')}</span><textarea rows={4} value={comment} onChange={e=>setComment(e.target.value)}/></label></Modal></>}
+
+export default function ApprovalDetailPage(){
+ const {id}=useParams()
+ const nav=useNavigate()
+ const {t,lang}=useI18n()
+ const toast=useToast()
+ const {data:a,loading,reload}=useApiData(`/api/approvals/${id}`,{poll:10000})
+ const [action,setAction]=useState(null)
+ const [comment,setComment]=useState('')
+ const [busy,setBusy]=useState(false)
+ if(loading&&!a)return <div className="loading">{t('loading')}</div>
+ if(!a)return null
+
+ const submit=async()=>{
+  setBusy(true)
+  try{await api(`/api/approvals/${id}/${action}`,{method:'POST',body:{comment}});setAction(null);setComment('');await reload();toast.push(t('operationSuccess'))}
+  catch(e){toast.push(e.message||t('operationFailed'),'red')}
+  finally{setBusy(false)}
+ }
+
+ return <>
+  <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions"><button className="btn" onClick={()=>nav(`/tasks/${a.taskId}`)}><ExternalLink size={15}/>{t('remediationTask')}</button>{a.changeOrderId&&<button className="btn" onClick={()=>nav(`/work-orders/changes/${a.changeOrderId}`)}><ExternalLink size={15}/>{t('changeOrder')}</button>}{a.status==='PENDING'&&<><button className="btn danger" onClick={()=>setAction('reject')}><X size={15}/>{t('reject')}</button><button className="btn primary" onClick={()=>setAction('approve')}><Check size={15}/>{t('approve')}</button></>}</div></div>
+  <section className="detail-hero"><div><div className="eyebrow"><StatusBadge tone={a.changeType==='EMERGENCY'?'critical':a.changeType==='MAJOR'?'high':'purple'}>{t(a.changeType)}</StatusBadge><StatusBadge tone={statusTone(a.status)}>{approvalStatus(t,a.status)}</StatusBadge></div><h1>{a.approvalNo}</h1><h2>{a.changeNo?`${a.changeNo} · `:''}{a.taskNo} · {a.cveId} · {a.assetName}</h2></div></section>
+  <div className="detail-grid"><section className="panel span-2"><div className="panel-head"><h2>{t('approvalFlow')}</h2></div><div className="panel-body"><ApprovalGraph steps={a.steps}/></div></section><section className="panel"><div className="kv-grid"><div><span>{t('requestedBy')}</span><b>{a.requestedByName}</b></div><div><span>{t('submittedAt')}</span><b>{fmtDate(a.submittedAt,lang)}</b></div><div><span>{t('changeType')}</span><b>{t(a.changeType)}</b></div>{a.changeNo&&<div><span>{t('changeNo')}</span><b>{a.changeNo}</b></div>}</div></section><section className="panel"><div className="panel-head"><h2>{t('reason')}</h2></div><div className="panel-body text-block">{a.reason||'—'}</div><div className="panel-head top-border"><h2>{t('rollbackPlan')}</h2></div><div className="panel-body text-block">{a.rollbackPlan||'—'}</div></section></div>
+  <Modal open={!!action} title={action==='approve'?t('approve'):t('reject')} onClose={()=>setAction(null)} footer={<><button className="btn" onClick={()=>setAction(null)}>{t('cancel')}</button><button className={`btn ${action==='reject'?'danger':'primary'}`} disabled={busy} onClick={submit}>{action==='approve'?t('approve'):t('reject')}</button></>}><label className="form-field"><span>{t('comment')}</span><textarea rows={4} value={comment} onChange={e=>setComment(e.target.value)}/></label></Modal>
+ </>
+}

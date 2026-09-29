@@ -1,12 +1,12 @@
 import React,{useState} from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShieldAlert, Library, ScanSearch, Database, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, ShieldAlert, Library, ScanSearch, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown, TicketCheck, FileClock } from 'lucide-react'
 import { useI18n } from '../contexts/I18nContext'
 import { useAuth } from '../contexts/AuthContext'
 
 const groups=[
  {key:'vulnerabilityManagement',items:[['/vulnerabilities/library','vulnerabilityLibrary',Library],['/vulnerabilities/findings','findings',ShieldAlert],['/scans','scanManagement',ScanSearch]]},
- {key:'assetManagement',items:[['/assets','cmdb',Database]]},
+ {key:'workOrderCenter',items:[['/work-orders/incidents','securityIncidents',TicketCheck],['/work-orders/changes','changeOrders',FileClock]]},
  {key:'remediation',items:[['/tasks','tasks',ClipboardList],['/patches','patchCenter',Package],['/approvals','approvals',CheckSquare],['/automation','automation',Workflow]]},
  {key:null,items:[['/reports','reports',BarChart3],['/audit','audit',ScrollText],['/settings','settings',Settings]]}
 ]

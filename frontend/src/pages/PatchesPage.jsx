@@ -1,5 +1,6 @@
 import React,{useState} from 'react'
 import { RefreshCw, Package, Server, Rocket, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
 import { useI18n } from '../contexts/I18nContext'
@@ -10,10 +11,11 @@ import Modal from '../components/Modal'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {fmtDate,envLabel,serverStatus,deploymentStatus} from '../utils/format'
 
-const emptyPatch={patchId:'',vendor:'',product:'',version:'',titleZh:'',titleEn:'',downloadUrl:'',checksum:'',sizeMb:'',rebootRequired:false,source:'Manual',cves:''}
+const emptyPatch={patchId:'',vendor:'',product:'',version:'',titleZh:'',titleEn:'',downloadUrl:'',checksum:'',sizeMb:'',rebootRequired:false,source:'Manual',cves:'',applicabilityRule:'',supersedes:'',releaseNotesZh:'',releaseNotesEn:''}
 
 export default function PatchesPage(){
   const {t,pick,lang}=useI18n()
+  const nav=useNavigate()
   const toast=useToast()
   const [tab,setTab]=useState('library')
   const [open,setOpen]=useState(false)
@@ -78,7 +80,7 @@ export default function PatchesPage(){
       <button className={tab==='servers'?'active':''} onClick={()=>setTab('servers')}><Server size={15}/>{t('patchServers')}<span>{servers.length}</span></button>
       <button className={tab==='deployments'?'active':''} onClick={()=>setTab('deployments')}><Rocket size={15}/>{t('deployments')}<span>{deployments.length}</span></button>
     </div>
-    {tab==='library'?<DataTable columns={libCols} rows={patches}/>:tab==='servers'?<DataTable columns={serverCols} rows={servers}/>:<DataTable columns={depCols} rows={deployments}/>} 
+    {tab==='library'?<DataTable columns={libCols} rows={patches} onRowClick={r=>nav(`/patches/${r.id}`)}/>:tab==='servers'?<DataTable columns={serverCols} rows={servers}/>:<DataTable columns={depCols} rows={deployments} onRowClick={r=>r.orchestrationRunId&&nav(`/automation/runs/${r.orchestrationRunId}`)}/>}
     <Modal open={open} title={t('registerPatch')} onClose={()=>setOpen(false)} size="lg" footer={<><button className="btn" onClick={()=>setOpen(false)}>{t('cancel')}</button><button className="btn primary" disabled={busy||!form.patchId.trim()||!form.vendor.trim()||!form.product.trim()||!form.titleZh.trim()||!form.titleEn.trim()} onClick={register}>{t('save')}</button></>}>
       <div className="form-grid">
         <label className="form-field"><span>{t('patchId')}</span><input value={form.patchId} onChange={e=>setForm({...form,patchId:e.target.value})}/></label>
@@ -93,6 +95,10 @@ export default function PatchesPage(){
         <label className="form-field"><span>{t('checksum')}</span><input value={form.checksum} onChange={e=>setForm({...form,checksum:e.target.value})}/></label>
         <label className="form-field"><span>{t('rebootRequired')}</span><select value={form.rebootRequired?'true':'false'} onChange={e=>setForm({...form,rebootRequired:e.target.value==='true'})}><option value="false">{t('no')}</option><option value="true">{t('yes')}</option></select></label>
         <label className="form-field full"><span>{t('cveMappings')}</span><input value={form.cves} onChange={e=>setForm({...form,cves:e.target.value})} placeholder="CVE-2025-..., CVE-2026-..."/></label>
+        <label className="form-field full"><span>{t('applicability')}</span><textarea rows={3} value={form.applicabilityRule} onChange={e=>setForm({...form,applicabilityRule:e.target.value})}/></label>
+        <label className="form-field full"><span>{t('supersedes')}</span><input value={form.supersedes} onChange={e=>setForm({...form,supersedes:e.target.value})}/></label>
+        <label className="form-field full"><span>{t('releaseNotes')} · 中文</span><textarea rows={3} value={form.releaseNotesZh} onChange={e=>setForm({...form,releaseNotesZh:e.target.value})}/></label>
+        <label className="form-field full"><span>{t('releaseNotes')} · English</span><textarea rows={3} value={form.releaseNotesEn} onChange={e=>setForm({...form,releaseNotesEn:e.target.value})}/></label>
       </div>
     </Modal>
   </>
