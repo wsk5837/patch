@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: gazellio-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: gazellio-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: gazellio-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: gazellio-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: gazellio-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: gazellio-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_INITIAL_PASSWORD
+        sync: false
+      - key: AGENT_REGISTRATION_TOKEN
+        generateValue: true
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: DB_POOL_SIZE
+        value: "6"
+
+  - type: web
+    name: gazellio-web
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    envVars:
+      - key: BACKEND_HOSTPORT
+        fromService:
+          type: web
+          name: gazellio-api
+          property: hostport
+
+databases:
+  - name: gazellio-db
+    plan: free
+    region: singapore
+    postgresMajorVersion: "18"
+    databaseName: gazellio
+    user: gazellio
+    ipAllowList: []
