@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
+import { useI18n } from '../contexts/I18nContext'
+import { localizePayload } from './dataTranslations'
 
 export function useApiData(path,{poll=0,initial=null}={}){
- const [data,setData]=useState(initial),[loading,setLoading]=useState(true),[error,setError]=useState(null)
+ const {lang}=useI18n()
+ const [rawData,setData]=useState(initial),[loading,setLoading]=useState(true),[error,setError]=useState(null)
+ const data=useMemo(()=>localizePayload(rawData,lang),[rawData,lang])
  const active=useRef(true),inFlight=useRef(null),generation=useRef(0)
  const load=useCallback(async(showLoading=false)=>{
   if(inFlight.current)return inFlight.current

@@ -20,9 +20,9 @@ export function serverStatus(t,v){const x=t(`server_${v}`);return x===`server_${
 export function deploymentStatus(t,v){const x=t(`deployment_${v}`);return x===`deployment_${v}`?(v||'—'):x}
 export function templateType(t,v){const x=t(`template_${v}`);return x===`template_${v}`?(v||'—'):x}
 
-export function scanTargetLabel(t,r){
+export function scanTargetLabel(t,r,localize=(value)=>value){
   if(!r) return '—'
   if(r.targetType==='ALL'||r.targetValue==='ALL') return t('allAssets')
   if(r.targetType==='ENVIRONMENT') return envLabel(t,r.targetValue)
-  return r.targetValue||'—'
+  return localize(r.targetValue)||'—'
 }

@@ -11,7 +11,7 @@ import Modal from '../components/Modal'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {fmtDate,envLabel,serverStatus,deploymentStatus} from '../utils/format'
 
-const emptyPatch={patchId:'',vendor:'',product:'',version:'',titleZh:'',titleEn:'',downloadUrl:'',checksum:'',sizeMb:'',rebootRequired:false,source:'Manual',cves:'',applicabilityRule:'',supersedes:'',releaseNotesZh:'',releaseNotesEn:''}
+const emptyPatch={patchId:'',vendor:'',product:'',version:'',titleZh:'',titleEn:'',downloadUrl:'',checksum:'',sizeMb:'',rebootRequired:false,cves:'',applicabilityRule:'',supersedes:'',releaseNotesZh:'',releaseNotesEn:''}
 
 export default function PatchesPage(){
   const {t,pick,lang}=useI18n()
@@ -51,8 +51,7 @@ export default function PatchesPage(){
     {key:'cves',label:t('cve'),render:r=><div className="chip-list mini">{r.cves?.slice(0,3).map(x=><span className="chip" key={x}>{x}</span>)}</div>},
     {key:'affectedAssets',label:t('affectedAssets')},
     {key:'sizeMb',label:t('size'),render:r=>r.sizeMb?`${r.sizeMb} MB`:'—'},
-    {key:'rebootRequired',label:t('rebootRequired'),render:r=><StatusBadge tone={r.rebootRequired?'warn':'gray'}>{r.rebootRequired?t('yes'):t('no')}</StatusBadge>},
-    {key:'source',label:t('source')}
+    {key:'rebootRequired',label:t('rebootRequired'),render:r=><StatusBadge tone={r.rebootRequired?'warn':'gray'}>{r.rebootRequired?t('yes'):t('no')}</StatusBadge>}
   ]
   const serverCols=[
     {key:'name',label:t('name'),render:r=><span className="mono">{r.name}</span>},
@@ -84,7 +83,6 @@ export default function PatchesPage(){
     <Modal open={open} title={t('registerPatch')} onClose={()=>setOpen(false)} size="lg" footer={<><button className="btn" onClick={()=>setOpen(false)}>{t('cancel')}</button><button className="btn primary" disabled={busy||!form.patchId.trim()||!form.vendor.trim()||!form.product.trim()||!form.titleZh.trim()||!form.titleEn.trim()} onClick={register}>{t('save')}</button></>}>
       <div className="form-grid">
         <label className="form-field"><span>{t('patchId')}</span><input value={form.patchId} onChange={e=>setForm({...form,patchId:e.target.value})}/></label>
-        <label className="form-field"><span>{t('sourceType')}</span><input value={form.source} onChange={e=>setForm({...form,source:e.target.value})}/></label>
         <label className="form-field"><span>{t('vendor')}</span><input value={form.vendor} onChange={e=>setForm({...form,vendor:e.target.value})}/></label>
         <label className="form-field"><span>{t('product')}</span><input value={form.product} onChange={e=>setForm({...form,product:e.target.value})}/></label>
         <label className="form-field"><span>{t('version')}</span><input value={form.version} onChange={e=>setForm({...form,version:e.target.value})}/></label>
@@ -97,8 +95,8 @@ export default function PatchesPage(){
         <label className="form-field full"><span>{t('cveMappings')}</span><input value={form.cves} onChange={e=>setForm({...form,cves:e.target.value})} placeholder="CVE-2025-..., CVE-2026-..."/></label>
         <label className="form-field full"><span>{t('applicability')}</span><textarea rows={3} value={form.applicabilityRule} onChange={e=>setForm({...form,applicabilityRule:e.target.value})}/></label>
         <label className="form-field full"><span>{t('supersedes')}</span><input value={form.supersedes} onChange={e=>setForm({...form,supersedes:e.target.value})}/></label>
-        <label className="form-field full"><span>{t('releaseNotes')} · 中文</span><textarea rows={3} value={form.releaseNotesZh} onChange={e=>setForm({...form,releaseNotesZh:e.target.value})}/></label>
-        <label className="form-field full"><span>{t('releaseNotes')} · English</span><textarea rows={3} value={form.releaseNotesEn} onChange={e=>setForm({...form,releaseNotesEn:e.target.value})}/></label>
+        <label className="form-field full"><span>{t('releaseNotes')} · {t('titleZh')}</span><textarea rows={3} value={form.releaseNotesZh} onChange={e=>setForm({...form,releaseNotesZh:e.target.value})}/></label>
+        <label className="form-field full"><span>{t('releaseNotes')} · {t('titleEn')}</span><textarea rows={3} value={form.releaseNotesEn} onChange={e=>setForm({...form,releaseNotesEn:e.target.value})}/></label>
       </div>
     </Modal>
   </>
