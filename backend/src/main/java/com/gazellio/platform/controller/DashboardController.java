@@ -1,0 +1,2 @@
+package com.gazellio.platform.controller; import com.gazellio.platform.dto.ApiDtos.*; import com.gazellio.platform.service.DashboardReportService; import lombok.RequiredArgsConstructor; import org.springframework.web.bind.annotation.*;
+@RestController @RequestMapping("/api/dashboard") @RequiredArgsConstructor public class DashboardController {private final DashboardReportService service;@GetMapping public DashboardView dashboard(){return service.dashboard();}@GetMapping("/report") public ReportView report(){return service.report();}}

@@ -1,0 +1,32 @@
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { I18nProvider } from './contexts/I18nContext'
+import { ToastProvider } from './components/ToastContext'
+import Layout from './components/Layout'
+import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
+import VulnerabilityLibraryPage from './pages/VulnerabilityLibraryPage'
+import VulnerabilityDetailPage from './pages/VulnerabilityDetailPage'
+import FindingsPage from './pages/FindingsPage'
+import FindingDetailPage from './pages/FindingDetailPage'
+import ScansPage from './pages/ScansPage'
+import AssetsPage from './pages/AssetsPage'
+import PatchesPage from './pages/PatchesPage'
+import TasksPage from './pages/TasksPage'
+import TaskDetailPage from './pages/TaskDetailPage'
+import ApprovalsPage from './pages/ApprovalsPage'
+import ApprovalDetailPage from './pages/ApprovalDetailPage'
+import AutomationPage from './pages/AutomationPage'
+import AutomationTemplateDetailPage from './pages/AutomationTemplateDetailPage'
+import AutomationRunDetailPage from './pages/AutomationRunDetailPage'
+import ReportsPage from './pages/ReportsPage'
+import SettingsPage from './pages/SettingsPage'
+import AuditPage from './pages/AuditPage'
+import './styles.css'
+
+function Protected({children}){const {authenticated}=useAuth();return authenticated?children:<Navigate to="/login" replace/>}
+function AppRoutes(){const {authenticated}=useAuth();return <Routes><Route path="/login" element={authenticated?<Navigate to="/" replace/>:<LoginPage/>}/><Route element={<Protected><Layout/></Protected>}><Route path="/" element={<DashboardPage/>}/><Route path="/vulnerabilities/library" element={<VulnerabilityLibraryPage/>}/><Route path="/vulnerabilities/library/:cve" element={<VulnerabilityDetailPage/>}/><Route path="/vulnerabilities/findings" element={<FindingsPage/>}/><Route path="/vulnerabilities/findings/:id" element={<FindingDetailPage/>}/><Route path="/scans" element={<ScansPage/>}/><Route path="/assets" element={<AssetsPage/>}/><Route path="/patches" element={<PatchesPage/>}/><Route path="/tasks" element={<TasksPage/>}/><Route path="/tasks/:id" element={<TaskDetailPage/>}/><Route path="/approvals" element={<ApprovalsPage/>}/><Route path="/approvals/:id" element={<ApprovalDetailPage/>}/><Route path="/automation" element={<AutomationPage/>}/><Route path="/automation/templates/:id" element={<AutomationTemplateDetailPage/>}/><Route path="/automation/runs/:id" element={<AutomationRunDetailPage/>}/><Route path="/reports" element={<ReportsPage/>}/><Route path="/audit" element={<AuditPage/>}/><Route path="/settings" element={<SettingsPage/>}/></Route><Route path="*" element={<Navigate to="/" replace/>}/></Routes>}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><I18nProvider><AuthProvider><ToastProvider><BrowserRouter><AppRoutes/></BrowserRouter></ToastProvider></AuthProvider></I18nProvider></React.StrictMode>)

@@ -1,0 +1,20 @@
+package com.gazellio.platform.model;
+
+public final class Enums {
+    private Enums() {}
+
+    public enum UserRole { ADMIN, SECURITY, OPS, APP_OWNER, APPROVER }
+    public enum EnvironmentType { DEV, TEST, PREPROD, PROD }
+    public enum Severity { CRITICAL, HIGH, MEDIUM, LOW }
+    public enum FindingStatus { NEW, CONFIRMED, IN_REMEDIATION, EXEMPTED, FALSE_POSITIVE, RESOLVED, REOPENED }
+    public enum ScanStatus { QUEUED, RUNNING, COMPLETED, FAILED, CANCELLED }
+    public enum AgentStatus { ONLINE, OFFLINE }
+    public enum TaskStage { ASSIGNED, TEST_PATCH, APP_VERIFY, TEST_RESCAN, RELEASE_APPROVAL, PREPROD_PATCH, PREPROD_VERIFY, PREPROD_RESCAN, PROD_PATCH, PROD_VERIFY, PROD_RESCAN, CLOSED }
+    public enum TaskStatus { OPEN, IN_PROGRESS, BLOCKED, COMPLETED, CANCELLED }
+    public enum ApprovalStatus { PENDING, APPROVED, IMPLEMENTING, CLOSED, REJECTED, CANCELLED }
+    public enum ApprovalStepStatus { WAITING, PENDING, APPROVED, REJECTED, SKIPPED }
+    public enum ChangeType { EMERGENCY, MAJOR, NORMAL, STANDARD }
+    public enum DeploymentStatus { PENDING, APPROVAL, RUNNING, PAUSED, SUCCEEDED, FAILED, ROLLED_BACK }
+    public enum RunStatus { QUEUED, RUNNING, PAUSED, SUCCEEDED, FAILED, ROLLED_BACK }
+    public enum RunStepStatus { WAITING, RUNNING, SUCCEEDED, FAILED, SKIPPED, ROLLED_BACK }
+}
