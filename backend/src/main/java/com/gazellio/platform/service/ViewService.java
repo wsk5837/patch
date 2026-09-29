@@ -387,14 +387,18 @@ public class ViewService {
                     .map(x -> new RunStepView(x.getId(), x.getStepOrder(), x.getCode(), x.getNameZh(), x.getNameEn(),
                             s(x.getStatus()), s(x.getStartedAt()), s(x.getCompletedAt()), x.getMessageZh(), x.getMessageEn()))
                     .toList();
+            List<DeploymentTargetView> runTargets = targetsByRun.get(r.getId());
+            if (runTargets == null) {
+                runTargets = r.getDeploymentId() == null
+                        ? List.of()
+                        : targetsByDeployment.getOrDefault(r.getDeploymentId(), List.of());
+            }
             return new RunView(
                     r.getId(), r.getRunNo(), r.getTemplateId(), template == null ? null : template.getCode(),
                     template == null ? null : template.getNameZh(), template == null ? null : template.getNameEn(),
                     r.getTaskId(), task == null ? null : task.getTaskNo(), r.getDeploymentId(), r.getEnvironment(),
                     r.getRing(), s(r.getStatus()), r.getCurrentStep(), r.getProgress(), s(r.getCreatedAt()),
-                    s(r.getStartedAt()), s(r.getCompletedAt()), r.getFailureReason(), steps,
-                    targetsByRun.getOrDefault(r.getId(),
-                            targetsByDeployment.getOrDefault(r.getDeploymentId(), List.of()))
+                    s(r.getStartedAt()), s(r.getCompletedAt()), r.getFailureReason(), steps, runTargets
             );
         }).toList();
     }

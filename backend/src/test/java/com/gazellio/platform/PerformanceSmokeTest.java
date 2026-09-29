@@ -3,6 +3,7 @@ package com.gazellio.platform;
 import com.gazellio.platform.dto.ApiDtos.ChangeCreateRequest;
 import com.gazellio.platform.dto.ApiDtos.IncidentActionRequest;
 import com.gazellio.platform.dto.ApiDtos.SecurityIncidentView;
+import com.gazellio.platform.dto.ApiDtos.TaskActionRequest;
 import com.gazellio.platform.model.RemediationTask;
 import com.gazellio.platform.repository.RemediationTaskRepository;
 import com.gazellio.platform.service.*;
@@ -83,7 +84,7 @@ class PerformanceSmokeTest {
 
         Set<String> priorities = workOrders.incidents().stream()
                 .map(SecurityIncidentView::priority).collect(Collectors.toSet());
-        assertTrue(priorities.containsAll(Set.of("P1", "P2", "P3", "P4")));
+        assertTrue(priorities.containsAll(Set.of("P1", "P2", "P3", "P4")), priorities.toString());
         assertFalse(patches.calendar(null).isEmpty());
 
         SecurityIncidentView incident = workOrders.incidents().stream()
@@ -118,5 +119,15 @@ class PerformanceSmokeTest {
         assertTrue(retestCodes.containsAll(Set.of("INSTALL_STATE", "VERSION_PROBE", "VULN_PROBE", "EFFECT_CHECK")));
         assertFalse(retestCodes.contains("DOWNLOAD"));
         assertFalse(retestCodes.contains("INSTALL"));
+
+        RemediationTask validationTask = taskRepository.findTop200ByOrderByUpdatedAtDesc().stream()
+                .filter(task -> task.getStage() == com.gazellio.platform.model.Enums.TaskStage.APP_VERIFY)
+                .findFirst().orElseThrow();
+        var updated = tasks.action(validationTask.getId(), "verify-test",
+                new TaskActionRequest("PASS", "应用健康检查通过", null, null, null));
+        var retestRun = orchestration.run(updated.latestRunId());
+        assertNull(retestRun.deploymentId());
+        assertEquals("PATCH-RETEST", retestRun.templateCode());
+        assertFalse(retestRun.targets().isEmpty());
     }
 }

@@ -155,7 +155,9 @@ public class OrchestrationService {
         List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env);
         if(targets.isEmpty()&&source.getEnvironment()==env)targets=List.of(source);
         if(targets.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No mapped retest target");
-        OrchestrationTemplate template=templates.findByCode("PATCH-RETEST").orElseThrow();
+        OrchestrationTemplate template=templates.findByCode("PATCH-RETEST").orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Retest orchestration template is unavailable; restart the latest Gazellio release"));
         OrchestrationRun run=runs.save(OrchestrationRun.builder().runNo("RET-"+System.currentTimeMillis())
                 .templateId(template.getId()).taskId(task.getId()).environment(env.name())
                 .ring("Verification only").status(RunStatus.RUNNING).currentStep(1).progress(1).startedAt(Instant.now()).build());
