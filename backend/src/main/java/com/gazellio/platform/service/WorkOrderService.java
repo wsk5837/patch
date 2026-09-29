@@ -138,7 +138,13 @@ public class WorkOrderService {
     @Transactional
     public ChangeWorkOrderView createChange(Long incidentId, ChangeCreateRequest req) {
         SecurityIncident incident = requireIncident(incidentId);
-        if (incident.getChangeOrderId() != null) return change(incident.getChangeOrderId());
+        if (incident.getChangeOrderId() != null) {
+            ChangeWorkOrder existing = changes.findById(incident.getChangeOrderId()).orElse(null);
+            if (existing != null && existing.getStatus() == ChangeStatus.REJECTED) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Rejected change must be revised and resubmitted");
+            }
+            return change(incident.getChangeOrderId());
+        }
         if (incident.getRemediationTaskId() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Remediation task is required");
         }
@@ -184,6 +190,59 @@ public class WorkOrderService {
         audit.log("SECURITY_INCIDENT", incident.getId(), "TRIGGER_CHANGE",
                 incident.getIncidentNo()+" 已触发变更 "+change.getChangeNo(),
                 incident.getIncidentNo()+" triggered change "+change.getChangeNo(), actor());
+        return view.change(change);
+    }
+
+    @Transactional
+    public ChangeWorkOrderView resubmitChange(Long changeId, ChangeCreateRequest req) {
+        ChangeWorkOrder change = changes.findById(changeId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Change not found"));
+        if (change.getStatus() != ChangeStatus.REJECTED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a rejected change can be resubmitted");
+        }
+        RemediationTask task = tasks.findById(change.getRemediationTaskId()).orElseThrow();
+        if (task.getStage() != TaskStage.RELEASE_APPROVAL) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Task is no longer at the production release gate");
+        }
+        ChangeType type;
+        try { type = ChangeType.valueOf(req.changeType().toUpperCase(Locale.ROOT)); }
+        catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid change type"); }
+        Instant maintenanceStart = parseInstant(req.maintenanceStart());
+        Instant maintenanceEnd = parseInstant(req.maintenanceEnd());
+        if (maintenanceStart != null && maintenanceEnd != null && !maintenanceEnd.isAfter(maintenanceStart)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maintenance end must be after start");
+        }
+        change.setChangeType(type);
+        change.setSummary(req.summary().trim());
+        change.setRiskAssessment(blank(req.riskAssessment()));
+        change.setImplementationPlan(blank(req.implementationPlan()));
+        change.setRollbackPlan(blank(req.rollbackPlan()));
+        change.setMaintenanceStart(maintenanceStart);
+        change.setMaintenanceEnd(maintenanceEnd);
+        change.setStatus(ChangeStatus.PENDING_APPROVAL);
+        change.setUpdatedAt(Instant.now());
+        change.setClosedAt(null);
+        changes.save(change);
+
+        ApprovalRequest approval = approvalService.createForTask(task, type,
+                change.getRiskAssessment() == null ? change.getSummary() : change.getRiskAssessment(),
+                change.getRollbackPlan() == null ? "失败时暂停执行并恢复至最近回退点。" : change.getRollbackPlan());
+        approval.setChangeOrderId(change.getId());
+        approvalRequests.save(approval);
+        change.setApprovalId(approval.getId());
+        changes.save(change);
+        task.setChangeOrderId(change.getId());
+        task.setStatus(TaskStatus.IN_PROGRESS);
+        task.setUpdatedAt(Instant.now());
+        tasks.save(task);
+        incidents.findById(change.getIncidentId()).ifPresent(incident -> {
+            incident.setStatus(IncidentStatus.PENDING_CHANGE);
+            incident.setUpdatedAt(Instant.now());
+            incidents.save(incident);
+        });
+        audit.log("CHANGE", change.getId(), "RESUBMIT",
+                "已修订并重新提交变更审批 " + change.getChangeNo(),
+                "Change revised and resubmitted for approval " + change.getChangeNo(), actor());
         return view.change(change);
     }
 

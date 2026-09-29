@@ -188,6 +188,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         if(p.getChecksum()==null)p.setChecksum("sha256:"+UUID.randomUUID().toString().replace("-","")+UUID.randomUUID().toString().replace("-",""));
         p.setSignatureStatus("VERIFIED");
         p.setApplicabilityRule(product+" "+version+"；安装前校验操作系统、产品版本、架构与现有补丁替代关系。");
+        p.setApplicabilityRuleEn(product+" "+version+"; validate the operating system, product version, architecture and supersedence before installation.");
         p.setDownloadUrl("https://patch.gazellio.local/vendor/"+code.replace(":","-").toLowerCase(Locale.ROOT));
         p.setReleaseNotesZh("包含安全修复、安装前检查、完整性校验、失败回滚与重启策略。建议先在测试和预生产环境验证。");
         p.setReleaseNotesEn("Includes security fixes, pre-checks, integrity validation, rollback and restart policy. Validate in test and pre-production first.");
@@ -196,10 +197,12 @@ public class DemoDataSeeder implements CommandLineRunner {
         p.setIntegrityVerifiedAt(Instant.now().minus(Duration.ofHours(2)));
         p.setVendorAdvisoryUrl(vendorAdvisory(vendor,cves.getFirst()));
         p.setPrerequisites("Agent 1.6.0+；磁盘可用空间不少于补丁包大小的 3 倍；已生成回退点；业务健康探针可用；维护窗口已确认。");
+        p.setPrerequisitesEn("Agent 1.6.0+; free disk space at least three times the package size; rollback point created; health probe available; maintenance window confirmed.");
         p.setInstallCommand("gazellio-agent patch install --package \""+code+"\" --verify-signature --rollback-point auto");
         p.setUninstallCommand("gazellio-agent patch rollback --package \""+code+"\" --restore-point latest");
-        p.setTestEvidence("包完整性：SHA-256 校验通过\n数字签名：可信链验证通过\n适用性：操作系统/产品版本/架构匹配\n测试安装：成功\n服务健康检查：通过\n漏洞定向复测：未再检出");
+        p.setTestEvidence("PACKAGE_INTEGRITY_VERIFIED");
         p.setKnownIssues(reboot?"安装完成后需要在维护窗口内重启；集群节点须按批次滚动执行。":"未发现阻断性已知问题；安装前仍需确认进程占用和依赖版本。");
+        p.setKnownIssuesEn(reboot?"A maintenance-window restart is required; clustered nodes must be rolled out by ring.":"No blocking known issues; confirm process locks and dependency versions before installation.");
         p.setUpdatedAt(Instant.now());p=patches.save(p);
         for(String c:cves){
             if(!patchCves.existsByPatchIdAndCveId(p.getId(),c))patchCves.save(PatchCve.builder().patchId(p.getId()).cveId(c).build());
@@ -242,7 +245,7 @@ public class DemoDataSeeder implements CommandLineRunner {
             {"WEB-PROD-01","CVE-2023-38545","NEW"},{"WIN-PROD-01","CVE-2025-29824","IN_REMEDIATION"},{"WIN-UAT-01","CVE-2025-33053","CONFIRMED"},
             {"JENKINS-01","CVE-2024-23897","IN_REMEDIATION"},{"TOMCAT-01","CVE-2025-24813","IN_REMEDIATION"},{"DB-PROD-01","CVE-2024-1086","NEW"},
             {"VPN-EDGE-01","CVE-2024-21762","CONFIRMED"},{"ADC-EDGE-01","CVE-2023-4966","IN_REMEDIATION"},{"DEVOPS-01","CVE-2024-27198","NEW"},
-            {"WEB-TEST-01","CVE-2024-4577","RESOLVED"},{"WIN-TEST-01","CVE-2021-34527","FALSE_POSITIVE"},{"VPN-TEST-01","CVE-2024-21762","EXEMPTED"}
+            {"WEB-TEST-01","CVE-2024-4577","RESOLVED"},{"WIN-TEST-01","CVE-2024-49138","FALSE_POSITIVE"},{"VPN-TEST-01","CVE-2024-21762","EXEMPTED"}
         };
         int n=1;
         for(String[] r:rows){
@@ -303,7 +306,9 @@ public class DemoDataSeeder implements CommandLineRunner {
             else if(task.getStage()==TaskStage.RELEASE_APPROVAL)incidentStatus=IncidentStatus.PENDING_CHANGE;
             else if(List.of(TaskStage.PREPROD_PATCH,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,TaskStage.PROD_PATCH,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN).contains(task.getStage()))incidentStatus=IncidentStatus.IMPLEMENTING;
             else incidentStatus=IncidentStatus.IN_REMEDIATION;
-            String priority=(vulnerability.isKev()||vulnerability.getSeverity()==Severity.CRITICAL)?"P1":vulnerability.getSeverity()==Severity.HIGH?"P2":vulnerability.getSeverity()==Severity.MEDIUM?"P3":"P4";
+            String priority=(vulnerability.isKev()||vulnerability.getSeverity()==Severity.CRITICAL)?"P1":
+                    (vulnerability.getSeverity()==Severity.HIGH||asset.getCriticality()>=5)?"P2":
+                            vulnerability.getSeverity()==Severity.MEDIUM?"P3":"P4";
             SecurityIncident incident=incidents.findByFindingId(f.getId()).orElseGet(()->incidents.save(SecurityIncident.builder()
                     .incidentNo("SEC-MIG-"+String.format("%06d",f.getId())).externalTicketNo("AITSM-SEC-"+String.format("%06d",f.getId()))
                     .findingId(f.getId()).assetId(f.getAssetId()).priority(priority).ownerId(f.getOwnerId()).ownerName(f.getOwnerName())

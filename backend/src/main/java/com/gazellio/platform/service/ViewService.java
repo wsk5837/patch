@@ -194,16 +194,32 @@ public class ViewService {
         Map<Long, Long> affected = patchCves.countAffectedAssets(ids, CLOSED_FINDING_STATUSES).stream()
                 .collect(Collectors.toMap(PatchCveRepository.PatchAffectedCount::getPatchId,
                         PatchCveRepository.PatchAffectedCount::getTotal));
+        Set<String> cveIds = linksByPatch.values().stream().flatMap(Collection::stream)
+                .map(PatchCve::getCveId).collect(Collectors.toSet());
+        Map<String, VulnerabilityDefinition> vulnerabilityById = cveIds.isEmpty()
+                ? Map.of() : index(vulns.findAllById(cveIds), VulnerabilityDefinition::getCveId);
         return rows.stream().map(p -> new PatchView(
                 p.getId(), p.getPatchId(), p.getVendor(), p.getProduct(), p.getVersion(), p.getTitleZh(),
                 p.getTitleEn(), p.getDownloadUrl(), p.getChecksum(), p.getSizeMb(), p.isRebootRequired(),
                 p.getStatus(), p.getSource(), s(p.getPublishedDate()),
                 linksByPatch.getOrDefault(p.getId(), List.of()).stream().map(PatchCve::getCveId).toList(),
-                affected.getOrDefault(p.getId(), 0L), p.getApplicabilityRule(), p.getSignatureStatus(),
+                affected.getOrDefault(p.getId(), 0L), p.getApplicabilityRule(), p.getApplicabilityRuleEn(), p.getSignatureStatus(),
                 p.getSupersedes(), p.getReleaseNotesZh(), p.getReleaseNotesEn(), p.getSignatureIssuer(),
                 p.getSignatureFingerprint(), s(p.getIntegrityVerifiedAt()), p.getVendorAdvisoryUrl(),
-                p.getPrerequisites(), p.getInstallCommand(), p.getUninstallCommand(), p.getTestEvidence(),
-                p.getKnownIssues()
+                p.getPrerequisites(), p.getPrerequisitesEn(), p.getInstallCommand(), p.getUninstallCommand(), p.getTestEvidence(),
+                p.getKnownIssues(), p.getKnownIssuesEn(), linksByPatch.getOrDefault(p.getId(), List.of()).stream().map(link -> {
+                    VulnerabilityDefinition v = vulnerabilityById.get(link.getCveId());
+                    String fixed = p.getVersion() == null ? p.getPatchId() : p.getVersion();
+                    String product = v == null ? p.getProduct() : v.getProduct();
+                    String titleZh = v == null ? link.getCveId() : v.getTitleZh();
+                    String titleEn = v == null ? link.getCveId() : v.getTitleEn();
+                    return new PatchCveEvidenceView(link.getCveId(), titleZh, titleEn, product,
+                            v == null ? null : v.getCvss(), v == null ? null : s(v.getSeverity()),
+                            "< " + fixed, fixed, "GZ-" + link.getCveId(),
+                            "漏洞目录与补丁清单已建立映射；安装后版本须达到 " + fixed + "，并以定向复测未检出作为关闭依据。",
+                            "Catalog-to-patch mapping verified. The installed version must reach " + fixed
+                                    + " and the targeted retest must return not detected before closure.");
+                }).toList()
         )).toList();
     }
 
@@ -231,7 +247,9 @@ public class ViewService {
                     asset == null ? null : s(asset.getEnvironment()), asset == null ? null : asset.getBusinessService(),
                     t.getPatchId(), patch == null ? null : patch.getPatchId(), t.getOwnerName(), t.getPriority(),
                     s(t.getStage()), s(t.getStatus()), s(t.getChangeType()), t.getApprovalId(), t.getLatestRunId(),
-                    t.getSecurityIncidentId(), t.getChangeOrderId(), s(t.getDueAt()), s(t.getCreatedAt()), s(t.getUpdatedAt())
+                    t.getSecurityIncidentId(), t.getChangeOrderId(), s(t.getDueAt()), s(t.getCreatedAt()), s(t.getUpdatedAt()),
+                    t.getLastRetestMode(), t.getLastRetestResult(), t.getLastRetestComment(),
+                    t.getLastRetestedBy(), s(t.getLastRetestedAt())
             );
         }).toList();
     }

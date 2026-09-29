@@ -107,7 +107,7 @@ public class ScanService {
     private List<String> candidateCves(Asset a){
         String os=(a.getOsName()+" "+a.getName()).toLowerCase(Locale.ROOT);
         LinkedHashSet<String> out=new LinkedHashSet<>();
-        if(os.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2024-43451"); out.add("CVE-2021-34527"); }
+        if(os.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2024-43451"); out.add("CVE-2024-49138"); }
         if(os.contains("red hat")||os.contains("ubuntu")||os.contains("rocky")||os.contains("linux")){ out.add("CVE-2024-6387"); out.add("CVE-2024-6386"); out.add("CVE-2024-5535"); out.add("CVE-2023-38545"); out.add("CVE-2023-0465"); out.add("CVE-2022-0778"); out.add("CVE-2024-1086"); }
         if(os.contains("jenkins")) out.add("CVE-2024-23897");
         if(os.contains("tomcat")) out.add("CVE-2025-24813");
@@ -160,16 +160,33 @@ public class ScanService {
         RemediationTask task=tasks.findById(j.getRemediationTaskId()).orElse(null); if(task==null)return;
         boolean stillFound=findings.findByScanJobId(j.getId()).stream().anyMatch(f->Objects.equals(f.getCveId(),j.getTargetCve()));
         String env=j.getScanType().replace("TARGETED_RESCAN_","");
-        if(stillFound){
-            task.setStage(env.equals("TEST")?TaskStage.TEST_PATCH:env.equals("PREPROD")?TaskStage.PREPROD_PATCH:TaskStage.PROD_PATCH); task.setStatus(TaskStatus.BLOCKED); task.setUpdatedAt(Instant.now()); tasks.save(task);
+        completeRetest(task,env,!stillFound,"Gazellio Scanner",stillFound?"Target vulnerability was still detected":"Target vulnerability was not detected");
+    }
+
+    @Transactional
+    public void completeManualTaskRetest(RemediationTask task,String environment,boolean passed,String comment){
+        String env=environment.toUpperCase(Locale.ROOT);
+        TaskStage expected=switch(env){case "TEST"->TaskStage.TEST_RESCAN;case "PREPROD"->TaskStage.PREPROD_RESCAN;case "PROD"->TaskStage.PROD_RESCAN;default->throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid retest environment");};
+        if(task.getStage()!=expected)throw new ResponseStatusException(HttpStatus.CONFLICT,"Task is not waiting for a "+env+" retest");
+        completeRetest(task,env,passed,currentUser.name(),comment);
+    }
+
+    private void completeRetest(RemediationTask task,String env,boolean passed,String actor,String comment){
+        task.setLastRetestResult(passed?"PASSED":"FAILED");
+        if(task.getLastRetestMode()==null)task.setLastRetestMode("AUTO");
+        task.setLastRetestComment(comment);task.setLastRetestedBy(actor);task.setLastRetestedAt(Instant.now());
+        if(!passed){
+            task.setStage(env.equals("TEST")?TaskStage.TEST_PATCH:env.equals("PREPROD")?TaskStage.PREPROD_PATCH:TaskStage.PROD_PATCH);
+            task.setStatus(TaskStatus.BLOCKED);task.setUpdatedAt(Instant.now());tasks.save(task);
             incidentFor(task).ifPresent(i->{i.setStatus(IncidentStatus.IN_REMEDIATION);i.setUpdatedAt(Instant.now());incidents.save(i);});
-            audit.log("TASK",task.getId(),"RESCAN_FAILED",env+" 环境复测仍发现漏洞，返回补丁修复","Vulnerability still detected in "+env+" rescan; remediation loop reopened","Gazellio Scanner"); return;
+            audit.log("TASK",task.getId(),"RETEST_FAILED",env+" 环境复测不通过，已驳回至补丁执行",
+                    env+" retest failed; task returned to patch execution",actor);return;
         }
-        markPatchVerified(task,env);
+        markPatchVerified(task,env,actor);
         if(env.equals("TEST")){
             task.setStage(TaskStage.RELEASE_APPROVAL); task.setStatus(TaskStatus.IN_PROGRESS); task.setUpdatedAt(Instant.now()); tasks.save(task);
             incidentFor(task).ifPresent(i->{i.setStatus(IncidentStatus.PENDING_CHANGE);i.setUpdatedAt(Instant.now());incidents.save(i);});
-            audit.log("TASK",task.getId(),"READY_FOR_APPROVAL","测试环境复测通过，任务进入生产发布审批","Test rescan passed; task is ready for production release approval","Gazellio Scanner");
+            audit.log("TASK",task.getId(),"READY_FOR_APPROVAL","测试环境复测通过，任务进入生产发布审批","Test rescan passed; task is ready for production release approval",actor);
         } else if(env.equals("PREPROD")){
             task.setStage(TaskStage.PROD_PATCH); task.setStatus(TaskStatus.IN_PROGRESS); task.setUpdatedAt(Instant.now()); tasks.save(task);
             incidentFor(task).ifPresent(i->{i.setStatus(IncidentStatus.IMPLEMENTING);i.setUpdatedAt(Instant.now());incidents.save(i);});
@@ -182,11 +199,11 @@ public class ScanService {
             incidentFor(task).ifPresent(i->{i.setStatus(IncidentStatus.CLOSED);i.setResolvedAt(Instant.now());i.setClosedAt(Instant.now());i.setUpdatedAt(Instant.now());incidents.save(i);});
             if(task.getChangeOrderId()!=null) changeOrders.findById(task.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.CLOSED);c.setClosedAt(Instant.now());c.setUpdatedAt(Instant.now());changeOrders.save(c);});
             if(task.getApprovalId()!=null) approvals.findById(task.getApprovalId()).ifPresent(a->{a.setStatus(ApprovalStatus.CLOSED);a.setCompletedAt(Instant.now());approvals.save(a);});
-            audit.log("TASK",task.getId(),"CLOSE","生产复测通过，处置任务、发布变更与漏洞实例已关闭","Production rescan passed; remediation task, release change and finding closed","Gazellio Scanner");
+            audit.log("TASK",task.getId(),"CLOSE","生产复测通过，处置任务、发布变更与漏洞实例已关闭","Production rescan passed; remediation task, release change and finding closed",actor);
         }
     }
 
-    private void markPatchVerified(RemediationTask task,String envName){
+    private void markPatchVerified(RemediationTask task,String envName,String actor){
         if(task.getPatchId()==null) return;
         Asset source=assets.findById(task.getAssetId()).orElse(null); if(source==null) return;
         EnvironmentType env; try{env=EnvironmentType.valueOf(envName);}catch(Exception e){return;}
@@ -195,7 +212,7 @@ public class ScanService {
         for(Asset a:targetAssets){
             assetPatchStates.findByAssetIdAndPatchId(a.getId(),task.getPatchId()).ifPresent(st->{st.setVerified(true);st.setVerifiedAt(Instant.now());assetPatchStates.save(st);});
         }
-        audit.log("CMDB",task.getId(),"PATCH_VERIFIED","复测通过，已回写 "+envName+" 环境补丁验证状态","Rescan passed; patch verification state written back for "+envName,"Gazellio Scanner");
+        audit.log("CMDB",task.getId(),"PATCH_VERIFIED","复测通过，已回写 "+envName+" 环境补丁验证状态","Rescan passed; patch verification state written back for "+envName,actor);
     }
 
     private Optional<SecurityIncident> incidentFor(RemediationTask task){

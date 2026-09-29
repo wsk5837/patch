@@ -37,4 +37,8 @@ public class WorkOrderController {
     @PreAuthorize("hasAnyRole('ADMIN','SECURITY','OPS')")
     @PostMapping("/incidents/{id}/changes")
     public ChangeWorkOrderView createChange(@PathVariable Long id, @Valid @RequestBody ChangeCreateRequest req){ return service.createChange(id, req); }
+
+    @PreAuthorize("hasAnyRole('ADMIN','SECURITY','OPS')")
+    @PostMapping("/changes/{id}/resubmit")
+    public ChangeWorkOrderView resubmitChange(@PathVariable Long id, @Valid @RequestBody ChangeCreateRequest req){ return service.resubmitChange(id, req); }
 }

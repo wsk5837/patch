@@ -27,7 +27,7 @@ public final class ApiDtos {
     public record ChangeCreateRequest(@NotBlank String changeType, @NotBlank String summary,
                                       String riskAssessment, String implementationPlan, String rollbackPlan,
                                       String maintenanceStart, String maintenanceEnd) {}
-    public record TaskActionRequest(String result, String comment, String changeType, String reason, String rollbackPlan) {}
+    public record TaskActionRequest(String result, String comment, String retestMode, String changeType, String reason, String rollbackPlan) {}
     public record TaskAssignRequest(Long ownerId, @NotBlank String ownerName) {}
     public record ApprovalActionRequest(String comment) {}
     public record SettingsUpdateRequest(Map<String,String> values) {}
@@ -68,14 +68,19 @@ public final class ApiDtos {
                                      String source, List<String> cves, String applicabilityRule, String supersedes,
                                      String releaseNotesZh, String releaseNotesEn) {}
 
+    public record PatchCveEvidenceView(String cveId, String titleZh, String titleEn, String product,
+                                       Double cvss, String severity, String affectedVersionRule,
+                                       String fixedVersion, String scannerRuleId, String evidenceZh,
+                                       String evidenceEn) {}
+
     public record PatchView(Long id, String patchId, String vendor, String product, String version,
                             String titleZh, String titleEn, String downloadUrl, String checksum, Double sizeMb,
                             boolean rebootRequired, String status, String source, String publishedDate,
-                            List<String> cves, long affectedAssets, String applicabilityRule, String signatureStatus,
+                            List<String> cves, long affectedAssets, String applicabilityRule, String applicabilityRuleEn, String signatureStatus,
                             String supersedes, String releaseNotesZh, String releaseNotesEn, String signatureIssuer,
                             String signatureFingerprint, String integrityVerifiedAt, String vendorAdvisoryUrl,
-                            String prerequisites, String installCommand, String uninstallCommand, String testEvidence,
-                            String knownIssues) {}
+                            String prerequisites, String prerequisitesEn, String installCommand, String uninstallCommand, String testEvidence,
+                            String knownIssues, String knownIssuesEn, List<PatchCveEvidenceView> remediationEvidence) {}
 
     public record PatchCalendarEventView(String eventId, String date, String endAt, String eventType,
                                          Long incidentId, String incidentNo, Long taskId, String taskNo,
@@ -87,7 +92,9 @@ public final class ApiDtos {
                            Long assetId, String assetCode, String assetName, String environment, String businessService,
                            Long patchId, String patchCode, String ownerName, String priority, String stage, String status,
                            String changeType, Long approvalId, Long latestRunId, Long securityIncidentId, Long changeOrderId,
-                           String dueAt, String createdAt, String updatedAt) {}
+                           String dueAt, String createdAt, String updatedAt, String lastRetestMode,
+                           String lastRetestResult, String lastRetestComment, String lastRetestedBy,
+                           String lastRetestedAt) {}
 
     public record ApprovalStepView(Long id, Integer stepOrder, String roleNameZh, String roleNameEn, String approverName,
                                    String status, String comment, String actedAt) {}

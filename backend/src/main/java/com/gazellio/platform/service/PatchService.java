@@ -119,6 +119,7 @@ public class PatchService {
         p.setDownloadUrl(blankToNull(req.downloadUrl()));
         p.setChecksum(blankToNull(req.checksum()));
         p.setApplicabilityRule(blankToNull(req.applicabilityRule()));
+        p.setApplicabilityRuleEn(blankToNull(req.applicabilityRule()));
         p.setSupersedes(blankToNull(req.supersedes()));
         p.setReleaseNotesZh(blankToNull(req.releaseNotesZh()));
         p.setReleaseNotesEn(blankToNull(req.releaseNotesEn()));
@@ -127,10 +128,12 @@ public class PatchService {
         p.setSignatureFingerprint(p.getChecksum());
         p.setIntegrityVerifiedAt(p.getChecksum()==null?null:Instant.now());
         p.setPrerequisites("Agent 1.6.0+；已确认维护窗口、回退点、可用空间和健康探针。");
+        p.setPrerequisitesEn("Agent 1.6.0+; maintenance window, rollback point, capacity and health probe confirmed.");
         p.setInstallCommand("gazellio-agent patch install --package \""+req.patchId().trim()+"\" --verify-signature --rollback-point auto");
         p.setUninstallCommand("gazellio-agent patch rollback --package \""+req.patchId().trim()+"\" --restore-point latest");
         p.setTestEvidence(p.getChecksum()==null?"待完成包完整性、签名、适用性、测试安装、健康检查和漏洞复测。":"包完整性、数字签名与适用性校验已通过；等待目标环境安装证据。");
         p.setKnownIssues(req.rebootRequired()?"需要在维护窗口内完成重启并验证服务健康状态。":"登记时未发现阻断性已知问题。");
+        p.setKnownIssuesEn(req.rebootRequired()?"Restart during the maintenance window and verify service health.":"No blocking known issues were recorded at registration.");
         p.setSizeMb(req.sizeMb());
         p.setRebootRequired(req.rebootRequired());
         p.setStatus("AVAILABLE");

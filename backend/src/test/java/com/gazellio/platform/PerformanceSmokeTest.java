@@ -4,6 +4,7 @@ import com.gazellio.platform.dto.ApiDtos.ChangeCreateRequest;
 import com.gazellio.platform.dto.ApiDtos.IncidentActionRequest;
 import com.gazellio.platform.dto.ApiDtos.SecurityIncidentView;
 import com.gazellio.platform.dto.ApiDtos.TaskActionRequest;
+import com.gazellio.platform.dto.ApiDtos.ApprovalActionRequest;
 import com.gazellio.platform.model.RemediationTask;
 import com.gazellio.platform.repository.RemediationTaskRepository;
 import com.gazellio.platform.service.*;
@@ -104,6 +105,13 @@ class PerformanceSmokeTest {
         assertNotNull(change.approvalId());
         assertEquals(incident.id(), change.incidentId());
         assertEquals(change.id(), taskRepository.findById(task.getId()).orElseThrow().getChangeOrderId());
+
+        approvals.reject(change.approvalId(), new ApprovalActionRequest("补充回退验证后重新提交"));
+        var resubmitted = workOrders.resubmitChange(change.id(), new ChangeCreateRequest(
+                "NORMAL", "修订后的生产环境补丁发布", "已补充业务风险评估", "按灰度批次执行并验证",
+                "已验证快照回退", null, null));
+        assertEquals("PENDING_APPROVAL", resubmitted.status());
+        assertNotEquals(change.approvalId(), resubmitted.approvalId());
     }
 
     @Test
@@ -124,10 +132,31 @@ class PerformanceSmokeTest {
                 .filter(task -> task.getStage() == com.gazellio.platform.model.Enums.TaskStage.APP_VERIFY)
                 .findFirst().orElseThrow();
         var updated = tasks.action(validationTask.getId(), "verify-test",
-                new TaskActionRequest("PASS", "应用健康检查通过", null, null, null));
-        var retestRun = orchestration.run(updated.latestRunId());
+                new TaskActionRequest("PASS", "应用健康检查通过", null, null, null, null));
+        assertEquals("TEST_RESCAN", updated.stage());
+        assertNull(updated.lastRetestMode());
+        var started = tasks.action(validationTask.getId(), "start-auto-retest",
+                new TaskActionRequest(null, "使用 Agent 定向扫描", "AUTO", null, null, null));
+        assertEquals("AUTO", started.lastRetestMode());
+        assertEquals("RUNNING", started.lastRetestResult());
+        var retestRun = orchestration.run(started.latestRunId());
         assertNull(retestRun.deploymentId());
         assertEquals("PATCH-RETEST", retestRun.templateCode());
         assertFalse(retestRun.targets().isEmpty());
+    }
+
+    @Test
+    void manualRetestRecordsEvidenceAndMovesToNextGate() {
+        RemediationTask validationTask = taskRepository.findTop200ByOrderByUpdatedAtDesc().stream()
+                .filter(task -> task.getStage() == com.gazellio.platform.model.Enums.TaskStage.PREPROD_VERIFY)
+                .findFirst().orElseThrow();
+        tasks.action(validationTask.getId(), "verify-preprod",
+                new TaskActionRequest("PASS", "Application healthy", null, null, null, null));
+        var completed = tasks.action(validationTask.getId(), "submit-manual-retest",
+                new TaskActionRequest("PASS", "Version and probe evidence reviewed", "MANUAL", null, null, null));
+        assertEquals("MANUAL", completed.lastRetestMode());
+        assertEquals("PASSED", completed.lastRetestResult());
+        assertEquals("PROD_PATCH", completed.stage());
+        assertNotNull(completed.lastRetestedAt());
     }
 }

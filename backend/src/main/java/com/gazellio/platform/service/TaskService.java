@@ -34,9 +34,11 @@ public class TaskService {
         RemediationTask t=require(id);
         switch(action.toLowerCase(Locale.ROOT)){
             case "start-test" -> { ensure(t,TaskStage.ASSIGNED,TaskStage.TEST_PATCH); t.setStage(TaskStage.TEST_PATCH);t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);orchestration.startPatchRun(t,"TEST","Ring 0 · Test"); }
-            case "verify-test" -> verifyAndRescan(t,TaskStage.APP_VERIFY,TaskStage.TEST_RESCAN,"TEST",req);
-            case "verify-preprod" -> verifyAndRescan(t,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,"PREPROD",req);
-            case "verify-prod" -> verifyAndRescan(t,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN,"PROD",req);
+            case "verify-test" -> verifyApplication(t,TaskStage.APP_VERIFY,TaskStage.TEST_RESCAN,"TEST",req);
+            case "verify-preprod" -> verifyApplication(t,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,"PREPROD",req);
+            case "verify-prod" -> verifyApplication(t,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN,"PROD",req);
+            case "start-auto-retest" -> startAutoRetest(t,req);
+            case "submit-manual-retest" -> submitManualRetest(t,req);
             case "submit-approval" -> throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Create a production change from the linked security incident before approval");
             case "retry" -> retry(t);
@@ -57,10 +59,42 @@ public class TaskService {
         return view.task(t);
     }
 
-    private void verifyAndRescan(RemediationTask t,TaskStage expected,TaskStage rescanStage,String env,TaskActionRequest req){
+    private void verifyApplication(RemediationTask t,TaskStage expected,TaskStage rescanStage,String env,TaskActionRequest req){
         ensure(t,expected); boolean pass=req==null||req.result()==null||!req.result().equalsIgnoreCase("FAIL");
         if(!pass){ t.setStage(env.equals("TEST")?TaskStage.TEST_PATCH:env.equals("PREPROD")?TaskStage.PREPROD_PATCH:TaskStage.PROD_PATCH);t.setStatus(TaskStatus.BLOCKED);tasks.save(t);return; }
-        t.setStage(rescanStage);t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);scanService.createTaskRescan(t,env);
+        t.setStage(rescanStage);t.setStatus(TaskStatus.OPEN);t.setLastRetestMode(null);t.setLastRetestResult(null);
+        t.setLastRetestComment(null);t.setLastRetestedBy(null);t.setLastRetestedAt(null);tasks.save(t);
+        audit.log("TASK",t.getId(),"APP_VALIDATED",env+" 环境应用验证通过，等待选择复测方式",
+                env+" application validation passed; retest method selection required",currentUser.name());
+    }
+
+    private void startAutoRetest(RemediationTask t,TaskActionRequest req){
+        String env=retestEnvironment(t);
+        if("RUNNING".equalsIgnoreCase(t.getLastRetestResult()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"An automatic retest is already running");
+        t.setLastRetestMode("AUTO");t.setLastRetestResult("RUNNING");
+        t.setLastRetestComment(req==null?null:req.comment());t.setLastRetestedBy(currentUser.name());
+        t.setLastRetestedAt(Instant.now());t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);
+        scanService.createTaskRescan(t,env);
+    }
+
+    private void submitManualRetest(RemediationTask t,TaskActionRequest req){
+        String env=retestEnvironment(t);
+        if(req==null||req.result()==null||(!req.result().equalsIgnoreCase("PASS")&&!req.result().equalsIgnoreCase("FAIL")))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Manual retest result must be PASS or FAIL");
+        boolean pass=req.result().equalsIgnoreCase("PASS");
+        t.setLastRetestMode("MANUAL");t.setLastRetestResult(pass?"PASSED":"FAILED");
+        t.setLastRetestComment(req.comment());t.setLastRetestedBy(currentUser.name());t.setLastRetestedAt(Instant.now());
+        tasks.save(t);scanService.completeManualTaskRetest(t,env,pass,req.comment());
+    }
+
+    private String retestEnvironment(RemediationTask t){
+        return switch(t.getStage()){
+            case TEST_RESCAN -> "TEST";
+            case PREPROD_RESCAN -> "PREPROD";
+            case PROD_RESCAN -> "PROD";
+            default -> throw new ResponseStatusException(HttpStatus.CONFLICT,"Task is not waiting for a retest");
+        };
     }
 
     private void retry(RemediationTask t){

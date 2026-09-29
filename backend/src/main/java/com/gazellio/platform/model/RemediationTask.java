@@ -27,6 +27,11 @@ public class RemediationTask {
     @Enumerated(EnumType.STRING) @Column(length=30) private ChangeType changeType;
     private Long approvalId;
     private Long latestRunId;
+    @Column(length=20) private String lastRetestMode;
+    @Column(length=20) private String lastRetestResult;
+    @Column(length=1000) private String lastRetestComment;
+    @Column(length=120) private String lastRetestedBy;
+    private Instant lastRetestedAt;
     private Instant dueAt;
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
     @Column(nullable=false) @Builder.Default private Instant updatedAt = Instant.now();

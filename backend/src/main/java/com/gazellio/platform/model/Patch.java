@@ -18,6 +18,7 @@ public class Patch {
     @Column(length=1000) private String downloadUrl;
     @Column(length=128) private String checksum;
     @Column(columnDefinition="TEXT") private String applicabilityRule;
+    @Column(columnDefinition="TEXT") private String applicabilityRuleEn;
     @Column(length=30) @Builder.Default private String signatureStatus = "VERIFIED";
     @Column(length=160) private String supersedes;
     @Column(columnDefinition="TEXT") private String releaseNotesZh;
@@ -27,10 +28,12 @@ public class Patch {
     private Instant integrityVerifiedAt;
     @Column(length=1000) private String vendorAdvisoryUrl;
     @Column(columnDefinition="TEXT") private String prerequisites;
+    @Column(columnDefinition="TEXT") private String prerequisitesEn;
     @Column(columnDefinition="TEXT") private String installCommand;
     @Column(columnDefinition="TEXT") private String uninstallCommand;
     @Column(columnDefinition="TEXT") private String testEvidence;
     @Column(columnDefinition="TEXT") private String knownIssues;
+    @Column(columnDefinition="TEXT") private String knownIssuesEn;
     private Double sizeMb;
     @Column(nullable=false) @Builder.Default private boolean rebootRequired = false;
     @Column(nullable=false, length=30) @Builder.Default private String status = "AVAILABLE";

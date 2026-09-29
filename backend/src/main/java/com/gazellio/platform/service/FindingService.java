@@ -31,9 +31,12 @@ public class FindingService {
     private final WorkOrderService workOrders;
 
     public List<VulnerabilityView> library(String q,String severity,Boolean kev){
+        Set<String> supportedCves=patchCves.findAll().stream().map(PatchCve::getCveId)
+                .collect(java.util.stream.Collectors.toSet());
+        if(supportedCves.isEmpty()) return List.of();
         Severity sev=null; if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")) try{sev=Severity.valueOf(severity.toUpperCase());}catch(Exception ignored){}
         String query=q==null||q.isBlank()?null:q;
-        Specification<VulnerabilityDefinition> spec=(root,cq,cb)->cb.conjunction();
+        Specification<VulnerabilityDefinition> spec=(root,cq,cb)->root.get("cveId").in(supportedCves);
         if(query!=null){
             String pattern="%"+query.toLowerCase(Locale.ROOT)+"%";
             spec=spec.and((root,cq,cb)->cb.or(
