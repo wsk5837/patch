@@ -23,16 +23,17 @@ Render sets `rootDir: frontend` and `rootDir: backend` for the two services. A c
 ## Business invariants
 
 1. A finding is unique by `asset + CVE`; repeated scans update the same finding.
-2. A resolved finding detected again becomes reopened.
-3. A valid finding can be remediated, marked false-positive, or exempted until a defined expiry date. Expired exemptions can be reopened by a later scan.
-4. CMDB ownership is copied to the finding/task when remediation begins.
-5. Patch execution follows environment gates: test -> application validation -> targeted rescan -> release approval -> pre-production -> validation -> rescan -> production -> validation -> rescan.
-6. Failed application validation or failed rescan returns the task to that environment's patch stage instead of silently advancing.
-7. Final approval starts implementation. The release/change remains implementing until production rescan succeeds, then it closes.
-8. Successful patch runs write installed/verified patch state back against affected CMDB assets.
-9. A vulnerability finding closes only after production validation and targeted production rescan pass.
-10. Long-running patch executions are persistent orchestration runs; each node has its own database state and can be observed, paused, resumed or rolled back.
-11. The end-to-end business flow exists as an orchestration template. Normal product pages do not duplicate it as explanatory text.
+2. A scan creates or updates a finding only. A security incident is created after an operator explicitly confirms a new or reopened finding.
+3. A resolved finding detected again becomes reopened.
+4. A valid finding can be remediated, marked false-positive, or exempted until a defined expiry date. Expired exemptions can be reopened by a later scan.
+5. CMDB ownership is copied to the finding/task when remediation begins.
+6. Patch execution follows environment gates: test -> application validation -> targeted rescan -> release approval -> pre-production -> validation -> rescan -> production -> validation -> rescan.
+7. Failed application validation or failed rescan returns the task to that environment's patch stage instead of silently advancing.
+8. Final approval starts implementation. The release/change remains implementing until production rescan succeeds, then it closes.
+9. Successful patch runs write installed/verified patch state back against affected CMDB assets.
+10. A vulnerability finding closes only after production validation and targeted production rescan pass.
+11. Long-running patch executions are persistent orchestration runs; each node has its own database state and can be observed, paused, resumed or rolled back.
+12. The end-to-end business flow exists as an orchestration template. Normal product pages do not duplicate it as explanatory text.
 
 ## Scanner integration
 
