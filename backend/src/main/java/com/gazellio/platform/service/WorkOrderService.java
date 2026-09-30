@@ -283,8 +283,8 @@ public class WorkOrderService {
 
     private String priority(VulnerabilityDefinition vulnerability, Asset asset) {
         if (vulnerability.isKev() || vulnerability.getSeverity() == Severity.CRITICAL) return "P1";
-        if (asset.isInternetExposed() && vulnerability.getSeverity() == Severity.HIGH) return "P1";
-        if (vulnerability.getSeverity() == Severity.HIGH || asset.getCriticality() >= 5 || asset.isInternetExposed()) return "P2";
+        if (Boolean.TRUE.equals(asset.getInternetExposed()) && vulnerability.getSeverity() == Severity.HIGH) return "P1";
+        if (vulnerability.getSeverity() == Severity.HIGH || asset.getCriticality() >= 5 || Boolean.TRUE.equals(asset.getInternetExposed())) return "P2";
         if (vulnerability.getSeverity() == Severity.MEDIUM) return "P3";
         return "P4";
     }

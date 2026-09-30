@@ -21,7 +21,9 @@ public class Asset {
     @Column(length=40) private String networkSegment;
     @Column(length=40) @Builder.Default private String assetType = "VIRTUAL_MACHINE";
     @Column(length=80) private String zone;
-    @Builder.Default private boolean internetExposed = false;
+    // Nullable at ORM bootstrap so an existing populated table can be upgraded safely. The
+    // compatibility migration immediately backfills NULL to false and restores NOT NULL.
+    @Column(nullable=true) @Builder.Default private Boolean internetExposed = false;
     @Column(length=100) private String osName;
     @Column(length=80) private String osVersion;
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=20) private EnvironmentType environment;

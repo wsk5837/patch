@@ -33,6 +33,9 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("assets", "internet_exposed", "boolean default false");
         addColumn("assets", "installed_products", "text");
         addColumn("assets", "maintenance_window", "varchar(120)");
+        normalizeInternetExposure();
+
+        upgradeSeverityConstraint();
 
         addColumn("approval_requests", "change_order_id", "bigint");
         addColumn("findings", "security_incident_id", "bigint");
@@ -90,6 +93,35 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         }
     }
 
+    private void normalizeInternetExposure() {
+        if (!columnExists("assets", "internet_exposed")) return;
+        jdbc.update("update assets set internet_exposed = false where internet_exposed is null");
+        jdbc.execute("alter table assets alter column internet_exposed set default false");
+        jdbc.execute("alter table assets alter column internet_exposed set not null");
+    }
+
+    private void upgradeSeverityConstraint() {
+        String name = "vulnerability_definitions_severity_check";
+        if (!constraintExists("vulnerability_definitions", name)) return;
+        String clause = jdbc.queryForObject("""
+                select cc.check_clause
+                from information_schema.check_constraints cc
+                join information_schema.table_constraints tc
+                  on lower(tc.constraint_name) = lower(cc.constraint_name)
+                 and tc.constraint_schema = cc.constraint_schema
+                where lower(tc.table_name) = 'vulnerability_definitions'
+                  and lower(tc.constraint_name) = lower(?)
+                """, String.class, name);
+        if (clause != null && clause.toUpperCase().contains("UNKNOWN")) return;
+        jdbc.execute("alter table vulnerability_definitions drop constraint " + name);
+        jdbc.execute("""
+                alter table vulnerability_definitions
+                add constraint vulnerability_definitions_severity_check
+                check (severity in ('CRITICAL','HIGH','MEDIUM','LOW','UNKNOWN'))
+                """);
+        log.info("Upgraded vulnerability severity constraint to support unscored CVEs");
+    }
+
     private boolean tableExists(String table) {
         Integer count = jdbc.queryForObject("""
                 select count(*) from information_schema.tables
@@ -104,6 +136,15 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
                 where lower(table_name) = lower(?)
                   and lower(column_name) = lower(?)
                 """, Integer.class, table, column);
+        return count != null && count > 0;
+    }
+
+    private boolean constraintExists(String table, String constraint) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from information_schema.table_constraints
+                where lower(table_name) = lower(?)
+                  and lower(constraint_name) = lower(?)
+                """, Integer.class, table, constraint);
         return count != null && count > 0;
     }
 }

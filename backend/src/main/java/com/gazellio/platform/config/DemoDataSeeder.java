@@ -149,7 +149,7 @@ public class DemoDataSeeder implements CommandLineRunner {
             if(asset.getNetworkSegment()==null){asset.setNetworkSegment(segmentFor(asset.getIpAddress()));update=true;}
             if(asset.getAssetType()==null){asset.setAssetType(inferAssetType(asset.getAssetCode(),asset.getOsName()));update=true;}
             if(asset.getZone()==null){asset.setZone(asset.getEnvironment()==EnvironmentType.PROD?"主数据中心":"测试云区");update=true;}
-            if(!asset.isInternetExposed()&&(asset.getAssetCode().contains("WEB")||asset.getAssetCode().contains("VPN")||asset.getAssetCode().contains("ADC"))){asset.setInternetExposed(true);update=true;}
+            if(!Boolean.TRUE.equals(asset.getInternetExposed())&&(asset.getAssetCode().contains("WEB")||asset.getAssetCode().contains("VPN")||asset.getAssetCode().contains("ADC"))){asset.setInternetExposed(true);update=true;}
             if(asset.getInstalledProducts()==null){asset.setInstalledProducts(inferProducts(asset.getAssetCode(),asset.getOsName()));update=true;}
             if(asset.getMaintenanceWindow()==null){asset.setMaintenanceWindow(asset.getEnvironment()==EnvironmentType.PROD?"周日 01:00-05:00":"周三 20:00-23:00");update=true;}
             if(update)changed.add(asset);
@@ -424,7 +424,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                     +"collected_at: "+finding.getLastSeenAt()+"\n"
                     +"evidence_sha256: "+UUID.nameUUIDFromBytes((finding.getCveId()+asset.getAssetCode()).getBytes(StandardCharsets.UTF_8)).toString().replace("-","");
             double prioritized=Math.min(10.0,(vulnerability.getCvss()==null?5.0:vulnerability.getCvss())
-                    +(asset.getCriticality()-3)*0.25+(vulnerability.isKev()?0.5:0)+(asset.isInternetExposed()?0.75:0));
+                    +(asset.getCriticality()-3)*0.25+(vulnerability.isKev()?0.5:0)+(Boolean.TRUE.equals(asset.getInternetExposed())?0.75:0));
             boolean update=!proof.equals(finding.getEvidence())||!Objects.equals(finding.getRiskScore(),prioritized);
             if(update){finding.setEvidence(proof);finding.setRiskScore(prioritized);changed.add(finding);}
         }

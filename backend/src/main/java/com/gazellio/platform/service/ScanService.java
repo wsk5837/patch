@@ -143,7 +143,7 @@ public class ScanService {
         double score=v.getCvss()==null?5.0:v.getCvss();
         score += Math.max(0,a.getCriticality()-3)*0.3;
         if(v.isKev()) score += 0.6;
-        if(a.isInternetExposed()) score += 0.8;
+        if(Boolean.TRUE.equals(a.getInternetExposed())) score += 0.8;
         if(a.getEnvironment()==EnvironmentType.PROD) score += 0.2;
         return Math.round(Math.min(10.0,score)*10.0)/10.0;
     }

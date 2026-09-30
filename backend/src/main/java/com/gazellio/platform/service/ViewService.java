@@ -57,7 +57,7 @@ public class ViewService {
                         FindingRepository.AssetOpenCount::getTotal));
         return rows.stream().map(a -> new AssetView(
                 a.getId(), a.getAssetCode(), a.getName(), a.getHostname(), a.getIpAddress(), a.getNetworkSegment(),
-                a.getAssetType(), a.getZone(), a.isInternetExposed(), a.getOsName(), a.getOsVersion(),
+                a.getAssetType(), a.getZone(), Boolean.TRUE.equals(a.getInternetExposed()), a.getOsName(), a.getOsVersion(),
                 s(a.getEnvironment()), a.getBusinessService(), a.getOwnerId(), a.getOwnerName(), a.getCriticality(),
                 a.getAgentStatus(), a.getPatchBaseline(), a.getInstalledProducts(), a.getMaintenanceWindow(),
                 a.getLastSeenAt(), openCounts.getOrDefault(a.getId(), 0L)
@@ -151,7 +151,7 @@ public class ViewService {
             List<String> reasons=new ArrayList<>();
             if(v!=null&&v.isKev())reasons.add("KNOWN_EXPLOITED");
             if(v!=null&&v.getSeverity()==Enums.Severity.CRITICAL)reasons.add("CRITICAL_SEVERITY");
-            if(a!=null&&a.isInternetExposed())reasons.add("INTERNET_EXPOSED");
+            if(a!=null&&Boolean.TRUE.equals(a.getInternetExposed()))reasons.add("INTERNET_EXPOSED");
             if(a!=null&&a.getCriticality()!=null&&a.getCriticality()>=5)reasons.add("CORE_ASSET");
             if(f.getExemptionExpiresAt()!=null)reasons.add("EXCEPTION_ACTIVE");
             return new FindingView(
@@ -160,7 +160,7 @@ public class ViewService {
                     v == null ? null : s(v.getSeverity()), v != null && v.isKev(), f.getAssetId(),
                     a == null ? null : a.getAssetCode(), a == null ? null : a.getName(),
                     a == null ? null : s(a.getEnvironment()), a == null ? null : a.getBusinessService(),
-                    f.getOwnerName(), a==null?null:a.getCriticality(), a!=null&&a.isInternetExposed(), reasons,
+                    f.getOwnerName(), a==null?null:a.getCriticality(), a!=null&&Boolean.TRUE.equals(a.getInternetExposed()), reasons,
                     s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
