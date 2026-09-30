@@ -39,3 +39,6 @@
 @media(max-width:680px){.calendar-legend .legend-spacer{display:none}.calendar-legend{gap:11px}.workorder-chain{padding:12px}.chain-card{min-height:74px}}
 .panel-head h2{display:flex;align-items:center;gap:7px}
 .btn.next-action{box-shadow:0 0 0 3px rgba(105,65,245,.11),0 8px 20px rgba(105,65,245,.24)}
+.sync-result-bar{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:0;margin:-4px 0 14px;background:#fff;border:1px solid #DED7FA;border-radius:12px;overflow:hidden;box-shadow:0 5px 16px rgba(105,65,245,.05)}.sync-result-bar>div{min-width:0;padding:11px 13px;border-left:1px solid #F0ECFF}.sync-result-bar>div:first-child{border-left:0}.sync-result-bar span{display:block;color:var(--muted);font-size:9px}.sync-result-bar b{display:block;margin-top:4px;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sync-result-bar>div:nth-child(4) b,.sync-result-bar>div:nth-child(5) b,.sync-result-bar>div:nth-child(6) b,.sync-result-bar>div:nth-child(7) b{color:var(--purple);font-size:14px}
+@media(max-width:1100px){.sync-result-bar{grid-template-columns:repeat(4,1fr)}.sync-result-bar>div:nth-child(5){border-left:0}}
+@media(max-width:680px){.sync-result-bar{grid-template-columns:repeat(2,1fr)}.sync-result-bar>div:nth-child(odd){border-left:0}}
