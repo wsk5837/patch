@@ -73,9 +73,12 @@ public class FindingService {
     }
     public VulnerabilityView vulnerability(String cve){ return view.vulnerability(vulns.findById(cve).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND))); }
 
-    public List<FindingView> list(String status,String severity,String q){
+    public List<FindingView> list(String status,String severity,String q){return list(status,severity,q,null);}
+
+    public List<FindingView> list(String status,String severity,String q,Long assetId){
         String needle=q==null?null:q.toLowerCase(Locale.ROOT);
-        return view.findingViews(findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc()).stream().filter(f->{
+        List<Finding> source=assetId==null?findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc():findings.findByAssetIdOrderByRiskScoreDescLastSeenAtDesc(assetId);
+        return view.findingViews(source).stream().filter(f->{
             if(status!=null&&!status.isBlank()&&!status.equalsIgnoreCase("ALL")&&!status.equalsIgnoreCase(f.status())) return false;
             if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")&&!severity.equalsIgnoreCase(f.severity())) return false;
             if(needle!=null&&!needle.isBlank()){
@@ -124,5 +127,31 @@ public class FindingService {
         incidents.findByFindingId(id).ifPresent(i->{i.setStatus(IncidentStatus.EXEMPTED);i.setDecisionReason(reason);i.setUpdatedAt(Instant.now());incidents.save(i);});
         audit.log("FINDING",f.getId(),"EXEMPT","漏洞已豁免至 "+expires,"Finding exempted until "+expires,currentUser.name());
         return view.finding(f);
+    }
+
+    @Transactional
+    public BulkFindingActionResult bulk(BulkFindingActionRequest req){
+        List<Long> ids=req.findingIds()==null?List.of():req.findingIds().stream().filter(Objects::nonNull).distinct().limit(200).toList();
+        if(ids.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Select at least one finding");
+        String action=req.action().trim().toUpperCase(Locale.ROOT);
+        List<String> errors=new ArrayList<>();int succeeded=0;
+        for(Long id:ids){
+            try{
+                FindingActionRequest item=new FindingActionRequest(req.reason(),null,req.expiresAt());
+                switch(action){
+                    case "CONFIRM" -> confirm(id,item);
+                    case "FALSE_POSITIVE" -> {
+                        if(req.reason()==null||req.reason().isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Reason is required");
+                        falsePositive(id,item);
+                    }
+                    case "EXEMPT" -> exempt(id,item);
+                    default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported bulk action");
+                }
+                succeeded++;
+            }catch(Exception ex){errors.add(id+": "+Objects.toString(ex.getMessage(),"Failed"));}
+        }
+        audit.log("FINDING","BULK",action,"批量处置漏洞：成功 "+succeeded+"，失败 "+errors.size(),
+                "Bulk finding action: "+succeeded+" succeeded, "+errors.size()+" failed",currentUser.name());
+        return new BulkFindingActionResult(ids.size(),succeeded,errors.size(),errors.stream().limit(20).toList());
     }
 }

@@ -71,6 +71,8 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("approval_requests", "change_order_id", "bigint");
         addColumn("findings", "security_incident_id", "bigint");
         addColumn("scan_jobs", "automation_run_id", "bigint");
+        addColumn("audit_events", "source_ip", "varchar(80)");
+        addColumn("audit_events", "user_agent", "varchar(500)");
 
         addColumn("patches", "applicability_rule", "text");
         addColumn("patches", "applicability_rule_en", "text");
@@ -105,6 +107,7 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("remediation_tasks", "last_retest_comment", "varchar(1000)");
         addColumn("remediation_tasks", "last_retested_by", "varchar(120)");
         addColumn("remediation_tasks", "last_retested_at", "timestamp with time zone");
+        normalizeTaskNumbers();
 
         // Retest runs intentionally have no patch deployment. Older Gazellio databases created this
         // column as NOT NULL, and Hibernate ddl-auto=update does not consistently remove that constraint.
@@ -129,6 +132,16 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         jdbc.update("update assets set internet_exposed = false where internet_exposed is null");
         jdbc.execute("alter table assets alter column internet_exposed set default false");
         jdbc.execute("alter table assets alter column internet_exposed set not null");
+    }
+
+    private void normalizeTaskNumbers() {
+        if (!columnExists("remediation_tasks", "task_no")) return;
+        jdbc.update("""
+                update remediation_tasks
+                   set task_no = 'RMD-' || lpad(cast(id as varchar), 6, '0')
+                 where task_no is null
+                    or task_no not like 'RMD-______'
+                """);
     }
 
     private void upgradeSeverityConstraint() {

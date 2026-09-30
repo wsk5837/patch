@@ -23,6 +23,7 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
  long countByStatusIn(Collection<FindingStatus> statuses);
  long countByStatusNotIn(Collection<FindingStatus> statuses);
  List<Finding> findByScanJobId(Long scanJobId);
+ List<Finding> findByAssetIdOrderByRiskScoreDescLastSeenAtDesc(Long assetId);
 
  @Query("select f.assetId as assetId, count(f.id) as total from Finding f where f.status not in :closed group by f.assetId")
  List<AssetOpenCount> countOpenByAsset(@Param("closed") Collection<FindingStatus> closed);

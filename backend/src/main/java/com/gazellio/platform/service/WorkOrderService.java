@@ -147,11 +147,13 @@ public class WorkOrderService {
         if (patchId == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "No applicable patch selected");
         patches.findById(patchId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patch not found"));
         RemediationTask task = tasks.save(RemediationTask.builder()
-                .taskNo("RMD-" + System.currentTimeMillis())
+                .taskNo("RMD-PENDING-" + UUID.randomUUID())
                 .findingId(finding.getId()).securityIncidentId(incident.getId())
                 .patchId(patchId).assetId(incident.getAssetId()).ownerId(incident.getOwnerId())
                 .ownerName(incident.getOwnerName()).priority(incident.getPriority())
                 .stage(TaskStage.ASSIGNED).status(TaskStatus.OPEN).dueAt(incident.getDueAt()).build());
+        task.setTaskNo("RMD-"+String.format("%06d",task.getId()));
+        tasks.save(task);
         incident.setRemediationTaskId(task.getId());
         incident.setStatus(IncidentStatus.IN_REMEDIATION);
         incident.setDecisionReason(req == null ? null : req.reason());

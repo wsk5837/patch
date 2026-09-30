@@ -26,6 +26,9 @@ public final class ApiDtos {
     public record AgentResultRequest(@NotNull Long scanJobId, @NotNull Long assetId, @NotNull List<AgentFindingItem> findings) {}
 
     public record FindingActionRequest(String reason, Long patchId, String expiresAt) {}
+    public record BulkFindingActionRequest(@NotNull List<Long> findingIds, @NotBlank String action,
+                                           String reason, String expiresAt) {}
+    public record BulkFindingActionResult(int requested, int succeeded, int failed, List<String> errors) {}
     public record IncidentActionRequest(Long ownerId, String ownerName, Long patchId, String reason) {}
     public record ChangeCreateRequest(@NotBlank String changeType, @NotBlank String summary,
                                       String riskAssessment, String implementationPlan, String rollbackPlan,
@@ -137,7 +140,11 @@ public final class ApiDtos {
     public record ApprovalView(Long id, String approvalNo, Long taskId, String taskNo, String cveId, String assetName,
                                String changeType, String status, Integer currentStep, String requestedByName,
                                String submittedAt, String completedAt, String reason, String rollbackPlan,
-                               Long changeOrderId, String changeNo, List<ApprovalStepView> steps) {}
+                               Long changeOrderId, String changeNo, List<ApprovalStepView> steps,
+                               boolean canAct, String currentApproverName, String actionBlockReason) {}
+
+    public record GlobalSearchResult(String type, String id, String titleZh, String titleEn,
+                                     String subtitleZh, String subtitleEn, String path) {}
 
     public record SecurityIncidentView(Long id, String incidentNo, Long findingId, String cveId, String titleZh,
                                        String titleEn, String severity, boolean kev, Long assetId, String assetCode,
@@ -180,7 +187,7 @@ public final class ApiDtos {
                                  String scopeSummary, List<DeploymentTargetView> targets) {}
 
     public record AuditView(Long id, String entityType, String entityId, String action, String messageZh,
-                            String messageEn, String actor, String createdAt) {}
+                            String messageEn, String actor, String sourceIp, String userAgent, String createdAt) {}
 
     public record DashboardView(long openCritical, long openHigh, long openFindings, long pendingApprovals,
                                 long runningScans, long runningAutomations, double patchCompliance,

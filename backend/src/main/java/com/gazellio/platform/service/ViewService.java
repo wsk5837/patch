@@ -34,6 +34,7 @@ public class ViewService {
     private final OrchestrationTemplateStepRepository templateSteps;
     private final OrchestrationRunStepRepository runSteps;
     private final DeploymentTargetRepository deploymentTargets;
+    private final CurrentUserService currentUser;
 
     private static String s(Object value) { return value == null ? null : String.valueOf(value); }
 
@@ -266,12 +267,20 @@ public class ViewService {
             List<ApprovalStepView> steps = stepsByApproval.getOrDefault(a.getId(), List.of()).stream()
                     .map(x -> new ApprovalStepView(x.getId(), x.getStepOrder(), x.getRoleNameZh(), x.getRoleNameEn(),
                             x.getApproverName(), s(x.getStatus()), x.getComment(), s(x.getActedAt()))).toList();
+            ApprovalStep pending=stepsByApproval.getOrDefault(a.getId(),List.of()).stream().filter(x->x.getStatus()==Enums.ApprovalStepStatus.PENDING).findFirst().orElse(null);
+            UserAccount actor=currentUser.current();
+            boolean sameRequester=actor!=null&&((a.getRequestedById()!=null&&a.getRequestedById().equals(actor.getId()))
+                    ||(a.getRequestedById()==null&&actor.getDisplayName().equals(a.getRequestedByName())));
+            boolean assigned=actor!=null&&pending!=null&&((pending.getApproverId()!=null&&pending.getApproverId().equals(actor.getId()))||(pending.getApproverId()==null&&actor.getDisplayName().equals(pending.getApproverName())));
+            boolean canAct=a.getStatus()==Enums.ApprovalStatus.PENDING&&assigned&&!sameRequester;
+            String block=canAct?null:sameRequester?"REQUESTER_SOD":pending==null?"NO_PENDING_STEP":"NOT_ASSIGNED_APPROVER";
             return new ApprovalView(
                     a.getId(), a.getApprovalNo(), a.getTaskId(), task == null ? null : task.getTaskNo(),
                     finding == null ? null : finding.getCveId(), asset == null ? null : asset.getName(),
                     s(a.getChangeType()), s(a.getStatus()), a.getCurrentStep(), a.getRequestedByName(),
                     s(a.getSubmittedAt()), s(a.getCompletedAt()), a.getReason(), a.getRollbackPlan(),
-                    a.getChangeOrderId(), change == null ? null : change.getChangeNo(), steps
+                    a.getChangeOrderId(), change == null ? null : change.getChangeNo(), steps,
+                    canAct,pending==null?null:pending.getApproverName(),block
             );
         }).toList();
     }
@@ -473,6 +482,6 @@ public class ViewService {
 
     public AuditView audit(AuditEvent a) {
         return new AuditView(a.getId(), a.getEntityType(), a.getEntityId(), a.getAction(), a.getMessageZh(),
-                a.getMessageEn(), a.getActor(), s(a.getCreatedAt()));
+                a.getMessageEn(), a.getActor(), a.getSourceIp(), a.getUserAgent(), s(a.getCreatedAt()));
     }
 }
