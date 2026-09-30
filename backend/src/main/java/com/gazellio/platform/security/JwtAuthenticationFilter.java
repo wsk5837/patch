@@ -13,7 +13,8 @@ import java.io.IOException;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwt;
-    public JwtAuthenticationFilter(JwtService jwt) { this.jwt = jwt; }
+    private final DatabaseUserDetailsService users;
+    public JwtAuthenticationFilter(JwtService jwt,DatabaseUserDetailsService users) { this.jwt = jwt;this.users=users; }
 
     @Override protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
         String auth = req.getHeader("Authorization");
@@ -21,7 +22,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = auth.substring(7);
             try {
                 JwtService.TokenClaims claims = jwt.read(token);
-                UserDetails u = User.withUsername(claims.username()).password("").roles(claims.role()).build();
+                UserDetails u = users.loadUserByUsername(claims.username());
+                if(!u.isEnabled()){chain.doFilter(req,res);return;}
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(u, null, u.getAuthorities());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception ignored) {}

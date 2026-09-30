@@ -27,6 +27,7 @@ public class PatchService {
     private final SecurityIncidentRepository incidents;
     private final RemediationTaskRepository tasks;
     private final ChangeWorkOrderRepository changes;
+    private final PatchScheduleRepository schedules;
     private final AssetRepository assets;
     private final ViewService view;
     private final AuditService audit;
@@ -93,6 +94,15 @@ public class PatchService {
                         "PATCH_WINDOW",incident,task,change,patch,finding,asset,vulnerability,status,hours));
             }
         }
+        Instant rangeStart=selected.atDay(1).atStartOfDay(zone).toInstant();
+        Instant rangeEnd=selected.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant();
+        for(PatchSchedule schedule:schedules.findByStartAtLessThanAndEndAtGreaterThanOrderByStartAtAsc(rangeEnd,rangeStart)){
+            Patch patch=patches.findById(schedule.getPatchId()).orElse(null);
+            long hours=Duration.between(now,schedule.getStartAt()).toHours();
+            out.add(new PatchCalendarEventView("PLAN-"+schedule.getId(),schedule.getStartAt().toString(),schedule.getEndAt().toString(),"PATCH_PLAN",
+                    null,null,null,null,null,null,schedule.getPatchId(),patch==null?null:patch.getPatchId(),null,null,null,null,null,
+                    schedule.getStatus(),hours,schedule.getId(),schedule.getTitleZh(),schedule.getTitleEn(),true));
+        }
         return out.stream().sorted(Comparator.comparing(PatchCalendarEventView::date)).toList();
     }
 
@@ -105,7 +115,54 @@ public class PatchService {
                 change==null?null:change.getId(),change==null?null:change.getChangeNo(),patch==null?null:patch.getId(),
                 patch==null?null:patch.getPatchId(),finding.getCveId(),asset==null?null:asset.getName(),
                 asset==null?null:asset.getBusinessService(),vulnerability==null?null:vulnerability.getSeverity().name(),
-                incident.getPriority(),status,hours);
+                incident.getPriority(),status,hours,null,null,null,false);
+    }
+
+    public PatchScheduleView schedule(Long id){return scheduleView(schedules.findById(id)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND)));}
+
+    @Transactional
+    public PatchScheduleView createSchedule(PatchScheduleRequest request){return saveSchedule(new PatchSchedule(),request,true);}
+
+    @Transactional
+    public PatchScheduleView updateSchedule(Long id,PatchScheduleRequest request){return saveSchedule(schedules.findById(id)
+            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND)),request,false);}
+
+    @Transactional
+    public void deleteSchedule(Long id){
+        PatchSchedule schedule=schedules.findById(id).orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND));
+        schedules.delete(schedule);
+        audit.log("PATCH_SCHEDULE",id,"DELETE","删除补丁排程："+schedule.getTitleZh(),"Deleted patch schedule: "+schedule.getTitleEn(),currentUser.name());
+    }
+
+    private PatchScheduleView saveSchedule(PatchSchedule schedule,PatchScheduleRequest request,boolean creating){
+        Patch patch=patches.findById(request.patchId()).orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Patch not found"));
+        Instant start=parseInstant(request.startAt());Instant end=parseInstant(request.endAt());
+        if(!end.isAfter(start))throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"End time must be after start time");
+        String status=request.status().trim().toUpperCase(Locale.ROOT);
+        if(!Set.of("PLANNED","APPROVED","COMPLETED","CANCELLED").contains(status))throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Invalid schedule status");
+        UserAccount actor=currentUser.current();
+        schedule.setTitleZh(request.titleZh().trim());schedule.setTitleEn(request.titleEn().trim());schedule.setPatchId(patch.getId());
+        schedule.setEnvironment(request.environment().trim().toUpperCase(Locale.ROOT));schedule.setStartAt(start);schedule.setEndAt(end);
+        schedule.setStatus(status);schedule.setNotes(blankToNull(request.notes()));schedule.setOwnerId(actor==null?null:actor.getId());
+        schedule.setOwnerName(actor==null?currentUser.name():actor.getDisplayName());schedule.setUpdatedAt(Instant.now());
+        if(creating){schedule.setCreatedById(actor==null?null:actor.getId());schedule.setCreatedByName(actor==null?currentUser.name():actor.getDisplayName());schedule.setCreatedAt(Instant.now());}
+        schedule=schedules.save(schedule);
+        audit.log("PATCH_SCHEDULE",schedule.getId(),creating?"CREATE":"UPDATE",(creating?"创建":"更新")+"补丁排程："+schedule.getTitleZh(),(creating?"Created":"Updated")+" patch schedule: "+schedule.getTitleEn(),currentUser.name());
+        return scheduleView(schedule);
+    }
+
+    private PatchScheduleView scheduleView(PatchSchedule schedule){
+        String patchCode=patches.findById(schedule.getPatchId()).map(Patch::getPatchId).orElse(null);
+        return new PatchScheduleView(schedule.getId(),schedule.getTitleZh(),schedule.getTitleEn(),schedule.getPatchId(),patchCode,
+                schedule.getEnvironment(),schedule.getStartAt().toString(),schedule.getEndAt().toString(),schedule.getStatus(),schedule.getOwnerId(),
+                schedule.getOwnerName(),schedule.getNotes(),schedule.getCreatedByName(),schedule.getCreatedAt().toString(),schedule.getUpdatedAt().toString());
+    }
+
+    private Instant parseInstant(String value){
+        try{return Instant.parse(value);}catch(Exception ignored){}
+        try{return LocalDateTime.parse(value).atZone(ZoneId.systemDefault()).toInstant();}
+        catch(Exception e){throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Invalid date time");}
     }
 
     @Transactional

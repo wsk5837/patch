@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
 import { useI18n } from '../contexts/I18nContext'
+import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ToastContext'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
@@ -15,6 +16,7 @@ const emptyPatch={patchId:'',vendor:'',product:'',version:'',titleZh:'',titleEn:
 
 export default function PatchesPage(){
   const {t,pick,lang}=useI18n()
+  const {has}=useAuth()
   const nav=useNavigate()
   const toast=useToast()
   const [tab,setTab]=useState('library')
@@ -71,8 +73,8 @@ export default function PatchesPage(){
   return <>
     <PageHeader title={t('patchCenter')}>
       <button className="btn" onClick={()=>{reload();reloadServers();reloadDeployments()}}><RefreshCw size={15}/>{t('refresh')}</button>
-      {tab==='library'&&<button className="btn" onClick={()=>setOpen(true)}><Plus size={15}/>{t('registerPatch')}</button>}
-      <button className="btn primary" onClick={sync}>{t('syncPatchCatalog')}</button>
+      {has('PATCH_MANAGE')&&tab==='library'&&<button className="btn" onClick={()=>setOpen(true)}><Plus size={15}/>{t('registerPatch')}</button>}
+      {has('PATCH_MANAGE')&&<button className="btn primary" onClick={sync}>{t('syncPatchCatalog')}</button>}
     </PageHeader>
     <div className="tabs">
       <button className={tab==='library'?'active':''} onClick={()=>setTab('library')}><Package size={15}/>{t('patchLibrary')}<span>{patches.length}</span></button>

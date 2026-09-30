@@ -14,6 +14,7 @@ public class UserAccount {
     @Column(nullable=false, length=120) private String displayName;
     @Column(length=160) private String email;
     @Enumerated(EnumType.STRING) @Column(nullable=false, length=30) private UserRole role;
+    @Column(name="access_role_id") private Long accessRoleId;
     @Column(nullable=false) @Builder.Default private boolean enabled = true;
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
 }

@@ -26,6 +26,8 @@ public class ApprovalService {
     private final ChangeWorkOrderRepository changes;
     private final SecurityIncidentRepository incidents;
     private final UserAccountRepository users;
+    private final AccessRoleRepository accessRoles;
+    private final AccessControlService accessControl;
 
     public List<ApprovalView> list(){return view.approvalViews(approvals.findActive(PageRequest.of(0,200)));}
     public ApprovalView get(Long id){return view.approval(require(id));}
@@ -37,10 +39,10 @@ public class ApprovalService {
         ApprovalRequest a=approvals.save(ApprovalRequest.builder().approvalNo("APR-PENDING-"+UUID.randomUUID()).taskId(task.getId()).changeType(type).status(ApprovalStatus.PENDING).currentStep(1).requestedById(requesterId).requestedByName(currentUser.name()).reason(reason).rollbackPlan(rollback).build());
         a.setApprovalNo("APR-"+String.format("%06d",a.getId()));approvals.save(a);
         List<String[]> flow=switch(type){
-            case EMERGENCY -> List.<String[]>of(new String[]{"紧急变更审批人","Emergency Change Approver","approver"});
-            case MAJOR -> List.<String[]>of(new String[]{"运维负责人","Operations Lead","ops"},new String[]{"安全负责人","Security Lead","security"},new String[]{"重大变更审批人","Major Change Approver","approver"});
-            case NORMAL -> List.<String[]>of(new String[]{"运维负责人","Operations Lead","ops"},new String[]{"发布审批人","Release Approver","approver"});
-            case STANDARD -> List.<String[]>of(new String[]{"标准变更授权","Standard Change Authorization","approver"});
+            case EMERGENCY -> List.<String[]>of(new String[]{"紧急变更审批人","Emergency Change Approver","APPROVER"});
+            case MAJOR -> List.<String[]>of(new String[]{"运维负责人","Operations Lead","OPS"},new String[]{"安全负责人","Security Lead","SECURITY"},new String[]{"重大变更审批人","Major Change Approver","APPROVER"});
+            case NORMAL -> List.<String[]>of(new String[]{"运维负责人","Operations Lead","OPS"},new String[]{"发布审批人","Release Approver","APPROVER"});
+            case STANDARD -> List.<String[]>of(new String[]{"标准变更授权","Standard Change Authorization","APPROVER"});
         };
         Set<Long> routed=new HashSet<>();int i=1;
         for(String[] f:flow){
@@ -84,11 +86,16 @@ public class ApprovalService {
         if(assigned==null&&step.getApproverName()!=null){assigned=users.findByDisplayName(step.getApproverName()).map(UserAccount::getId).orElse(null);if(assigned!=null){step.setApproverId(assigned);steps.save(step);}}
         if(assigned==null||!assigned.equals(actor.getId()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Only the assigned approver can act on this step");
     }
-    private UserAccount resolveApprover(String preferred,Long requesterId,Set<Long> routed){
-        for(String username:List.of(preferred,"approver","security","ops","appowner")){
-            UserAccount candidate=users.findByUsername(username).orElse(null);
-            if(candidate!=null&&!Objects.equals(candidate.getId(),requesterId)&&!routed.contains(candidate.getId()))return candidate;
+    private UserAccount resolveApprover(String preferredRoleCode,Long requesterId,Set<Long> routed){
+        Long preferredRoleId=accessRoles.findByCode(preferredRoleCode).map(AccessRole::getId).orElse(null);
+        List<UserAccount> candidates=users.findAllByOrderByUsernameAsc().stream().filter(UserAccount::isEnabled)
+                .filter(candidate->!Objects.equals(candidate.getId(),requesterId)&&!routed.contains(candidate.getId()))
+                .filter(candidate->accessControl.permissions(candidate).contains("APPROVAL_ACT")).toList();
+        if(preferredRoleId!=null){
+            UserAccount preferred=candidates.stream().filter(candidate->Objects.equals(candidate.getAccessRoleId(),preferredRoleId)).findFirst().orElse(null);
+            if(preferred!=null)return preferred;
         }
+        if(!candidates.isEmpty())return candidates.getFirst();
         throw new ResponseStatusException(HttpStatus.CONFLICT,"No independent approver is available for this workflow");
     }
     private ApprovalRequest require(Long id){return approvals.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));}

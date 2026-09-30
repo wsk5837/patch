@@ -48,6 +48,20 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/api/auth/**", "/api/agent/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/access-control/**").hasAuthority("USER_MANAGE")
+                        .requestMatchers(HttpMethod.GET, "/api/dashboard/report").hasAuthority("REPORT_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/dashboard/**").hasAuthority("DASHBOARD_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/vulnerabilities/**").hasAuthority("VULNERABILITY_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/scans/**").hasAuthority("SCAN_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/assets/**").hasAuthority("ASSET_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/work-orders/incidents/**").hasAuthority("INCIDENT_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/work-orders/changes/**").hasAuthority("CHANGE_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/tasks/**").hasAuthority("TASK_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/patches/**").hasAuthority("PATCH_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/approvals/**").hasAuthority("APPROVAL_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/automation/**").hasAuthority("AUTOMATION_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/audit/**").hasAuthority("AUDIT_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/settings/**").hasAuthority("SETTINGS_VIEW")
                         .requestMatchers("/api/**").authenticated()
                         .requestMatchers(
                                 "/", "/index.html", "/favicon.ico", "/gazellio-logo.png", "/assets/**", "/error",

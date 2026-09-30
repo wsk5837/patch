@@ -17,7 +17,7 @@
 2. 解压新工程包。
 3. 进入解压得到的 `patch-main` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `patch-main` 这一层目录嵌套进仓库。
 4. 打开 GitHub Desktop，确认变更列表中没有 `node_modules`、`dist` 或 `target`。
-5. Summary 填写 `Fix legacy database schema migration`，点击 **Commit to main**。
+5. Summary 填写 `Add RBAC calendar scheduling and template editor`，点击 **Commit to main**。
 6. 点击 **Push origin**。Git 只会上传真正变化的文件，即使你刚才覆盖了整个目录。
 
 ## 三、如果只使用 GitHub 网页
@@ -55,6 +55,8 @@ patch-main/
 - 升级漏洞严重程度约束，允许暂无 CVSS 评分的漏洞使用 `UNKNOWN`。
 - 将旧演示数据中的支付节点、门户节点等资产自动迁移为客户的 20 类产品资产，并保留原有漏洞、任务和工单关联。
 - 批量补丁页的网段、资产类型、操作系统和服务分类均从当前资产目录动态读取，不再要求手工填写 CIDR。
+- 新增用户、角色、角色权限、补丁排程数据表；Hibernate 会自动创建，不需要手工执行 SQL。
+- 现有五类演示人员会迁移为数据库用户并绑定系统角色，初始密码统一为 `Gazellio@123`；后续启动不会覆盖已修改的密码。
 
 不要删除 `gazellio-db`，也不需要手工执行 SQL。
 

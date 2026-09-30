@@ -34,8 +34,6 @@ services:
           property: password
       - key: JWT_SECRET
         generateValue: true
-      - key: ADMIN_INITIAL_PASSWORD
-        sync: false
       - key: AGENT_REGISTRATION_TOKEN
         generateValue: true
       - key: SEED_DEMO_DATA

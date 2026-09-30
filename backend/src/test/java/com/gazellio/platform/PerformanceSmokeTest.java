@@ -6,12 +6,18 @@ import com.gazellio.platform.dto.ApiDtos.SecurityIncidentView;
 import com.gazellio.platform.dto.ApiDtos.TaskActionRequest;
 import com.gazellio.platform.dto.ApiDtos.ApprovalActionRequest;
 import com.gazellio.platform.dto.ApiDtos.BatchScopeRequest;
+import com.gazellio.platform.dto.ApiDtos.PatchScheduleRequest;
+import com.gazellio.platform.dto.ApiDtos.RoleSaveRequest;
+import com.gazellio.platform.dto.ApiDtos.TemplateSaveRequest;
+import com.gazellio.platform.dto.ApiDtos.TemplateStepSaveRequest;
+import com.gazellio.platform.dto.ApiDtos.UserSaveRequest;
 import com.gazellio.platform.model.RemediationTask;
 import com.gazellio.platform.repository.RemediationTaskRepository;
 import com.gazellio.platform.service.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
 import java.time.YearMonth;
@@ -45,6 +51,9 @@ class PerformanceSmokeTest {
     @Autowired WorkOrderService workOrders;
     @Autowired BatchPatchService batchPatch;
     @Autowired RemediationTaskRepository taskRepository;
+    @Autowired AccessControlService accessControl;
+    @Autowired com.gazellio.platform.repository.UserAccountRepository userAccounts;
+    @Autowired PasswordEncoder passwordEncoder;
 
     @Test
     void customerAssetCatalogAndSelectableScopesAreAvailable() {
@@ -210,5 +219,36 @@ class PerformanceSmokeTest {
         var run = orchestration.run(result.runId());
         assertEquals(preview.selectedCount(), run.targets().size());
         assertTrue(run.targets().stream().allMatch(target -> target.batchNo() != null));
+    }
+
+    @Test
+    void rbacUsersUseDatabaseRolesAndInitialPassword(){
+        var role=accessControl.createRole(new RoleSaveRequest("AUDITOR_TEST","审计测试角色","Audit Test Role",true,
+                List.of("AUDIT_VIEW","REPORT_VIEW")));
+        var user=accessControl.createUser(new UserSaveRequest("audit_tester","审计测试员","audit@example.test",role.id(),true,null));
+        assertEquals(Set.of("AUDIT_VIEW","REPORT_VIEW"),Set.copyOf(user.permissions()));
+        assertTrue(passwordEncoder.matches("Gazellio@123",userAccounts.findByUsername("audit_tester").orElseThrow().getPasswordHash()));
+        accessControl.updateRole(role.id(),new RoleSaveRequest(role.code(),role.nameZh(),role.nameEn(),true,List.of("AUDIT_VIEW")));
+        assertEquals(List.of("AUDIT_VIEW"),accessControl.users().stream().filter(x->x.id().equals(user.id())).findFirst().orElseThrow().permissions());
+    }
+
+    @Test
+    void patchSchedulesCanBeCreatedAndEdited(){
+        var patch=patches.list().getFirst();
+        var start=java.time.Instant.now().plus(java.time.Duration.ofDays(2));
+        var created=patches.createSchedule(new PatchScheduleRequest("测试排程","Test Schedule",patch.id(),"PROD",start.toString(),start.plusSeconds(7200).toString(),"PLANNED","test"));
+        var updated=patches.updateSchedule(created.id(),new PatchScheduleRequest("已批准排程","Approved Schedule",patch.id(),"PROD",start.toString(),start.plusSeconds(10800).toString(),"APPROVED","approved"));
+        assertEquals("APPROVED",updated.status());
+        assertTrue(patches.calendar(YearMonth.from(start.atZone(java.time.ZoneId.systemDefault())).toString()).stream().anyMatch(event->created.id().equals(event.scheduleId())&&event.editable()));
+    }
+
+    @Test
+    void orchestrationTemplatesCanBeVersionedAndEdited(){
+        var created=orchestration.createTemplate(new TemplateSaveRequest("TEST-EDITOR","编辑器测试","Editor Test","PATCH",true,
+                List.of(new TemplateStepSaveRequest("CHECK","前置检查","Pre-check","CHECK",false),new TemplateStepSaveRequest("INSTALL","安装","Install","ACTION",true))));
+        var updated=orchestration.updateTemplate(created.id(),new TemplateSaveRequest(created.code(),created.nameZh(),created.nameEn(),created.type(),true,
+                List.of(new TemplateStepSaveRequest("CHECK","前置检查","Pre-check","CHECK",false),new TemplateStepSaveRequest("VERIFY","验证","Verify","CHECK",true))));
+        assertEquals(created.version()+1,updated.version());
+        assertEquals(List.of("CHECK","VERIFY"),updated.steps().stream().map(step->step.code()).toList());
     }
 }

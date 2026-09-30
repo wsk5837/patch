@@ -18,14 +18,18 @@ public class AutomationController {
 
     @GetMapping("/templates") public List<TemplateView> templates(){return service.templates();}
     @GetMapping("/templates/{id}") public TemplateView template(@PathVariable Long id){return service.template(id);}
+    @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @PostMapping("/templates") public TemplateView createTemplate(@jakarta.validation.Valid @RequestBody TemplateSaveRequest req){return service.createTemplate(req);}
+    @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @PutMapping("/templates/{id}") public TemplateView updateTemplate(@PathVariable Long id,@jakarta.validation.Valid @RequestBody TemplateSaveRequest req){return service.updateTemplate(id,req);}
+    @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @DeleteMapping("/templates/{id}") public void deleteTemplate(@PathVariable Long id){service.deleteTemplate(id);}
     @GetMapping("/runs") public List<RunView> runs(){return service.runs();}
     @GetMapping("/runs/{id}") public RunView run(@PathVariable Long id){return service.run(id);}
-    @PreAuthorize("hasAnyRole('ADMIN','OPS')") @PostMapping("/runs/{id}/pause") public RunView pause(@PathVariable Long id){return service.pause(id);}
-    @PreAuthorize("hasAnyRole('ADMIN','OPS')") @PostMapping("/runs/{id}/resume") public RunView resume(@PathVariable Long id){return service.resume(id);}
-    @PreAuthorize("hasAnyRole('ADMIN','OPS')") @PostMapping("/runs/{id}/rollback") public RunView rollback(@PathVariable Long id){return service.rollback(id);}
+    @PreAuthorize("hasAuthority('AUTOMATION_EXECUTE')") @PostMapping("/runs/{id}/pause") public RunView pause(@PathVariable Long id){return service.pause(id);}
+    @PreAuthorize("hasAuthority('AUTOMATION_EXECUTE')") @PostMapping("/runs/{id}/resume") public RunView resume(@PathVariable Long id){return service.resume(id);}
+    @PreAuthorize("hasAuthority('AUTOMATION_EXECUTE')") @PostMapping("/runs/{id}/rollback") public RunView rollback(@PathVariable Long id){return service.rollback(id);}
     @GetMapping("/deployments") public List<DeploymentView> deployments(){return service.deployments();}
 
+    @PreAuthorize("hasAuthority('AUTOMATION_EXECUTE')")
     @PostMapping("/batch/preview") public BatchScopePreview preview(@RequestBody BatchScopeRequest request){return batchPatch.preview(request);}
-    @PreAuthorize("hasAnyRole('ADMIN','OPS')")
+    @PreAuthorize("hasAuthority('AUTOMATION_EXECUTE')")
     @PostMapping("/batch/runs") public BatchRunResult execute(@RequestBody BatchScopeRequest request){return batchPatch.execute(request);}
 }

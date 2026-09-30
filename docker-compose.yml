@@ -23,7 +23,6 @@ services:
       DB_USER: gazellio
       DB_PASSWORD: gazellio
       JWT_SECRET: local-development-secret-change-me-123456789
-      ADMIN_INITIAL_PASSWORD: Gazellio@2026
       SEED_DEMO_DATA: "true"
     depends_on:
       db:

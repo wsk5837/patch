@@ -2,6 +2,8 @@ package com.gazellio.platform.config;
 
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
+import com.gazellio.platform.service.AccessControlService;
+import com.gazellio.platform.service.PermissionCatalog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -37,20 +39,22 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final OrchestrationRunRepository runs;
     private final OrchestrationRunStepRepository runSteps;
     private final PatchDeploymentRepository deployments;
+    private final PatchScheduleRepository patchSchedules;
     private final DeploymentTargetRepository deploymentTargets;
     private final SecurityIncidentRepository incidents;
     private final ChangeWorkOrderRepository changeOrders;
     private final SystemSettingRepository settings;
+    private final AccessRoleRepository accessRoles;
+    private final RolePermissionRepository rolePermissions;
     private final PasswordEncoder encoder;
 
     @Value("${app.seed-demo-data:true}") private boolean seed;
-    @Value("${ADMIN_INITIAL_PASSWORD:}") private String adminPassword;
-    @Value("${RENDER:false}") private boolean renderEnvironment;
 
     @Override @Transactional
     public void run(String... args) throws Exception {
         if (!seed) return;
         seedUsers();
+        seedAccessControl();
         seedAssets();
         seedVulnerabilities();
         seedPatches();
@@ -64,45 +68,39 @@ public class DemoDataSeeder implements CommandLineRunner {
         reconcileOperationalAssetReferences();
         seedTemplatesAndRuns();
         seedDeploymentTargets();
+        seedPatchSchedules();
         seedSettings();
     }
 
     private void seedUsers() {
-        users.findByUsername("admin").orElseGet(() -> users.save(UserAccount.builder()
-                .username("admin")
-                .passwordHash(encoder.encode(bootstrapAdminPassword()))
-                .displayName("Gazellio Admin")
-                .email("admin@gazellio.local")
-                .role(UserRole.ADMIN)
-                .build()));
-        saveUserIfMissing("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
-        saveUserIfMissing("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
+        upsertDemoUser("admin", "Gazellio Admin", "admin@gazellio.local", UserRole.ADMIN);
+        upsertDemoUser("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
+        upsertDemoUser("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
         upsertDemoUser("appowner", "陈佳宁", "appowner@gazellio.local", UserRole.APP_OWNER);
         upsertDemoUser("approver", "李明远", "approver@gazellio.local", UserRole.APPROVER);
     }
 
-    private String bootstrapAdminPassword() {
-        if (adminPassword != null && !adminPassword.isBlank()) return adminPassword;
-        if (renderEnvironment) {
-            throw new IllegalStateException("ADMIN_INITIAL_PASSWORD must be configured on Render");
-        }
-        return "Gazellio@2026";
-    }
-
-    private void saveUserIfMissing(String username,String name,String email,UserRole role){
-        users.findByUsername(username).orElseGet(() -> users.save(UserAccount.builder()
-                .username(username)
-                .passwordHash(encoder.encode(UUID.randomUUID().toString()))
-                .displayName(name)
-                .email(email)
-                .role(role)
-                .build()));
-    }
-
     private void upsertDemoUser(String username,String name,String email,UserRole role){
         UserAccount user=users.findByUsername(username).orElse(null);
-        if(user==null){saveUserIfMissing(username,name,email,role);return;}
-        user.setDisplayName(name);user.setEmail(email);user.setRole(role);users.save(user);
+        boolean initializePassword=user==null||user.getAccessRoleId()==null;
+        if(user==null)user=UserAccount.builder().username(username).createdAt(Instant.now()).build();
+        user.setDisplayName(name);user.setEmail(email);user.setRole(role);user.setEnabled(true);
+        if(initializePassword||user.getPasswordHash()==null||user.getPasswordHash().isBlank())user.setPasswordHash(encoder.encode(AccessControlService.INITIAL_PASSWORD));
+        users.save(user);
+    }
+
+    private void seedAccessControl(){
+        Map<String,String[]> names=Map.of(
+                "ADMIN",new String[]{"系统管理员","Administrator"},"SECURITY",new String[]{"安全管理员","Security Administrator"},
+                "OPS",new String[]{"运维人员","Operations"},"APP_OWNER",new String[]{"应用负责人","Application Owner"},
+                "APPROVER",new String[]{"发布审批人","Release Approver"});
+        for(var entry:names.entrySet()){
+            AccessRole role=accessRoles.findByCode(entry.getKey()).orElseGet(AccessRole::new);
+            role.setCode(entry.getKey());role.setNameZh(entry.getValue()[0]);role.setNameEn(entry.getValue()[1]);role.setSystemRole(true);role.setEnabled(true);role.setUpdatedAt(Instant.now());role=accessRoles.save(role);
+            if(rolePermissions.findByRoleId(role.getId()).isEmpty())for(String permission:PermissionCatalog.defaults(role.getCode()))rolePermissions.save(RolePermission.builder().roleId(role.getId()).permissionCode(permission).build());
+            Map<String,String> usernames=Map.of("ADMIN","admin","SECURITY","security","OPS","ops","APP_OWNER","appowner","APPROVER","approver");
+            AccessRole assignedRole=role;users.findByUsername(usernames.get(role.getCode())).ifPresent(user->{user.setAccessRoleId(assignedRole.getId());users.save(user);});
+        }
     }
 
     private void seedAssets() {
@@ -604,7 +602,7 @@ public class DemoDataSeeder implements CommandLineRunner {
                             ScanStatus status,int progress,int findingCount,int startedMinutes,Integer completedMinutes){
         ScanJob job=scans.findByJobNo(jobNo).orElseGet(ScanJob::new);
         job.setJobNo(jobNo);job.setName(name);job.setScanType(scanType);job.setTargetType(targetType);job.setTargetValue(targetValue);
-        job.setCredentialType(credential);job.setStatus(status);job.setProgress(progress);job.setFindingsCount(findingCount);job.setRequestedByName("王卫嘉");
+        job.setCredentialType(credential);job.setStatus(status);job.setProgress(progress);job.setFindingsCount(findingCount);job.setRequestedByName(users.findByUsername("security").map(UserAccount::getDisplayName).orElse("security"));
         if(job.getStartedAt()==null)job.setStartedAt(Instant.now().minus(Duration.ofMinutes(startedMinutes)));
         if(completedMinutes!=null&&job.getCompletedAt()==null)job.setCompletedAt(Instant.now().minus(Duration.ofMinutes(completedMinutes)));
         scans.save(job);
@@ -646,11 +644,31 @@ public class DemoDataSeeder implements CommandLineRunner {
         t.setTaskNo("RMD-"+String.format("%06d",t.getId()));tasks.save(t);
         f.setRemediationTaskId(t.getId()); f.setStatus(stage==TaskStage.CLOSED?FindingStatus.RESOLVED:FindingStatus.IN_REMEDIATION); findings.save(f);
         if(stage==TaskStage.RELEASE_APPROVAL){
-            ApprovalRequest ar=approvals.save(ApprovalRequest.builder().approvalNo("APR-"+String.format("%06d",approvals.count()+1)).taskId(t.getId()).changeType(type).status(ApprovalStatus.PENDING).currentStep(1).requestedByName("王卫嘉").reason("测试环境验证与复测通过，申请进入生产发布。 ").rollbackPlan("失败自动暂停；恢复快照或回退补丁版本。 ").build());
-            approvalSteps.save(ApprovalStep.builder().approvalId(ar.getId()).stepOrder(1).roleNameZh("运维负责人").roleNameEn("Operations Lead").approverName("曾卫平").status(ApprovalStepStatus.PENDING).build());
-            approvalSteps.save(ApprovalStep.builder().approvalId(ar.getId()).stepOrder(2).roleNameZh("安全负责人").roleNameEn("Security Lead").approverName("王卫嘉").status(ApprovalStepStatus.WAITING).build());
+            UserAccount requester=users.findByUsername("security").orElseThrow();
+            UserAccount operations=users.findByUsername("ops").orElseThrow();
+            UserAccount releaseApprover=users.findByUsername("approver").orElseThrow();
+            ApprovalRequest ar=approvals.save(ApprovalRequest.builder().approvalNo("APR-"+String.format("%06d",approvals.count()+1)).taskId(t.getId()).changeType(type).status(ApprovalStatus.PENDING).currentStep(1).requestedById(requester.getId()).requestedByName(requester.getDisplayName()).reason("测试环境验证与复测通过，申请进入生产发布。 ").rollbackPlan("失败自动暂停；恢复快照或回退补丁版本。 ").build());
+            approvalSteps.save(ApprovalStep.builder().approvalId(ar.getId()).stepOrder(1).roleNameZh("运维负责人").roleNameEn("Operations Lead").approverId(operations.getId()).approverName(operations.getDisplayName()).status(ApprovalStepStatus.PENDING).build());
+            approvalSteps.save(ApprovalStep.builder().approvalId(ar.getId()).stepOrder(2).roleNameZh("发布审批人").roleNameEn("Release Approver").approverId(releaseApprover.getId()).approverName(releaseApprover.getDisplayName()).status(ApprovalStepStatus.WAITING).build());
             t.setApprovalId(ar.getId()); tasks.save(t);
         }
+    }
+
+    private void seedPatchSchedules(){
+        if(patchSchedules.count()>0)return;
+        UserAccount ops=users.findByUsername("ops").orElse(null);
+        List<Patch> available=patches.findActiveCatalog();
+        if(available.isEmpty())return;
+        ZonedDateTime first=ZonedDateTime.now().plusDays(3).withHour(22).withMinute(0).withSecond(0).withNano(0);
+        ZonedDateTime second=ZonedDateTime.now().plusDays(10).withHour(21).withMinute(30).withSecond(0).withNano(0);
+        patchSchedules.save(PatchSchedule.builder().titleZh("生产环境月度补丁窗口").titleEn("Production Monthly Patch Window")
+                .patchId(available.get(0).getId()).environment("PROD").startAt(first.toInstant()).endAt(first.plusHours(3).toInstant())
+                .status("APPROVED").ownerId(ops==null?null:ops.getId()).ownerName(ops==null?"ops":ops.getDisplayName())
+                .createdById(ops==null?null:ops.getId()).createdByName(ops==null?"ops":ops.getDisplayName()).notes("Ring 0 验证后按批次发布。 ").build());
+        if(available.size()>1)patchSchedules.save(PatchSchedule.builder().titleZh("预生产兼容性验证窗口").titleEn("Pre-production Compatibility Window")
+                .patchId(available.get(1).getId()).environment("PREPROD").startAt(second.toInstant()).endAt(second.plusHours(2).toInstant())
+                .status("PLANNED").ownerId(ops==null?null:ops.getId()).ownerName(ops==null?"ops":ops.getDisplayName())
+                .createdById(ops==null?null:ops.getId()).createdByName(ops==null?"ops":ops.getDisplayName()).notes("执行安装、健康检查和定向复测。 ").build());
     }
 
     private void seedLowerSeverityFindings(){

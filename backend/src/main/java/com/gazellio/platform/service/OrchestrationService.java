@@ -42,6 +42,64 @@ public class OrchestrationService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND)));
     }
 
+    @Transactional
+    public TemplateView createTemplate(TemplateSaveRequest request){
+        String code=normalizeTemplateCode(request.code());
+        if(templates.findByCode(code).isPresent())throw new ResponseStatusException(HttpStatus.CONFLICT,"Template code already exists");
+        OrchestrationTemplate template=templates.save(OrchestrationTemplate.builder().code(code).nameZh(request.nameZh().trim())
+                .nameEn(request.nameEn().trim()).type(request.type().trim().toUpperCase(Locale.ROOT)).enabled(request.enabled()).version(1).updatedAt(Instant.now()).build());
+        replaceTemplateSteps(template.getId(),request.steps());
+        audit.log("ORCHESTRATION_TEMPLATE",template.getId(),"CREATE","创建自动化编排模板："+template.getNameZh(),"Created orchestration template: "+template.getNameEn(),currentUser.name());
+        return view.template(template);
+    }
+
+    @Transactional
+    public TemplateView updateTemplate(Long id,TemplateSaveRequest request){
+        OrchestrationTemplate template=templates.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        String code=normalizeTemplateCode(request.code());
+        templates.findByCode(code).filter(other->!other.getId().equals(id)).ifPresent(other->{throw new ResponseStatusException(HttpStatus.CONFLICT,"Template code already exists");});
+        template.setCode(code);template.setNameZh(request.nameZh().trim());template.setNameEn(request.nameEn().trim());
+        template.setType(request.type().trim().toUpperCase(Locale.ROOT));template.setEnabled(request.enabled());
+        template.setVersion((template.getVersion()==null?0:template.getVersion())+1);template.setUpdatedAt(Instant.now());templates.save(template);
+        replaceTemplateSteps(id,request.steps());
+        audit.log("ORCHESTRATION_TEMPLATE",id,"UPDATE","更新自动化编排模板："+template.getNameZh(),"Updated orchestration template: "+template.getNameEn(),currentUser.name());
+        return view.template(template);
+    }
+
+    @Transactional
+    public void deleteTemplate(Long id){
+        OrchestrationTemplate template=templates.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if(runs.existsByTemplateId(id)){
+            template.setEnabled(false);template.setUpdatedAt(Instant.now());templates.save(template);
+            audit.log("ORCHESTRATION_TEMPLATE",id,"DISABLE","模板已有执行历史，已停用："+template.getNameZh(),"Template has run history and was disabled: "+template.getNameEn(),currentUser.name());
+            return;
+        }
+        templateSteps.deleteByTemplateId(id);templates.delete(template);
+        audit.log("ORCHESTRATION_TEMPLATE",id,"DELETE","删除自动化编排模板："+template.getNameZh(),"Deleted orchestration template: "+template.getNameEn(),currentUser.name());
+    }
+
+    private void replaceTemplateSteps(Long templateId,List<TemplateStepSaveRequest> steps){
+        if(steps==null||steps.isEmpty())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"At least one orchestration step is required");
+        LinkedHashSet<String> codes=new LinkedHashSet<>();
+        for(TemplateStepSaveRequest step:steps){
+            String code=normalizeTemplateCode(step.code());
+            if(!codes.add(code))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Duplicate step code: "+code);
+        }
+        templateSteps.deleteByTemplateId(templateId);templateSteps.flush();
+        int order=1;
+        for(TemplateStepSaveRequest step:steps){
+            templateSteps.save(OrchestrationTemplateStep.builder().templateId(templateId).stepOrder(order++)
+                    .code(normalizeTemplateCode(step.code())).nameZh(step.nameZh().trim()).nameEn(step.nameEn().trim())
+                    .stepType(step.stepType().trim().toUpperCase(Locale.ROOT)).rollbackPoint(step.rollbackPoint()).build());
+        }
+    }
+
+    private String normalizeTemplateCode(String value){
+        String code=value==null?"":value.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]+","-");
+        if(code.isBlank())throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid template or step code");
+        return code;
+    }
+
     public List<RunView> runs(){
         return view.runViews(runs.findTop200ByOrderByCreatedAtDesc());
     }

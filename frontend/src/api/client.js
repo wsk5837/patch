@@ -59,5 +59,6 @@ export function api(path, options = {}) {
 
 export const authApi = {
   login: (username,password) => api('/api/auth/login',{method:'POST',body:{username,password}}),
+  me: () => api('/api/auth/me'),
   logout: () => api('/api/auth/logout',{method:'POST'})
 }

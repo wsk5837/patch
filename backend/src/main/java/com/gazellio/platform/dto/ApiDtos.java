@@ -10,7 +10,9 @@ public final class ApiDtos {
     private ApiDtos() {}
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
-    public record UserView(Long id, String username, String displayName, String email, String role) {}
+    public record UserView(Long id, String username, String displayName, String email, String role,
+                           Long roleId, String roleNameZh, String roleNameEn, boolean enabled,
+                           List<String> permissions) {}
     public record LoginResponse(String token, UserView user) {}
     public record MessageResponse(String message) {}
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
@@ -37,6 +39,12 @@ public final class ApiDtos {
     public record TaskAssignRequest(Long ownerId, @NotBlank String ownerName) {}
     public record ApprovalActionRequest(String comment) {}
     public record SettingsUpdateRequest(Map<String,String> values) {}
+    public record UserSaveRequest(@NotBlank String username,@NotBlank String displayName,String email,
+                                  @NotNull Long roleId,Boolean enabled,String password) {}
+    public record RoleSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
+                                  Boolean enabled,@NotNull List<String> permissions) {}
+    public record RoleView(Long id,String code,String nameZh,String nameEn,boolean systemRole,boolean enabled,
+                           long userCount,List<String> permissions) {}
 
     public record AssetView(Long id, String assetCode, String name, String hostname, String ipAddress, String networkSegment,
                             String assetType, String zone, boolean internetExposed, String osName, String osVersion,
@@ -125,7 +133,14 @@ public final class ApiDtos {
                                          Long incidentId, String incidentNo, Long taskId, String taskNo,
                                          Long changeOrderId, String changeNo, Long patchId, String patchCode,
                                          String cveId, String assetName, String businessService, String severity,
-                                         String priority, String status, long hoursRemaining) {}
+                                         String priority, String status, long hoursRemaining,
+                                         Long scheduleId, String titleZh, String titleEn, boolean editable) {}
+    public record PatchScheduleRequest(@NotBlank String titleZh,@NotBlank String titleEn,@NotNull Long patchId,
+                                       @NotBlank String environment,@NotBlank String startAt,@NotBlank String endAt,
+                                       @NotBlank String status,String notes) {}
+    public record PatchScheduleView(Long id,String titleZh,String titleEn,Long patchId,String patchCode,
+                                    String environment,String startAt,String endAt,String status,Long ownerId,
+                                    String ownerName,String notes,String createdByName,String createdAt,String updatedAt) {}
 
     public record TaskView(Long id, String taskNo, Long findingId, String cveId, String titleZh, String titleEn,
                            Long assetId, String assetCode, String assetName, String environment, String businessService,
@@ -167,6 +182,10 @@ public final class ApiDtos {
                                    String stepType, boolean rollbackPoint) {}
     public record TemplateView(Long id, String code, String nameZh, String nameEn, String type, boolean enabled,
                                Integer version, List<TemplateStepView> steps) {}
+    public record TemplateStepSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
+                                          @NotBlank String stepType,boolean rollbackPoint) {}
+    public record TemplateSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
+                                      @NotBlank String type,boolean enabled,@NotNull List<TemplateStepSaveRequest> steps) {}
 
     public record RunStepView(Long id, Integer stepOrder, String code, String nameZh, String nameEn, String status,
                               String startedAt, String completedAt, String messageZh, String messageEn) {}
