@@ -49,7 +49,11 @@ patch-main/
 4. 不要删除 `gazellio-db`。原有 `gazellio` 服务保留为 Java API。
 5. 部署完成后，打开 `gazellio-web` 的 URL，不再把 `gazellio` API URL 当作页面地址。
 
-本次升级会在后端启动时自动补齐旧 PostgreSQL 数据库缺失的字段，包括
-`assets.internet_exposed`。不要删除数据库，也不需要手工执行 SQL。
+本次升级会在后端启动时自动升级旧 PostgreSQL 数据库：
+
+- 补齐并规范化 `assets.internet_exposed`，先填充历史空值，再恢复默认值和非空约束。
+- 升级漏洞严重程度约束，允许暂无 CVSS 评分的漏洞使用 `UNKNOWN`。
+
+不要删除 `gazellio-db`，也不需要手工执行 SQL。
 
 以后仅修改 `frontend/` 时，Render 只构建静态站点；仅修改 `backend/` 时，Render 只构建 Java API。
