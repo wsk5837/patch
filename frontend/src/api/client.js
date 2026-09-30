@@ -57,4 +57,7 @@ export function api(path, options = {}) {
   return pending
 }
 
-export const authApi = { login: (username,password) => api('/api/auth/login',{method:'POST',body:{username,password}}) }
+export const authApi = {
+  login: (username,password) => api('/api/auth/login',{method:'POST',body:{username,password}}),
+  logout: () => api('/api/auth/logout',{method:'POST'})
+}
