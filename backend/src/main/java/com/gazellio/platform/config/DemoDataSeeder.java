@@ -77,8 +77,8 @@ public class DemoDataSeeder implements CommandLineRunner {
                 .build()));
         saveUserIfMissing("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
         saveUserIfMissing("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
-        saveUserIfMissing("appowner", "应用负责人", "appowner@gazellio.local", UserRole.APP_OWNER);
-        saveUserIfMissing("approver", "发布审批人", "approver@gazellio.local", UserRole.APPROVER);
+        upsertDemoUser("appowner", "陈佳宁", "appowner@gazellio.local", UserRole.APP_OWNER);
+        upsertDemoUser("approver", "李明远", "approver@gazellio.local", UserRole.APPROVER);
     }
 
     private String bootstrapAdminPassword() {
@@ -99,12 +99,19 @@ public class DemoDataSeeder implements CommandLineRunner {
                 .build()));
     }
 
+    private void upsertDemoUser(String username,String name,String email,UserRole role){
+        UserAccount user=users.findByUsername(username).orElse(null);
+        if(user==null){saveUserIfMissing(username,name,email,role);return;}
+        user.setDisplayName(name);user.setEmail(email);user.setRole(role);users.save(user);
+    }
+
     private void seedAssets() {
         var ownerOps=users.findByUsername("ops").orElseThrow();
         var ownerApp=users.findByUsername("appowner").orElseThrow();
         List<CustomerAssetSpec> catalog=customerAssetCatalog();
         migrateLegacyAssets(catalog);
         upsertCustomerAssets(catalog,ownerOps,ownerApp);
+        retireGeneratedLegacyAssets();
     }
 
     private List<CustomerAssetSpec> customerAssetCatalog(){
@@ -202,6 +209,14 @@ public class DemoDataSeeder implements CommandLineRunner {
         assets.saveAll(rows);
     }
 
+    private void retireGeneratedLegacyAssets(){
+        List<Asset> retired=assets.findAll().stream()
+                .filter(a->text(a.getAssetCode()).matches(".*-(DEV|TEST|PREPROD|PROD)-M\\d+$"))
+                .filter(Asset::isActive)
+                .peek(a->a.setActive(false)).toList();
+        if(!retired.isEmpty())assets.saveAll(retired);
+    }
+
     private String zoneFor(EnvironmentType environment){
         return switch(environment){case PROD->"生产数据中心";case PREPROD->"预生产资源区";case TEST->"测试资源区";default->"开发资源区";};
     }
@@ -238,6 +253,7 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedPatches(){
+        retireInvalidDemoPatches();
         addPatch("KB5072180","Microsoft","Windows Server","2026-09","Windows Server 2022 九月安全更新","Windows Server 2022 September security update",740.0,true,List.of("CVE-2025-29824","CVE-2025-33053"));
         addPatch("RHEL-RHSA-2026:7211","Red Hat","OpenSSH","9.4p2","RHEL OpenSSH 安全更新","RHEL OpenSSH security update",18.5,false,List.of("CVE-2024-6387","CVE-2024-6386"));
         addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535","CVE-2023-0465","CVE-2022-0778"));
@@ -279,6 +295,14 @@ public class DemoDataSeeder implements CommandLineRunner {
             if(changed){v.setUpdatedAt(Instant.now());corrected.add(v);}
         }
         if(!corrected.isEmpty())vulns.saveAll(corrected);
+    }
+
+    private void retireInvalidDemoPatches(){
+        List<Patch> changed=patches.findAll().stream()
+                .filter(p->Set.of("1213","1231").contains(text(p.getPatchId()))
+                        || (text(p.getTitleZh()).equals("1231")&&text(p.getVendor()).equals("123")))
+                .peek(p->p.setStatus("RETIRED")).toList();
+        if(!changed.isEmpty())patches.saveAll(changed);
     }
 
     /**
@@ -562,6 +586,15 @@ public class DemoDataSeeder implements CommandLineRunner {
         if(agents.count()==0){
             int i=1; for(Asset a:assets.findAll().stream().limit(9).toList()) agents.save(ScanAgent.builder().agentKey("AGENT-"+String.format("%03d",i++)).hostname(a.getName()).ipAddress(a.getIpAddress()).osName(a.getOsName()).version("1.6.0").status(AgentStatus.ONLINE).assetId(a.getId()).lastHeartbeatAt(Instant.now().minusSeconds((long)(Math.random()*300))).build());
         }
+        List<Asset> active=assets.findByActiveTrueOrderByNameAsc();
+        List<ScanAgent> agentRows=agents.findAll();
+        for(int index=0;index<agentRows.size()&&!active.isEmpty();index++){
+            ScanAgent agent=agentRows.get(index);
+            Asset asset=active.get(index%active.size());
+            agent.setAssetId(asset.getId());agent.setHostname(asset.getHostname());agent.setIpAddress(asset.getIpAddress());agent.setOsName(asset.getOsName());
+            agent.setLastHeartbeatAt(index%4==0?Instant.now().minus(Duration.ofMinutes(18)):Instant.now().minus(Duration.ofMinutes(index+1)));
+            agent.setStatus(index%4==0?AgentStatus.OFFLINE:AgentStatus.ONLINE);agents.save(agent);
+        }
         upsertScan("SCN-260929-001","生产数据库与中间件认证扫描","AUTHENTICATED","ENVIRONMENT","PROD","AGENT",ScanStatus.COMPLETED,100,18,120,70);
         upsertScan("SCN-260929-002","测试环境补丁效果复测","TARGETED_RESCAN","ENVIRONMENT","TEST","AGENT",ScanStatus.COMPLETED,100,3,60,35);
         upsertScan("SCN-260929-003","公网暴露应用服务扫描","NETWORK","CIDR","10.60.20.0/24","NONE",ScanStatus.RUNNING,64,5,22,null);
@@ -578,7 +611,6 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedFindingsTasksApprovals(){
-        if(findings.count()>0) return;
         Map<String,Asset> a=new HashMap<>(); assets.findAll().forEach(x->a.put(x.getAssetCode(),x));
         ScanJob scan=scans.findTop100ByOrderByCreatedAtDesc().stream().filter(s->s.getStatus()==ScanStatus.COMPLETED).findFirst().orElseThrow();
         String[][] rows={
@@ -591,6 +623,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         int n=1;
         for(String[] r:rows){
             Asset x=a.get(r[0]); VulnerabilityDefinition v=vulns.findById(r[1]).orElseThrow();
+            if(findings.findByAssetIdAndCveId(x.getId(),v.getCveId()).isPresent()){n++;continue;}
             double risk=Math.min(10.0,(v.getCvss()==null?5:v.getCvss())+(x.getCriticality()-3)*0.25+(v.isKev()?0.5:0));
             Finding f=findings.save(Finding.builder().assetId(x.getId()).cveId(v.getCveId()).scanJobId(scan.getId()).status(FindingStatus.valueOf(r[2])).riskScore(risk).ownerId(x.getOwnerId()).ownerName(x.getOwnerName()).evidence("agent-package-match:"+v.getProduct()).firstSeenAt(Instant.now().minus(Duration.ofDays(12+n))).lastSeenAt(Instant.now().minus(Duration.ofHours(n))).build());
             if(f.getStatus()==FindingStatus.RESOLVED) f.setResolvedAt(Instant.now().minus(Duration.ofDays(2)));
@@ -608,7 +641,9 @@ public class DemoDataSeeder implements CommandLineRunner {
 
     private void createTask(String assetCode,String cve,String patchCode,TaskStage stage,String priority,ChangeType type){
         Asset a=assets.findByAssetCode(assetCode).orElseThrow(); Finding f=findings.findByAssetIdAndCveId(a.getId(),cve).orElseThrow(); Patch p=patches.findByPatchId(patchCode).orElseThrow();
-        RemediationTask t=tasks.save(RemediationTask.builder().taskNo("RMD-"+String.format("%06d",tasks.count()+1)).findingId(f.getId()).patchId(p.getId()).assetId(a.getId()).ownerId(a.getOwnerId()).ownerName(a.getOwnerName()).priority(priority).stage(stage).status(stage==TaskStage.CLOSED?TaskStatus.COMPLETED:TaskStatus.IN_PROGRESS).changeType(type).dueAt(Instant.now().plus(Duration.ofDays(priority.equals("P1")?2:7))).build());
+        if(tasks.findByFindingId(f.getId()).isPresent())return;
+        RemediationTask t=tasks.save(RemediationTask.builder().taskNo("RMD-PENDING-"+UUID.randomUUID()).findingId(f.getId()).patchId(p.getId()).assetId(a.getId()).ownerId(a.getOwnerId()).ownerName(a.getOwnerName()).priority(priority).stage(stage).status(stage==TaskStage.CLOSED?TaskStatus.COMPLETED:TaskStatus.IN_PROGRESS).changeType(type).dueAt(Instant.now().plus(Duration.ofDays(priority.equals("P1")?2:7))).build());
+        t.setTaskNo("RMD-"+String.format("%06d",t.getId()));tasks.save(t);
         f.setRemediationTaskId(t.getId()); f.setStatus(stage==TaskStage.CLOSED?FindingStatus.RESOLVED:FindingStatus.IN_REMEDIATION); findings.save(f);
         if(stage==TaskStage.RELEASE_APPROVAL){
             ApprovalRequest ar=approvals.save(ApprovalRequest.builder().approvalNo("APR-"+String.format("%06d",approvals.count()+1)).taskId(t.getId()).changeType(type).status(ApprovalStatus.PENDING).currentStep(1).requestedByName("王卫嘉").reason("测试环境验证与复测通过，申请进入生产发布。 ").rollbackPlan("失败自动暂停；恢复快照或回退补丁版本。 ").build());
@@ -765,7 +800,6 @@ public class DemoDataSeeder implements CommandLineRunner {
                     ||!Objects.equals(task.getOwnerId(),asset.getOwnerId())
                     ||!Objects.equals(task.getOwnerName(),asset.getOwnerName());
             if(changed){task.setAssetId(asset.getId());task.setOwnerId(asset.getOwnerId());task.setOwnerName(asset.getOwnerName());task.setUpdatedAt(Instant.now());changedTasks.add(task);}
-            if(!asset.isActive()){asset.setActive(true);assets.save(asset);}
         }
         if(!changedTasks.isEmpty())tasks.saveAll(changedTasks);
         List<SecurityIncident> changedIncidents=new ArrayList<>();

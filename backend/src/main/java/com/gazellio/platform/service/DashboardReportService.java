@@ -5,6 +5,7 @@ import com.gazellio.platform.model.Enums.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -41,16 +42,28 @@ public class DashboardReportService {
         synchronized (this) {
             now = Instant.now();
             if (cachedDashboard != null && now.isBefore(dashboardExpiresAt)) return cachedDashboard;
+            Instant dashboardNow=now;
             Map<Severity, Long> bySeverity = severityCounts();
+            List<com.gazellio.platform.model.Finding> activeFindings=findings.findAllActive();
+            List<com.gazellio.platform.model.Asset> activeAssets=assets.findByActiveTrueOrderByNameAsc();
+            List<com.gazellio.platform.model.SecurityIncident> activeIncidents=incidents.findActive(PageRequest.of(0,1000));
+            long overdue=activeIncidents.stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(dashboardNow)
+                    &&!List.of(IncidentStatus.CLOSED,IncidentStatus.RESOLVED,IncidentStatus.EXEMPTED,IncidentStatus.FALSE_POSITIVE).contains(i.getStatus())).count();
+            double mttr=activeFindings.stream().filter(f->f.getResolvedAt()!=null&&f.getFirstSeenAt()!=null)
+                    .mapToLong(f->Duration.between(f.getFirstSeenAt(),f.getResolvedAt()).toHours()).average().orElse(0.0);
+            long recentlySeen=activeAssets.stream().filter(a->a.getLastSeenAt()!=null&&a.getLastSeenAt().isAfter(dashboardNow.minus(Duration.ofDays(7)))).count();
+            double coverage=activeAssets.isEmpty()?100.0:Math.round(recentlySeen*1000.0/activeAssets.size())/10.0;
             DashboardView result = new DashboardView(
                     bySeverity.getOrDefault(Severity.CRITICAL, 0L),
                     bySeverity.getOrDefault(Severity.HIGH, 0L),
-                    findings.countByStatusNotIn(CLOSED_FINDINGS),
-                    approvals.countByStatus(ApprovalStatus.PENDING),
+                    findings.countActiveOpen(CLOSED_FINDINGS),
+                    approvals.countActiveByStatus(ApprovalStatus.PENDING),
                     scans.countByStatusIn(List.of(ScanStatus.QUEUED, ScanStatus.RUNNING)),
                     runs.countByStatusIn(List.of(RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.PAUSED)),
                     patchCompliance(),
-                    view.findingViews(findings.findTop6ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED_FINDINGS)),
+                    activeAssets.size(),overdue,Math.round(mttr*10.0)/10.0,coverage,
+                    trend(activeFindings,dashboardNow,30),
+                    view.findingViews(findings.findTopActiveOpen(CLOSED_FINDINGS,PageRequest.of(0,6))),
                     scans.findTop5ByOrderByCreatedAtDesc().stream().map(view::scan).toList(),
                     view.runViews(runs.findTop5ByOrderByCreatedAtDesc())
             );
@@ -58,6 +71,23 @@ public class DashboardReportService {
             dashboardExpiresAt = now.plus(DASHBOARD_CACHE_TTL);
             return result;
         }
+    }
+
+    private List<TrendPointView> trend(List<com.gazellio.platform.model.Finding> rows,Instant now,int days){
+        java.time.ZoneId zone=java.time.ZoneId.systemDefault();
+        java.time.LocalDate today=now.atZone(zone).toLocalDate();
+        List<TrendPointView> result=new ArrayList<>();
+        for(int offset=days-1;offset>=0;offset--){
+            java.time.LocalDate day=today.minusDays(offset);
+            Instant end=day.plusDays(1).atStartOfDay(zone).toInstant();
+            long opened=rows.stream().filter(f->f.getFirstSeenAt()!=null&&f.getFirstSeenAt().atZone(zone).toLocalDate().equals(day)).count();
+            long resolved=rows.stream().filter(f->f.getResolvedAt()!=null&&f.getResolvedAt().atZone(zone).toLocalDate().equals(day)).count();
+            long backlog=rows.stream().filter(f->f.getFirstSeenAt()!=null&&f.getFirstSeenAt().isBefore(end)
+                    &&(f.getResolvedAt()==null||!f.getResolvedAt().isBefore(end))
+                    &&f.getStatus()!=FindingStatus.FALSE_POSITIVE&&f.getStatus()!=FindingStatus.EXEMPTED).count();
+            result.add(new TrendPointView(day.toString(),opened,resolved,backlog));
+        }
+        return result;
     }
 
     public ReportView report() {
@@ -82,16 +112,16 @@ public class DashboardReportService {
 
             ReportView result = new ReportView(
                     vulns.count(),
-                    findings.countByStatusNotIn(CLOSED_FINDINGS),
-                    findings.countByStatus(FindingStatus.RESOLVED),
-                    findings.countByStatus(FindingStatus.FALSE_POSITIVE),
-                    findings.countByStatus(FindingStatus.EXEMPTED),
+                    findings.countActiveOpen(CLOSED_FINDINGS),
+                    findings.countActiveByStatus(FindingStatus.RESOLVED),
+                    findings.countActiveByStatus(FindingStatus.FALSE_POSITIVE),
+                    findings.countActiveByStatus(FindingStatus.EXEMPTED),
                     incidents.findTop200ByOrderByUpdatedAtDesc().stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(reportNow)
                             &&!List.of(IncidentStatus.CLOSED,IncidentStatus.RESOLVED,IncidentStatus.EXEMPTED,IncidentStatus.FALSE_POSITIVE).contains(i.getStatus())).count(),
                     deployments.countByStatus(DeploymentStatus.RUNNING),
                     deployments.countByStatus(DeploymentStatus.FAILED),
-                    tasks.countByStatusIn(List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)),
-                    approvals.countByStatus(ApprovalStatus.PENDING),
+                    tasks.countActiveByStatusIn(List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)),
+                    approvals.countActiveByStatus(ApprovalStatus.PENDING),
                     totalRuns,
                     succeededRuns,
                     totalRuns == 0 ? 100.0 : Math.round(succeededRuns * 1000.0 / totalRuns) / 10.0,

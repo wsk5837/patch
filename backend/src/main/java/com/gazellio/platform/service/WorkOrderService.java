@@ -4,6 +4,7 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,7 @@ public class WorkOrderService {
     private final CurrentUserService currentUser;
 
     public List<SecurityIncidentView> incidents() {
-        List<SecurityIncident> rows = incidents.findTop200ByOrderByUpdatedAtDesc();
+        List<SecurityIncident> rows = incidents.findActive(PageRequest.of(0,200));
         Set<Long> pendingConfirmation = findings.findAllById(rows.stream().map(SecurityIncident::getFindingId).toList())
                 .stream()
                 .filter(f -> f.getStatus() == FindingStatus.NEW || f.getStatus() == FindingStatus.REOPENED)
@@ -53,7 +54,7 @@ public class WorkOrderService {
     }
 
     public List<ChangeWorkOrderView> changes() {
-        return view.changeViews(changes.findTop200ByOrderByUpdatedAtDesc());
+        return view.changeViews(changes.findActive(PageRequest.of(0,200)));
     }
 
     public ChangeWorkOrderView change(Long id) {

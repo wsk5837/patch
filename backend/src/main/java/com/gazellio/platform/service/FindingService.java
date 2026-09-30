@@ -73,11 +73,29 @@ public class FindingService {
     }
     public VulnerabilityView vulnerability(String cve){ return view.vulnerability(vulns.findById(cve).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND))); }
 
+    public String exportLibrary(String q,String severity,Boolean kev,Boolean patchAvailable){
+        StringBuilder csv=new StringBuilder("CVE,Title,Vendor,Product,CVSS,Severity,KEV,Patch Available,Affected Assets,Published Date\n");
+        int page=0;
+        while(page<100){
+            VulnerabilityPageView batch=library(q,severity,kev,patchAvailable,page,100);
+            for(VulnerabilityView v:batch.items()) csv.append(csv(v.cveId())).append(',').append(csv(v.titleEn())).append(',')
+                    .append(csv(v.vendor())).append(',').append(csv(v.product())).append(',')
+                    .append(v.cvss()==null?"":v.cvss()).append(',').append(csv(v.severity())).append(',')
+                    .append(v.kev()).append(',').append(v.patchAvailable()).append(',').append(v.affectedAssets()).append(',')
+                    .append(csv(v.publishedDate())).append('\n');
+            if(page+1>=batch.totalPages())break;
+            page++;
+        }
+        return csv.toString();
+    }
+
+    private String csv(Object value){String s=Objects.toString(value,"");return "\""+s.replace("\"","\"\"")+"\"";}
+
     public List<FindingView> list(String status,String severity,String q){return list(status,severity,q,null);}
 
     public List<FindingView> list(String status,String severity,String q,Long assetId){
         String needle=q==null?null:q.toLowerCase(Locale.ROOT);
-        List<Finding> source=assetId==null?findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc():findings.findByAssetIdOrderByRiskScoreDescLastSeenAtDesc(assetId);
+        List<Finding> source=assetId==null?findings.findTop200Active(PageRequest.of(0,200)):findings.findByAssetIdOrderByRiskScoreDescLastSeenAtDesc(assetId);
         return view.findingViews(source).stream().filter(f->{
             if(status!=null&&!status.isBlank()&&!status.equalsIgnoreCase("ALL")&&!status.equalsIgnoreCase(f.status())) return false;
             if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")&&!severity.equalsIgnoreCase(f.severity())) return false;

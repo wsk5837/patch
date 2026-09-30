@@ -4,6 +4,7 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class TaskService {
     private final AuditService audit;
     private final CurrentUserService currentUser;
 
-    public List<TaskView> list(){return view.taskViews(tasks.findTop200ByOrderByUpdatedAtDesc());}
+    public List<TaskView> list(){return view.taskViews(tasks.findActive(PageRequest.of(0,200)));}
     public TaskView get(Long id){return view.task(require(id));}
 
     @Transactional

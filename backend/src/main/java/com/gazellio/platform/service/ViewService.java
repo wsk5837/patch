@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,7 +83,7 @@ public class ViewService {
         Map<String, List<PatchCandidateView>> patchCandidatesByCve = new HashMap<>();
         for (PatchCve link : links) {
             Patch patch = patchById.get(link.getPatchId());
-            if (patch != null) {
+            if (patch != null && !"RETIRED".equalsIgnoreCase(patch.getStatus())) {
                 patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
@@ -116,10 +118,12 @@ public class ViewService {
         Set<Long> assetIds = rows.stream().map(Finding::getAssetId).collect(Collectors.toSet());
         Set<Long> scanIds = rows.stream().map(Finding::getScanJobId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> taskIds = rows.stream().map(Finding::getRemediationTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> incidentIds = rows.stream().map(Finding::getSecurityIncidentId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, VulnerabilityDefinition> vulnerabilityById = index(vulns.findAllById(cveIds), VulnerabilityDefinition::getCveId);
         Map<Long, Asset> assetById = index(assets.findAllById(assetIds), Asset::getId);
         Map<Long, ScanJob> scanById = scanIds.isEmpty() ? Map.of() : index(scans.findAllById(scanIds), ScanJob::getId);
         Map<Long, RemediationTask> taskById = taskIds.isEmpty() ? Map.of() : index(tasks.findAllById(taskIds), RemediationTask::getId);
+        Map<Long, SecurityIncident> incidentById = incidentIds.isEmpty() ? Map.of() : index(incidents.findAllById(incidentIds), SecurityIncident::getId);
 
         List<PatchCve> links = patchCves.findByCveIdIn(cveIds);
         Set<Long> patchIds = links.stream().map(PatchCve::getPatchId).collect(Collectors.toSet());
@@ -128,7 +132,7 @@ public class ViewService {
         Map<String, List<PatchCandidateView>> patchCandidatesByCve = new HashMap<>();
         for (PatchCve link : links) {
             Patch patch = patchById.get(link.getPatchId());
-            if (patch != null) {
+            if (patch != null && !"RETIRED".equalsIgnoreCase(patch.getStatus())) {
                 patchCodesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patch.getPatchId());
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
@@ -138,6 +142,7 @@ public class ViewService {
             Asset a = assetById.get(f.getAssetId());
             ScanJob scan = f.getScanJobId() == null ? null : scanById.get(f.getScanJobId());
             RemediationTask task = f.getRemediationTaskId() == null ? null : taskById.get(f.getRemediationTaskId());
+            SecurityIncident incident=f.getSecurityIncidentId()==null?null:incidentById.get(f.getSecurityIncidentId());
             List<String> reasons=new ArrayList<>();
             if(v!=null&&v.isKev())reasons.add("KNOWN_EXPLOITED");
             if(v!=null&&v.getSeverity()==Enums.Severity.CRITICAL)reasons.add("CRITICAL_SEVERITY");
@@ -154,7 +159,7 @@ public class ViewService {
                     s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), task == null ? null : task.getTaskNo(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
-                    s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(),
+                    s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
                     patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
                     patchCandidatesByCve.getOrDefault(f.getCveId(), List.of())
             );
@@ -171,8 +176,10 @@ public class ViewService {
     }
 
     public AgentView agent(ScanAgent x) {
+        boolean heartbeatFresh=x.getLastHeartbeatAt()!=null
+                && x.getLastHeartbeatAt().isAfter(Instant.now().minus(Duration.ofMinutes(10)));
         return new AgentView(x.getId(), x.getAgentKey(), x.getHostname(), x.getIpAddress(), x.getOsName(),
-                x.getVersion(), s(x.getStatus()), x.getAssetId(), s(x.getLastHeartbeatAt()));
+                x.getVersion(), heartbeatFresh?"ONLINE":"OFFLINE", x.getAssetId(), s(x.getLastHeartbeatAt()));
     }
 
     public PatchServerView patchServer(PatchServer p) {
@@ -310,7 +317,7 @@ public class ViewService {
         Map<String, List<PatchCandidateView>> candidatesByCve = new HashMap<>();
         for (PatchCve link : links) {
             Patch patch = patchById.get(link.getPatchId());
-            if (patch != null) candidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
+            if (patch != null && !"RETIRED".equalsIgnoreCase(patch.getStatus())) candidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
         }
         return rows.stream().map(i -> {
             Finding finding = findingById.get(i.getFindingId());

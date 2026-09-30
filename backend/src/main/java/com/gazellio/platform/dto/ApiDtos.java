@@ -89,7 +89,7 @@ public final class ApiDtos {
                               List<String> priorityReasons, String status, Double riskScore, Integer occurrences,
                               Long scanJobId, String scanJobNo, Long remediationTaskId, String remediationTaskNo, String firstSeenAt, String lastSeenAt,
                               String evidence, String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
-                              Long securityIncidentId, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
+                              Long securityIncidentId, String slaDueAt, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
 
     public record ScanJobView(Long id, String jobNo, String name, String scanType, String targetType, String targetValue,
                               String credentialType, String targetCve, String status, Integer progress, Integer findingsCount,
@@ -189,8 +189,11 @@ public final class ApiDtos {
     public record AuditView(Long id, String entityType, String entityId, String action, String messageZh,
                             String messageEn, String actor, String sourceIp, String userAgent, String createdAt) {}
 
+    public record TrendPointView(String date, long opened, long resolved, long backlog) {}
     public record DashboardView(long openCritical, long openHigh, long openFindings, long pendingApprovals,
                                 long runningScans, long runningAutomations, double patchCompliance,
+                                long totalAssets, long slaOverdue, double mttrHours, double scanCoverage,
+                                List<TrendPointView> riskTrend,
                                 List<FindingView> topFindings, List<ScanJobView> recentScans,
                                 List<RunView> recentRuns) {}
 

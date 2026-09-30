@@ -4,6 +4,7 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class ApprovalService {
     private final SecurityIncidentRepository incidents;
     private final UserAccountRepository users;
 
-    public List<ApprovalView> list(){return view.approvalViews(approvals.findTop200ByOrderBySubmittedAtDesc());}
+    public List<ApprovalView> list(){return view.approvalViews(approvals.findActive(PageRequest.of(0,200)));}
     public ApprovalView get(Long id){return view.approval(require(id));}
 
     @Transactional

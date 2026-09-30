@@ -4,6 +4,7 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +33,7 @@ public class PatchService {
     private final CurrentUserService currentUser;
 
     public List<PatchView> list(){
-        return view.patchViews(patches.findAllByOrderByPublishedDateDesc());
+        return view.patchViews(patches.findActiveCatalog());
     }
 
     public PatchView get(Long id){
@@ -57,7 +58,7 @@ public class PatchService {
         YearMonth selected;
         try{selected=month==null||month.isBlank()?YearMonth.now():YearMonth.parse(month);}
         catch(Exception e){selected=YearMonth.now();}
-        List<SecurityIncident> incidentRows=incidents.findTop200ByOrderByUpdatedAtDesc();
+        List<SecurityIncident> incidentRows=incidents.findActive(PageRequest.of(0,200));
         Map<Long,Finding> findingById=findings.findAllById(incidentRows.stream().map(SecurityIncident::getFindingId).toList())
                 .stream().collect(Collectors.toMap(Finding::getId,Function.identity()));
         Map<String,VulnerabilityDefinition> vulnerabilityById=vulnerabilities.findAllById(findingById.values().stream().map(Finding::getCveId).toList())
