@@ -18,6 +18,7 @@ export default function AssetDetailPage(){
   {key:'severity',label:t('severity'),render:r=><StatusBadge tone={severityTone(r.severity)}>{severityLabel(t,r.severity)}</StatusBadge>},
   {key:'riskScore',label:t('riskScore')},
   {key:'status',label:t('status'),render:r=><StatusBadge tone={statusTone(r.status)}>{findingStatus(t,r.status)}</StatusBadge>},
+  {key:'remediationTaskId',label:t('remediationTask'),render:r=>r.remediationTaskId?<button className="text-button mono" onClick={e=>{e.stopPropagation();nav(`/tasks/${r.remediationTaskId}`)}}>{r.remediationTaskNo||`RMD · ${r.remediationTaskId}`}</button>:'—'},
   {key:'lastSeenAt',label:t('lastSeen'),render:r=>fmtDate(r.lastSeenAt,lang)}
  ]
  return <>
