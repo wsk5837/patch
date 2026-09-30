@@ -54,6 +54,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedAssets();
         seedVulnerabilities();
         seedPatches();
+        enrichVulnerabilityKnowledge();
         seedPatchServers();
         seedAgentsAndScans();
         seedFindingsTasksApprovals();
@@ -277,6 +278,238 @@ public class DemoDataSeeder implements CommandLineRunner {
             if(changed){v.setUpdatedAt(Instant.now());corrected.add(v);}
         }
         if(!corrected.isEmpty())vulns.saveAll(corrected);
+    }
+
+    /**
+     * Builds the offline vulnerability knowledge base used by the vulnerability-library detail page.
+     * Finding details remain instance evidence; these fields describe the CVE itself and are persisted so
+     * the UI never has to invent generic guidance at request time.
+     */
+    private void enrichVulnerabilityKnowledge(){
+        List<VulnerabilityDefinition> rows=vulns.findAll();
+        if(rows.isEmpty())return;
+        Map<Long,Patch> patchById=new HashMap<>();
+        patches.findAll().forEach(p->patchById.put(p.getId(),p));
+        Map<String,Patch> patchByCve=new HashMap<>();
+        for(PatchCve link:patchCves.findAll()){
+            Patch patch=patchById.get(link.getPatchId());
+            if(patch!=null)patchByCve.putIfAbsent(link.getCveId(),patch);
+        }
+        Instant analyzedAt=Instant.now();
+        for(VulnerabilityDefinition v:rows){
+            Patch patch=patchByCve.get(v.getCveId());
+            String product=text(v.getProduct()).isBlank()?"目标组件":v.getProduct();
+            String titleEn=text(v.getTitleEn()).toLowerCase(Locale.ROOT);
+            String titleZh=text(v.getTitleZh());
+            String cwe=cweFor(titleEn);
+            String vector=attackVectorFor(titleEn,product);
+            String complexity=titleEn.contains("race")||titleEn.contains("signal handling")?"HIGH":"LOW";
+            String privileges=titleEn.contains("privilege")||titleEn.contains("elevation")?"LOW":"NONE";
+            String interaction=titleEn.contains("hash disclosure")?"REQUIRED":"NONE";
+            String impactKind=impactKind(titleEn);
+            String componentZh=componentZh(product,titleEn);
+            String componentEn=componentEn(product,titleEn);
+            String fixed=patch==null?null:patch.getVersion();
+            boolean web=webMitigationSupported(product,titleEn);
+            String affectedRange=fixed==null
+                    ?"以资产指纹、厂商公告及扫描规则的受影响版本条件为准；当前尚无已验证修复版本。"
+                    :"低于已验证修复版本 "+fixed+" 的受支持分支需按适用性规则核验；分支回移补丁以补丁详情为准。";
+            String affectedRangeEn=fixed==null
+                    ?"Evaluate the installed fingerprint against the archived vendor advisory and the local detection rule; no verified fixed build is currently recorded."
+                    :"Supported branches below verified fixed build "+fixed+" require evaluation against the local applicability rule; consult patch details for backported builds.";
+            String impactZh=impactZh(impactKind,product);
+            String impactEn=impactEn(impactKind,product);
+            String mechanismZh=mechanismZh(v.getCveId(),product,titleEn);
+            String mechanismEn=mechanismEn(v.getCveId(),product,titleEn);
+            String patchCode=patch==null?null:patch.getPatchId();
+
+            v.setCweId(cwe);
+            v.setAttackVector(vector);
+            v.setAttackComplexity(complexity);
+            v.setPrivilegesRequired(privileges);
+            v.setUserInteraction(interaction);
+            v.setCvssVector(cvssVector(vector,complexity,privileges,interaction,impactKind));
+            v.setExploitMaturity(v.isKev()?"ACTIVE_EXPLOIT":(v.getCvss()!=null&&v.getCvss()>=9?"PUBLIC_TECHNICAL_DETAILS":"NO_CONFIRMED_EXPLOIT"));
+            v.setAffectedComponentsZh(componentZh);
+            v.setAffectedComponentsEn(componentEn);
+            v.setAffectedVersionRangeZh(affectedRange);
+            v.setAffectedVersionRangeEn(affectedRangeEn);
+            v.setFixedVersion(fixed);
+            v.setImpactZh(impactZh);
+            v.setImpactEn(impactEn);
+            v.setScannerRuleId("GZ-VULN-"+v.getCveId().replace("CVE-", ""));
+            v.setDescriptionZh(titleZh+"。"+mechanismZh+"。受影响位置为 "+componentZh+"。利用成功后，"+impactZh+"。 ");
+            v.setDescriptionEn(v.getTitleEn()+". "+mechanismEn+". The affected area is the "+componentEn+". If exploitation succeeds, "+impactEn+".");
+            v.setDetectionGuidanceZh("1. 通过认证扫描采集 "+product+" 的软件包版本、进程参数、服务端口和组件指纹。\n2. 使用规则 "+v.getScannerRuleId()+" 将观测版本与受影响版本条件比对，并检查漏洞相关配置或接口是否可达。\n3. 保存原始探测结果、资产CI、采集时间和证据摘要；仅有端口开放不能直接判定漏洞成立。 ");
+            v.setDetectionGuidanceEn("1. Use authenticated collection for the "+product+" package version, process arguments, service port, and component fingerprint.\n2. Apply rule "+v.getScannerRuleId()+" to compare the observed build with the affected-version condition and test whether the vulnerable configuration or interface is reachable.\n3. Retain raw probe output, asset CI, collection time, and evidence digest; an open port alone is not sufficient proof.");
+            v.setRemediationGuidanceZh(patch==null
+                    ?"当前内部补丁库尚无已验证修复包。先执行临时缓解，登记风险例外和到期时间，持续监控厂商修复版本；补丁入库后必须先在测试环境验证。"
+                    :"使用内部补丁 "+patchCode+"（修复版本 "+fixed+"）执行灰度修复。安装前校验适用性和回退点，测试环境通过应用验证与定向复测后，再按审批窗口分批进入生产。 ");
+            v.setRemediationGuidanceEn(patch==null
+                    ?"No verified package is available in the internal repository. Apply temporary controls, record a time-bound exception, and monitor for the vendor fix; validate any new package in test first."
+                    :"Deploy internal patch "+patchCode+" (fixed build "+fixed+") by release ring. Validate applicability and a rollback point before installation; require application validation and a targeted test retest before approved production rollout.");
+            v.setMitigationZh(web
+                    ?"补丁窗口前，在WAF或反向代理按该CVE的请求路径、参数和协议特征部署观察规则；确认无误报后切换阻断，同时限制管理接口来源并加强异常请求告警。"
+                    :"补丁窗口前，通过ACL或主机防火墙限制受影响服务来源，关闭非必要接口与功能，收紧最小权限并对异常进程、崩溃和访问日志启用告警。 ");
+            v.setMitigationEn(web
+                    ?"Before patching, deploy a CVE-specific monitor rule on the WAF or reverse proxy for request paths, parameters, and protocol indicators; switch to blocking after false-positive review, restrict management sources, and alert on abnormal requests."
+                    :"Before patching, restrict the vulnerable service with ACLs or host firewall rules, disable unnecessary interfaces and features, enforce least privilege, and alert on abnormal processes, crashes, and access logs.");
+            v.setVirtualPatchAvailable(web);
+            v.setVirtualPatchGuidanceZh(web
+                    ?"可生成虚拟补丁策略：先在观察模式记录命中资产、URI、参数和来源地址，经过业务负责人确认后转为阻断；策略必须设置失效日期并随正式补丁复测结果撤销。"
+                    :"该漏洞不适合用WAF规则作为主要控制。系统应改用网络隔离、服务降级、功能关闭或主机级防护，并保留风险例外审批。 ");
+            v.setVirtualPatchGuidanceEn(web
+                    ?"A virtual-patch policy can be generated in monitor mode to capture asset, URI, parameter, and source details. Move to blocking after owner validation, set an expiry, and retire it after the permanent patch passes retest."
+                    :"A WAF rule is not an appropriate primary control for this weakness. Use isolation, service degradation, feature disablement, or host controls and retain an approved risk exception.");
+            v.setEvidenceRequirementsZh("关闭前必须留存：① 安装前后版本或补丁清单；② 补丁包签名与SHA-256校验结果；③ 应用健康检查和关键交易验证；④ 规则 "+v.getScannerRuleId()+" 的定向复测结果；⑤ 执行时间、目标资产、执行人及失败/回退记录。 ");
+            v.setEvidenceRequirementsEn("Closure evidence must include: (1) before/after version or patch inventory; (2) package signature and SHA-256 verification; (3) application health and critical-transaction validation; (4) targeted retest output from "+v.getScannerRuleId()+"; and (5) execution time, target asset, operator, and any failure or rollback record.");
+            v.setIntelligenceSources(v.isKev()?"NVD local mirror · CISA KEV local mirror · vendor advisory archive":"NVD local mirror · vendor advisory archive");
+            if(v.getPublishedDate()==null)v.setPublishedDate(LocalDate.now().minusDays(90));
+            v.setLastAnalyzedAt(analyzedAt);
+            v.setUpdatedAt(analyzedAt);
+            v.setPatchAvailable(patch!=null);
+        }
+        vulns.saveAll(rows);
+    }
+
+    private String cweFor(String title){
+        if(title.contains("sql injection"))return "CWE-89";
+        if(title.contains("command injection")||title.contains("ognl")||title.contains("argument injection"))return "CWE-78";
+        if(title.contains("path traversal"))return "CWE-22";
+        if(title.contains("authentication bypass"))return "CWE-288";
+        if(title.contains("buffer")||title.contains("out-of-bounds"))return "CWE-787";
+        if(title.contains("use-after-free"))return "CWE-416";
+        if(title.contains("server-side request forgery"))return "CWE-918";
+        if(title.contains("denial of service"))return "CWE-400";
+        if(title.contains("file read")||title.contains("disclosure")||title.contains("hash"))return "CWE-200";
+        if(title.contains("privilege")||title.contains("elevation"))return "CWE-269";
+        if(title.contains("supply-chain"))return "CWE-506";
+        return "CWE-20";
+    }
+
+    private String attackVectorFor(String title,String product){
+        String value=(title+" "+product).toLowerCase(Locale.ROOT);
+        return value.contains("kernel")||value.contains("clfs")||value.contains("privilege escalation")||value.contains("elevation of privilege")?"LOCAL":"NETWORK";
+    }
+
+    private String impactKind(String title){
+        if(title.contains("denial of service"))return "AVAILABILITY";
+        if(title.contains("disclosure")||title.contains("file read")||title.contains("hash")||title.contains("server-side request forgery"))return "CONFIDENTIALITY";
+        if(title.contains("path traversal"))return "FILE_ACCESS";
+        if(title.contains("privilege")||title.contains("elevation"))return "PRIVILEGE";
+        return "FULL_CONTROL";
+    }
+
+    private String componentZh(String product,String title){
+        if(title.contains("path traversal")||title.contains("file read"))return product+" 的请求路径规范化与文件访问处理模块";
+        if(title.contains("command injection")||title.contains("ognl")||title.contains("argument injection"))return product+" 的请求解析与命令执行链路";
+        if(title.contains("authentication bypass"))return product+" 的身份认证与授权边界";
+        if(title.contains("buffer")||title.contains("out-of-bounds"))return product+" 的输入解析与内存边界处理模块";
+        if(title.contains("privilege")||title.contains("elevation"))return product+" 的本地权限边界与系统服务";
+        if(title.contains("denial of service"))return product+" 的协议解析与资源处理模块";
+        return product+" 的对外服务接口与受影响组件";
+    }
+
+    private String componentEn(String product,String title){
+        if(title.contains("path traversal")||title.contains("file read"))return product+" request path normalization and file-access handler";
+        if(title.contains("command injection")||title.contains("ognl")||title.contains("argument injection"))return product+" request parsing and command-execution path";
+        if(title.contains("authentication bypass"))return product+" authentication and authorization boundary";
+        if(title.contains("buffer")||title.contains("out-of-bounds"))return product+" input parser and memory-boundary handling";
+        if(title.contains("privilege")||title.contains("elevation"))return product+" local privilege boundary and system service";
+        if(title.contains("denial of service"))return product+" protocol parser and resource-handling path";
+        return product+" exposed service interface and vulnerable component";
+    }
+
+    private String mechanismZh(String cve,String product,String title){
+        return switch(cve){
+            case "CVE-2025-24813"->"在特定配置下，Tomcat 默认 Servlet 对部分 PUT 请求的处理与持久化会话机制可被组合利用，攻击者可能写入恶意内容并触发反序列化";
+            case "CVE-2024-6387"->"OpenSSH 服务端在超时信号处理过程中存在竞态条件，未认证攻击者可通过大量连接反复触发异常时序，在部分受影响系统上造成远程代码执行风险";
+            case "CVE-2024-4577"->"Windows 环境中的字符编码转换可能把特定字节转换为命令行选项前缀，从而绕过 PHP-CGI 参数过滤并向解释器注入参数";
+            case "CVE-2024-23897"->"Jenkins CLI 的参数解析功能会展开以 @ 开头的文件参数，具有 CLI 访问能力的攻击者可借此读取控制器上的文件内容";
+            case "CVE-2024-5535"->"OpenSSL 在处理特定 TLS 数据时存在边界检查缺陷，恶意对端可诱导进程读取缓冲区边界之外的内存";
+            case "CVE-2024-3094"->"受污染的 xz/liblzma 构建产物包含供应链后门逻辑，特定运行环境下可能干预认证流程并形成远程入侵入口";
+            case "CVE-2024-3400"->"PAN-OS GlobalProtect 功能对外部输入的处理不安全，未认证攻击者可通过构造请求在设备上执行操作系统命令";
+            case "CVE-2023-4966"->"NetScaler 对特定请求的内存边界校验不足，攻击者可读取进程内存并获取会话令牌等敏感信息";
+            case "CVE-2023-38545"->"curl 的 SOCKS5 代理主机名解析路径存在堆缓冲区溢出条件，超长主机名在特定配置下可能破坏进程内存";
+            case "CVE-2022-0778"->"OpenSSL 在解析包含畸形椭圆曲线参数的证书时，BN_mod_sqrt 计算可能进入无限循环并持续占用处理资源";
+            case "CVE-2022-22965"->"Spring MVC 数据绑定机制在特定 JDK、Servlet 容器和部署方式组合下可被构造请求滥用，进而修改对象属性并形成代码执行链";
+            case "CVE-2021-44228"->"Log4j2 对可控日志字符串执行 JNDI 查找，攻击者可通过精心构造的输入诱导应用访问外部命名服务并加载恶意内容";
+            case "CVE-2021-41773","CVE-2021-42013"->"Apache HTTP Server 的路径规范化存在缺陷，编码后的路径片段可能绕过目录限制；在启用相关CGI配置时风险可进一步扩大为代码执行";
+            default->genericMechanismZh(product,title);
+        };
+    }
+
+    private String mechanismEn(String cve,String product,String title){
+        return switch(cve){
+            case "CVE-2025-24813"->"Under specific configurations, Tomcat default-servlet partial PUT handling can be combined with persistent sessions to write malicious content and trigger deserialization";
+            case "CVE-2024-6387"->"A race condition in OpenSSH server timeout-signal handling can be repeatedly triggered by an unauthenticated attacker and may lead to remote code execution on affected platforms";
+            case "CVE-2024-4577"->"On Windows, character-set conversion can transform crafted bytes into a command-line option prefix, bypass PHP-CGI argument filtering, and inject interpreter options";
+            case "CVE-2024-23897"->"Jenkins CLI argument parsing expands file arguments prefixed with @, allowing an attacker with CLI access to read controller-side files";
+            case "CVE-2024-5535"->"A boundary-validation flaw in OpenSSL processing of specific TLS data can cause a malicious peer to trigger an out-of-bounds memory read";
+            case "CVE-2024-3094"->"Compromised xz/liblzma build artifacts contain supply-chain backdoor logic that can interfere with authentication flows in specific environments";
+            case "CVE-2024-3400"->"PAN-OS GlobalProtect processes external input unsafely, allowing an unauthenticated attacker to submit a crafted request that executes an operating-system command";
+            case "CVE-2023-4966"->"Insufficient memory-boundary validation in NetScaler request processing can expose process memory, including session tokens and other sensitive material";
+            case "CVE-2023-38545"->"The curl SOCKS5 proxy hostname path can overflow a heap buffer when an overlong hostname is processed under specific configuration conditions";
+            case "CVE-2022-0778"->"Parsing a certificate with malformed elliptic-curve parameters can cause OpenSSL BN_mod_sqrt computation to loop indefinitely and consume processing resources";
+            case "CVE-2022-22965"->"Under a specific combination of JDK, servlet container, and deployment conditions, Spring MVC data binding can be abused to modify object properties and construct a code-execution chain";
+            case "CVE-2021-44228"->"Log4j2 performs JNDI lookups on attacker-controlled log strings, which can make an application contact an external naming service and load malicious content";
+            case "CVE-2021-41773","CVE-2021-42013"->"A path-normalization flaw in Apache HTTP Server allows encoded path segments to bypass directory restrictions and can progress to code execution when related CGI functionality is enabled";
+            default->genericMechanismEn(product,title);
+        };
+    }
+
+    private String genericMechanismZh(String product,String title){
+        if(title.contains("authentication bypass"))return product+" 对特定请求或状态的身份校验不完整，攻击者可绕过正常认证流程访问受保护功能";
+        if(title.contains("path traversal"))return product+" 对编码路径和目录边界的规范化校验不足，攻击者可构造路径访问预期目录之外的资源";
+        if(title.contains("command injection")||title.contains("ognl")||title.contains("argument injection"))return product+" 未正确隔离外部输入与命令或表达式执行上下文，构造输入可能被当作指令执行";
+        if(title.contains("buffer")||title.contains("out-of-bounds"))return product+" 在解析异常输入时缺少完整的长度与边界检查，可能访问或覆盖非预期内存区域";
+        if(title.contains("denial of service"))return product+" 对异常输入或高成本计算缺少资源限制，攻击者可诱导服务耗尽资源或停止响应";
+        if(title.contains("server-side request forgery"))return product+" 可被诱导代表攻击者访问非预期的内部或外部地址，造成边界绕过和敏感信息暴露";
+        if(title.contains("privilege")||title.contains("elevation"))return product+" 的权限边界检查存在缺陷，低权限主体可执行仅允许高权限上下文完成的操作";
+        return product+" 在处理特制输入时存在安全校验缺陷，攻击者可通过可达接口触发非预期行为";
+    }
+
+    private String genericMechanismEn(String product,String title){
+        if(title.contains("authentication bypass"))return product+" incompletely validates authentication state for specific requests, allowing access to protected functions outside the normal sign-in flow";
+        if(title.contains("path traversal"))return product+" does not fully normalize encoded paths and directory boundaries, allowing a crafted path to reach resources outside the intended directory";
+        if(title.contains("command injection")||title.contains("ognl")||title.contains("argument injection"))return product+" fails to isolate external input from a command or expression context, allowing crafted data to be interpreted as executable instructions";
+        if(title.contains("buffer")||title.contains("out-of-bounds"))return product+" lacks complete length and boundary checks while parsing malformed input, which may access or overwrite unintended memory";
+        if(title.contains("denial of service"))return product+" does not adequately constrain abnormal input or expensive computation, allowing resource exhaustion or loss of service";
+        if(title.contains("server-side request forgery"))return product+" can be induced to access unintended internal or external destinations on an attacker's behalf";
+        if(title.contains("privilege")||title.contains("elevation"))return product+" contains a privilege-boundary validation flaw that allows a lower-privileged principal to perform higher-privileged operations";
+        return product+" contains an input-validation weakness that can be triggered through a reachable interface to cause unintended behavior";
+    }
+
+    private String impactZh(String kind,String product){
+        return switch(kind){
+            case "AVAILABILITY"->"攻击者可触发 "+product+" 服务异常退出或资源耗尽，造成业务中断";
+            case "CONFIDENTIALITY"->"攻击者可读取敏感数据、会话信息或内部资源，扩大后续横向移动风险";
+            case "FILE_ACCESS"->"攻击者可绕过路径限制访问或写入非预期文件，并可能进一步执行代码";
+            case "PRIVILEGE"->"具备本地访问条件的攻击者可提升权限，取得系统级控制能力";
+            default->"远程攻击者可能执行未授权操作或代码，影响数据机密性、完整性与服务可用性";
+        };
+    }
+
+    private String impactEn(String kind,String product){
+        return switch(kind){
+            case "AVAILABILITY"->"an attacker may crash or exhaust the "+product+" service and interrupt business availability";
+            case "CONFIDENTIALITY"->"an attacker may read sensitive data, session material, or internal resources and enable further lateral movement";
+            case "FILE_ACCESS"->"an attacker may bypass path restrictions to read or write unintended files and potentially progress to code execution";
+            case "PRIVILEGE"->"an attacker with local access may cross a privilege boundary and obtain system-level control";
+            default->"a remote attacker may perform unauthorized actions or execute code, affecting confidentiality, integrity, and availability";
+        };
+    }
+
+    private String cvssVector(String vector,String complexity,String privileges,String interaction,String impact){
+        String impacts="AVAILABILITY".equals(impact)?"C:N/I:N/A:H":("CONFIDENTIALITY".equals(impact)?"C:H/I:N/A:N":"C:H/I:H/A:H");
+        return "CVSS:3.1/AV:"+("LOCAL".equals(vector)?"L":"N")+"/AC:"+("HIGH".equals(complexity)?"H":"L")+
+                "/PR:"+("LOW".equals(privileges)?"L":"N")+"/UI:"+("REQUIRED".equals(interaction)?"R":"N")+"/S:U/"+impacts;
+    }
+
+    private boolean webMitigationSupported(String product,String title){
+        String value=(product+" "+title).toLowerCase(Locale.ROOT);
+        return List.of("tomcat","http server","sharepoint","exchange","php","spring","confluence","jenkins","screenconnect","teamcity","moveit","vcenter")
+                .stream().anyMatch(value::contains);
     }
 
     private void addPatch(String code,String vendor,String product,String version,String zh,String en,double size,boolean reboot,List<String> cves){

@@ -87,36 +87,22 @@ public class ViewService {
         }
         return rows.stream().map(v -> {
             List<PatchCandidateView> candidates=patchCandidatesByCve.getOrDefault(v.getCveId(), List.of());
-            String fixed=candidates.isEmpty()?null:candidates.getFirst().version();
-            String affectedRange=fixed==null?"Refer to the locally archived vendor applicability rule":"< "+fixed;
-            String product=v.getProduct()==null?"component":v.getProduct();
-            String remediationZh=candidates.isEmpty()
-                    ?"暂无已批准补丁；建议先限制暴露面、启用访问控制并进入风险接受审批。"
-                    :"安装本地补丁库中已校验的 "+candidates.getFirst().patchId()+"，完成应用健康检查和漏洞定向复测后关闭。";
-            String remediationEn=candidates.isEmpty()
-                    ?"No approved package is available. Restrict exposure, enforce access controls, and route the risk through exception approval."
-                    :"Install verified package "+candidates.getFirst().patchId()+" from the internal patch library, validate application health, and close only after a targeted retest.";
-            String productLower=product.toLowerCase(Locale.ROOT);
-            boolean virtualPatch=List.of("tomcat","apache","nginx","jetty","struts","jira","php")
-                    .stream().anyMatch(productLower::contains);
-            String mitigationZh=virtualPatch
-                    ?"补丁窗口前可在WAF部署针对该CVE的请求特征阻断规则，限制管理端口和非必要访问，并开启告警监测。"
-                    :"补丁窗口前建议限制漏洞服务的网络暴露，通过ACL、访问控制或临时停用非必要服务降低风险。";
-            String mitigationEn=virtualPatch
-                    ?"Before the patch window, deploy a CVE-specific request blocking rule on the WAF, restrict administrative endpoints and unnecessary access, and enable alerting."
-                    :"Before the patch window, restrict network exposure with ACLs and access controls, or temporarily disable the non-essential vulnerable service.";
+            String fixed=v.getFixedVersion()!=null?v.getFixedVersion():(candidates.isEmpty()?null:candidates.getFirst().version());
+            boolean virtualPatch=Boolean.TRUE.equals(v.getVirtualPatchAvailable());
             return new VulnerabilityView(
                     v.getCveId(), v.getTitleZh(), v.getTitleEn(), v.getVendor(), v.getProduct(),
                     v.getDescriptionZh(), v.getDescriptionEn(), v.getCvss(), s(v.getSeverity()), v.isKev(),
                     v.isRansomwareKnown(), !candidates.isEmpty(), v.getReferenceUrl(), s(v.getPublishedDate()),
                     s(v.getKevDueDate()), affected.getOrDefault(v.getCveId(), 0L),
                     patchCodesByCve.getOrDefault(v.getCveId(), List.of()), candidates,
-                    "GZ-ADV-"+v.getCveId(),"NETWORK","LOW","NONE",affectedRange,
-                    "通过认证扫描读取 "+product+" 的软件包、进程或服务指纹，核对版本区间并执行定向规则验证。",
-                    "Use authenticated package, process, or service fingerprint collection for "+product+", compare the observed version with the affected range, and run the targeted detection rule.",
-                    remediationZh,remediationEn,mitigationZh,mitigationEn,virtualPatch,
-                    virtualPatch?"建议规则模板：匹配异常请求路径、参数和协议特征；先以观察模式发布，验证无误报后切换阻断。":"该类组件不适合使用WAF虚拟补丁，应使用网络隔离、ACL或主机级缓解措施。",
-                    virtualPatch?"Suggested template: match abnormal request paths, parameters, and protocol characteristics; deploy in monitor mode first and switch to blocking after false-positive validation.":"This component is not suitable for a WAF virtual patch. Use network isolation, ACLs, or host-level mitigations."
+                    "GZ-ADV-"+v.getCveId(),v.getAttackVector(),v.getAttackComplexity(),v.getPrivilegesRequired(),
+                    v.getAffectedVersionRangeZh(),v.getDetectionGuidanceZh(),v.getDetectionGuidanceEn(),
+                    v.getRemediationGuidanceZh(),v.getRemediationGuidanceEn(),v.getMitigationZh(),v.getMitigationEn(),virtualPatch,
+                    v.getVirtualPatchGuidanceZh(),v.getVirtualPatchGuidanceEn(),v.getCweId(),v.getCvssVector(),
+                    v.getUserInteraction(),v.getExploitMaturity(),v.getAffectedComponentsZh(),v.getAffectedComponentsEn(),
+                    v.getAffectedVersionRangeEn(),fixed,
+                    v.getImpactZh(),v.getImpactEn(),v.getScannerRuleId(),v.getEvidenceRequirementsZh(),
+                    v.getEvidenceRequirementsEn(),v.getIntelligenceSources(),s(v.getLastAnalyzedAt())
             );
         }).toList();
     }

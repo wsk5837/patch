@@ -70,7 +70,13 @@ public final class ApiDtos {
                                     String detectionGuidanceZh, String detectionGuidanceEn,
                                     String remediationGuidanceZh, String remediationGuidanceEn,
                                     String mitigationZh, String mitigationEn, boolean virtualPatchAvailable,
-                                    String virtualPatchGuidanceZh, String virtualPatchGuidanceEn) {}
+                                    String virtualPatchGuidanceZh, String virtualPatchGuidanceEn,
+                                    String cweId, String cvssVector, String userInteraction,
+                                    String exploitMaturity, String affectedComponentsZh, String affectedComponentsEn,
+                                    String affectedVersionRangeEn, String fixedVersion,
+                                    String impactZh, String impactEn, String scannerRuleId,
+                                    String evidenceRequirementsZh, String evidenceRequirementsEn,
+                                    String intelligenceSources, String lastAnalyzedAt) {}
     public record VulnerabilityPageView(List<VulnerabilityView> items, long totalElements, int page,
                                         int size, int totalPages) {}
 

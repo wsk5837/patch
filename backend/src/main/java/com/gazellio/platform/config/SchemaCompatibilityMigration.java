@@ -37,6 +37,37 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
 
         upgradeSeverityConstraint();
 
+        // Vulnerability-library knowledge fields. Keep them nullable so an existing Render
+        // database can be upgraded without rewriting all rows in a blocking DDL statement.
+        addColumn("vulnerability_definitions", "cwe_id", "varchar(40)");
+        addColumn("vulnerability_definitions", "cvss_vector", "varchar(220)");
+        addColumn("vulnerability_definitions", "attack_vector", "varchar(30)");
+        addColumn("vulnerability_definitions", "attack_complexity", "varchar(30)");
+        addColumn("vulnerability_definitions", "privileges_required", "varchar(30)");
+        addColumn("vulnerability_definitions", "user_interaction", "varchar(30)");
+        addColumn("vulnerability_definitions", "exploit_maturity", "varchar(40)");
+        addColumn("vulnerability_definitions", "affected_components_zh", "text");
+        addColumn("vulnerability_definitions", "affected_components_en", "text");
+        addColumn("vulnerability_definitions", "affected_version_range_zh", "text");
+        addColumn("vulnerability_definitions", "affected_version_range_en", "text");
+        addColumn("vulnerability_definitions", "fixed_version", "varchar(160)");
+        addColumn("vulnerability_definitions", "impact_zh", "text");
+        addColumn("vulnerability_definitions", "impact_en", "text");
+        addColumn("vulnerability_definitions", "scanner_rule_id", "varchar(120)");
+        addColumn("vulnerability_definitions", "detection_guidance_zh", "text");
+        addColumn("vulnerability_definitions", "detection_guidance_en", "text");
+        addColumn("vulnerability_definitions", "remediation_guidance_zh", "text");
+        addColumn("vulnerability_definitions", "remediation_guidance_en", "text");
+        addColumn("vulnerability_definitions", "mitigation_zh", "text");
+        addColumn("vulnerability_definitions", "mitigation_en", "text");
+        addColumn("vulnerability_definitions", "virtual_patch_available", "boolean");
+        addColumn("vulnerability_definitions", "virtual_patch_guidance_zh", "text");
+        addColumn("vulnerability_definitions", "virtual_patch_guidance_en", "text");
+        addColumn("vulnerability_definitions", "evidence_requirements_zh", "text");
+        addColumn("vulnerability_definitions", "evidence_requirements_en", "text");
+        addColumn("vulnerability_definitions", "intelligence_sources", "text");
+        addColumn("vulnerability_definitions", "last_analyzed_at", "timestamp with time zone");
+
         addColumn("approval_requests", "change_order_id", "bigint");
         addColumn("findings", "security_incident_id", "bigint");
         addColumn("scan_jobs", "automation_run_id", "bigint");
