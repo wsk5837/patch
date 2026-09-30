@@ -2,9 +2,11 @@
 
 ## Runtime topology
 
-- `gazellio-web`: React/Vite UI served by Node/Express. Browser requests stay on the web origin; `/api` is proxied to the Java service over Render private networking.
-- `gazellio-api`: Java 21 / Spring Boot REST API. Owns authentication and all business state transitions.
+- `gazellio-web`: React/Vite UI. Render publishes `frontend/dist` as an independent CDN-backed static site; the company-server Docker Compose profile serves the same files through Node/Express and proxies `/api` on one origin.
+- `gazellio`: Java 21 / Spring Boot REST API on Render. Owns authentication and all business state transitions. The Render static build receives its public hostname through `VITE_API_BASE_URL`.
 - `gazellio-db`: PostgreSQL. Persists vulnerabilities, findings, assets, patches, tasks, approvals, orchestration runs, execution steps, settings and audit events.
+
+Render sets `rootDir: frontend` and `rootDir: backend` for the two services. A commit that only touches one directory therefore does not rebuild the other service. The static-site SPA rewrite sends browser routes to `index.html`; API calls use the separately configured HTTPS origin.
 
 ## Product domains
 

@@ -5,21 +5,29 @@ Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程�
 - `frontend/`：React + Vite，负责产品 UI、路由和中英文切换。
 - `backend/`：Java 21 + Spring Boot，负责认证、业务流程、扫描任务、漏洞、补丁、安全事件/变更工单、审批、自动化编排和审计。
 - PostgreSQL：保存业务数据和流程状态。
-- `render.yaml`：Render Blueprint，一次创建全栈 Web Service 和 PostgreSQL。
+- `render.yaml`：Render Blueprint，分别创建前端静态站点、Java API 和 PostgreSQL。
 
 ## 直接部署到 Render
 
-1. 把本目录全部上传到一个 GitHub 仓库的根目录。
-2. 在 Render 选择 **New > Blueprint**，连接该 GitHub 仓库。
-3. Render 会读取根目录的 `render.yaml`，创建：
-   - `gazellio`（React 页面与 Java API 合并部署）
-   - `gazellio-db`
-4. 首次创建时输入 `ADMIN_INITIAL_PASSWORD`。
-5. 等待两个资源部署完成，打开 `gazellio` 的公开地址。
+1. 把本目录全部上传到 GitHub 仓库根目录，隐藏文件 `.gitignore` 和 `.dockerignore` 也要上传。
+2. 在 Render 选择 **New > Blueprint**，连接该 GitHub 仓库；已有 Blueprint 时选择 **Manual Sync / Sync Blueprint**。
+3. Render 会读取根目录的 `render.yaml`，管理：
+   - `gazellio-web`：React 静态站点，由 Render CDN 托管。
+   - `gazellio`：现有同名服务就地转为纯 Java API，只使用 `backend/` 作为构建根目录。
+   - `gazellio-db`：PostgreSQL，原有同名数据库保留数据。
+4. 首次创建时输入 `ADMIN_INITIAL_PASSWORD`。已有服务的环境变量会保留。
+5. 等待 `gazellio-web` 和 `gazellio` 部署完成，以后请打开 `gazellio-web` 的公开地址。
 
 默认管理员账号：`admin`。密码为你在 Render 中填写的 `ADMIN_INITIAL_PASSWORD`。
 
-> 根目录多阶段 Dockerfile 先构建 React，再把产物打入 Spring Boot 静态资源目录。浏览器页面和 `/api` 使用同一个 Render 域名，不需要额外配置跨域地址。
+> Render 现在只在 `frontend/` 改动时构建静态站点，只在 `backend/` 改动时重建 Java 镜像。前端会在构建时自动取得 API 域名。根目录 Dockerfile 仅作为兼容的单镜像部署方案，Render 不再使用它。
+
+### 已有 Render 服务升级注意事项
+
+- 不要删除 `gazellio-db`，否则原有数据会丢失。
+- 不需要删除原 `gazellio` Web Service；Blueprint 使用同一名称更新它。
+- 同步 Blueprint 后会新增 `gazellio-web`，这个地址才是新的系统入口。
+- 如果 Render 中存在早期手工创建、但不受 Blueprint 管理的同名服务，先尝试 Blueprint Sync；仅在 Render 明确报同名冲突时删除旧 Web Service，数据库仍不要删除。
 
 ### Render 登录与页面检查
 
@@ -86,6 +94,8 @@ Java API 提供 `/api/agent/*` 接口用于 Agent 或第三方漏扫适配器注
 - 自动化测试会用完整演示数据检查常用暖机接口是否在 1 秒内完成。
 
 Render 免费 Web Service 会在空闲时休眠。休眠后的第一次访问需要等待实例重新启动，这段时间不属于应用接口耗时，无法仅靠代码保证 1 秒；如需任何时间打开都快速响应，应使用 Render 常驻实例。
+
+前端静态站点不会休眠，页面资源可以由 CDN 快速打开；免费 Java API 休眠后的第一次登录或数据请求仍需要等待后端唤醒。
 
 ## 生产上线前建议
 
