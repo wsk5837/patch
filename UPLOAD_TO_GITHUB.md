@@ -15,9 +15,9 @@
 
 1. 保留电脑上原有的 Git 仓库文件夹，不要删除其中的 `.git` 目录。
 2. 解压新工程包。
-3. 进入解压得到的 `Gazellio-Render-Split` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `Gazellio-Render-Split` 这一层目录嵌套进仓库。
+3. 进入解压得到的 `patch-main` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `patch-main` 这一层目录嵌套进仓库。
 4. 打开 GitHub Desktop，确认变更列表中没有 `node_modules`、`dist` 或 `target`。
-5. Summary 填写 `Split Render frontend and backend deployments`，点击 **Commit to main**。
+5. Summary 填写 `Add CIDR batch patching and risk reports`，点击 **Commit to main**。
 6. 点击 **Push origin**。Git 只会上传真正变化的文件，即使你刚才覆盖了整个目录。
 
 ## 三、如果只使用 GitHub 网页
@@ -35,7 +35,7 @@ backend/
 不能变成：
 
 ```text
-Gazellio-Render-Split/
+patch-main/
   render.yaml
   frontend/
   backend/

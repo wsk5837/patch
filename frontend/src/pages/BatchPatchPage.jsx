@@ -1,0 +1,56 @@
+import React,{useEffect,useMemo,useState} from 'react'
+import {CheckSquare2,Network,Play,RefreshCw,ShieldCheck,SquareStack,UsersRound} from 'lucide-react'
+import {useNavigate} from 'react-router-dom'
+import {api} from '../api/client'
+import {useApiData} from '../utils/useApiData'
+import {useI18n} from '../contexts/I18nContext'
+import {useToast} from '../components/ToastContext'
+import PageHeader from '../components/PageHeader'
+import StatusBadge,{statusTone} from '../components/StatusBadge'
+import {envLabel} from '../utils/format'
+
+const initialForm={patchId:'',cidrText:'10.20.10.0/24\n10.30.10.0/24',environment:'ALL',assetType:'ALL',osName:'',businessService:'',onlineOnly:true,batchSize:20,concurrency:10,failureThreshold:5,planName:'',maintenanceWindow:''}
+
+export default function BatchPatchPage(){
+ const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate()
+ const {data:patches=[],loading:patchLoading}=useApiData('/api/patches',{initial:[]})
+ const [form,setForm]=useState(initialForm),[preview,setPreview]=useState(null),[excluded,setExcluded]=useState(new Set()),[busy,setBusy]=useState(false)
+ useEffect(()=>{if(!form.patchId&&patches.length){const preferred=patches.find(p=>/openssh/i.test(`${p.product||''} ${p.patchId||''}`))||patches[0];setForm(v=>({...v,patchId:String(preferred.id)}))}},[patches,form.patchId])
+ const cidrs=()=>form.cidrText.split(/[,\s]+/).map(v=>v.trim()).filter(Boolean)
+ const body=(excludedAssetIds=[...excluded])=>({patchId:Number(form.patchId),cidrs:cidrs(),environments:form.environment==='ALL'?[]:[form.environment],assetTypes:form.assetType==='ALL'?[]:[form.assetType],osName:form.osName,businessService:form.businessService,onlineOnly:form.onlineOnly,excludedAssetIds,batchSize:Number(form.batchSize),concurrency:Number(form.concurrency),failureThreshold:Number(form.failureThreshold),planName:form.planName||t('defaultBatchPlan'),maintenanceWindow:form.maintenanceWindow})
+ const previewScope=async()=>{setBusy(true);try{const result=await api('/api/automation/batch/preview',{method:'POST',body:body([]),timeout:30000});setPreview(result);setExcluded(new Set());toast.push(t('scopeMatched'))}catch(e){toast.push(e.message||t('operationFailed'),'red')}finally{setBusy(false)}}
+ const execute=async()=>{setBusy(true);try{const result=await api('/api/automation/batch/runs',{method:'POST',body:body(),timeout:30000});toast.push(t('batchRunStarted'));nav(`/automation/runs/${result.runId}`)}catch(e){toast.push(e.message||t('operationFailed'),'red')}finally{setBusy(false)}}
+ const toggle=id=>setExcluded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next})
+ const visibleSelected=useMemo(()=>preview?.assets?.filter(a=>!excluded.has(a.id)).length||0,[preview,excluded])
+ const totalSelected=Math.max(0,(preview?.selectedCount||0)-excluded.size)
+ const selectedPatch=patches.find(p=>String(p.id)===String(form.patchId))
+ return <>
+  <PageHeader title={t('batchPatch')}><button className="btn" disabled={busy} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></PageHeader>
+  <div className="batch-layout">
+   <section className="panel batch-scope-panel"><div className="panel-head"><h2><Network size={18}/>{t('assetScope')}</h2><StatusBadge tone="purple">CIDR</StatusBadge></div><div className="panel-body form-grid">
+    <label className="form-field full"><span>{t('choosePatch')}</span><select value={form.patchId} onChange={e=>{setForm({...form,patchId:e.target.value});setPreview(null)}} disabled={patchLoading}>{patches.map(p=><option key={p.id} value={p.id}>{p.patchId} · {pick(p)}</option>)}</select></label>
+    <label className="form-field full"><span>{t('networkSegments')}</span><textarea rows={3} value={form.cidrText} onChange={e=>{setForm({...form,cidrText:e.target.value});setPreview(null)}} placeholder="10.20.10.0/24"/></label>
+    <label className="form-field"><span>{t('environment')}</span><select value={form.environment} onChange={e=>{setForm({...form,environment:e.target.value});setPreview(null)}}><option value="ALL">{t('all')}</option><option value="TEST">{t('test')}</option><option value="PREPROD">{t('preprod')}</option><option value="PROD">{t('production')}</option></select></label>
+    <label className="form-field"><span>{t('assetType')}</span><select value={form.assetType} onChange={e=>{setForm({...form,assetType:e.target.value});setPreview(null)}}><option value="ALL">{t('all')}</option><option value="VIRTUAL_MACHINE">{t('virtualMachine')}</option><option value="PHYSICAL_SERVER">{t('physicalServer')}</option><option value="NETWORK_DEVICE">{t('networkDevice')}</option></select></label>
+    <label className="form-field"><span>{t('os')}</span><input value={form.osName} onChange={e=>{setForm({...form,osName:e.target.value});setPreview(null)}} placeholder="Red Hat / Ubuntu / Windows"/></label>
+    <label className="form-field"><span>{t('businessService')}</span><input value={form.businessService} onChange={e=>{setForm({...form,businessService:e.target.value});setPreview(null)}}/></label>
+    <label className="check-field full"><input type="checkbox" checked={form.onlineOnly} onChange={e=>{setForm({...form,onlineOnly:e.target.checked});setPreview(null)}}/><span>{t('onlineOnly')}</span></label>
+    <button className="btn primary full" disabled={busy||!form.patchId||cidrs().length===0} onClick={previewScope}><ShieldCheck size={15}/>{t('matchAssets')}</button>
+   </div></section>
+   <section className="panel batch-strategy-panel"><div className="panel-head"><h2><SquareStack size={18}/>{t('batchStrategy')}</h2></div><div className="panel-body form-grid">
+    <label className="form-field full"><span>{t('planName')}</span><input value={form.planName} onChange={e=>setForm({...form,planName:e.target.value})} placeholder={t('planNamePlaceholder')}/></label>
+    <label className="form-field"><span>{t('batchSize')}</span><input type="number" min="1" max="500" value={form.batchSize} onChange={e=>{setForm({...form,batchSize:e.target.value});setPreview(null)}}/></label>
+    <label className="form-field"><span>{t('concurrency')}</span><input type="number" min="1" max="200" value={form.concurrency} onChange={e=>{setForm({...form,concurrency:e.target.value});setPreview(null)}}/></label>
+    <label className="form-field"><span>{t('failureThreshold')}</span><div className="input-suffix"><input type="number" min="0.1" max="100" step="0.1" value={form.failureThreshold} onChange={e=>{setForm({...form,failureThreshold:e.target.value});setPreview(null)}}/><i>%</i></div></label>
+    <label className="form-field"><span>{t('maintenanceWindow')}</span><input value={form.maintenanceWindow} onChange={e=>setForm({...form,maintenanceWindow:e.target.value})} placeholder="Sun 01:00-05:00"/></label>
+    <div className="strategy-summary full"><div><span>{t('selectedPatch')}</span><b>{selectedPatch?.patchId||'—'}</b></div><div><span>{t('estimatedBatches')}</span><b>{preview?.totalBatches??'—'}</b></div><div><span>{t('selectedAssets')}</span><b>{preview?totalSelected:'—'}</b></div></div>
+   </div></section>
+  </div>
+  {preview&&<>
+   <div className="scope-metrics"><div><Network/><span>{t('cidrMatched')}</span><b>{preview.matchedCount}</b></div><div><CheckSquare2/><span>{t('patchApplicable')}</span><b>{preview.applicableCount}</b></div><div><UsersRound/><span>{t('selectedAssets')}</span><b>{totalSelected}</b></div><div><SquareStack/><span>{t('estimatedBatches')}</span><b>{preview.totalBatches}</b></div><div><ShieldCheck/><span>{t('offline')}</span><b>{preview.offlineCount}</b></div></div>
+   <section className="panel batch-target-panel"><div className="panel-head"><h2>{t('targetAssets')}</h2><div className="panel-actions"><span className="toolbar-count">{t('selectedOf',visibleSelected,preview.assets?.length||0)}</span><button className="btn small" onClick={()=>setExcluded(new Set())}>{t('selectAll')}</button><button className="btn small" onClick={()=>setExcluded(new Set(preview.assets?.map(a=>a.id)||[]))}>{t('clearVisible')}</button></div></div>
+    <div className="batch-table-wrap"><table className="batch-table"><thead><tr><th>{t('select')}</th><th>{t('batch')}</th><th>{t('asset')}</th><th>{t('ipAddress')}</th><th>{t('networkSegment')}</th><th>{t('environment')}</th><th>{t('os')}</th><th>{t('businessService')}</th><th>{t('agentStatus')}</th></tr></thead><tbody>{preview.assets?.map((a,index)=>{const selected=!excluded.has(a.id);const batch=Math.floor((index-[...excluded].filter(id=>preview.assets.findIndex(x=>x.id===id)<index).length)/Number(form.batchSize))+1;return <tr key={a.id} className={selected?'':'excluded'}><td><input type="checkbox" checked={selected} onChange={()=>toggle(a.id)}/></td><td><span className="batch-number">{selected?batch:'—'}</span></td><td><div className="cell-main"><b>{localize(a.name)}</b><small>{a.assetCode} · {a.assetType}</small></div></td><td className="mono">{a.ipAddress}</td><td className="mono">{a.networkSegment}</td><td>{envLabel(t,a.environment)}</td><td><div className="cell-main"><b>{a.osName}</b><small>{a.osVersion}</small></div></td><td>{localize(a.businessService)}</td><td><StatusBadge tone={statusTone(a.agentStatus)}>{t(String(a.agentStatus).toLowerCase())}</StatusBadge></td></tr>})}</tbody></table></div>
+   </section>
+  </>}
+ </>
+}

@@ -3,8 +3,8 @@ export function fmtDate(v, lang='zh'){
   const d=new Date(v); if(Number.isNaN(d.getTime())) return String(v)
   return new Intl.DateTimeFormat(lang==='zh'?'zh-CN':'en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(d)
 }
-export function envLabel(t,v){ return ({PROD:t('production'),TEST:t('test'),PREPROD:t('preprod'),DEV:t('development')})[v]||v||'—' }
-export function severityLabel(t,v){return ({CRITICAL:t('critical'),HIGH:t('high'),MEDIUM:t('medium'),LOW:t('low')})[v]||v||'—'}
+export function envLabel(t,v){ return ({PROD:t('production'),TEST:t('test'),PREPROD:t('preprod'),DEV:t('development'),MIXED:t('mixed')})[v]||v||'—' }
+export function severityLabel(t,v){return ({CRITICAL:t('critical'),HIGH:t('high'),MEDIUM:t('medium'),LOW:t('low'),UNKNOWN:t('unknown')})[v]||v||'—'}
 export function findingStatus(t,v){return t(`finding_${v}`)}
 export function taskStatus(t,v){return t(`task_${v}`)}
 export function taskStage(t,v){return t(`stage_${v}`)}

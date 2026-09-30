@@ -28,6 +28,7 @@ const exactEnglish={
 }
 
 const replacements=[
+ ['虚拟机','Virtual Machine'],['物理机','Physical Server'],['主数据中心','Primary Data Center'],['测试云区','Test Cloud Zone'],['批次','Batch'],['前置检查','Pre-check'],['已完成','Completed'],
  [' 生产补丁发布',' Production Patch Release'],['生产补丁发布','Production Patch Release'],
  [' 环境漏洞复测已创建',' environment vulnerability retest created'],[' 环境补丁效果复测已启动',' environment patch effect retest started'],
  ['任务动作：','Task action: '],['已触发变更','triggered change'],['安全事件','Security incident'],['补丁处置任务','patch remediation task']
