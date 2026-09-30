@@ -34,3 +34,18 @@ CVE-2021-44228,Apache,Log4j,10.0,CRITICAL,true,true,Log4Shell 远程代码执行
 CVE-2021-26855,Microsoft,Exchange Server,9.8,CRITICAL,true,true,Exchange ProxyLogon 服务端请求伪造漏洞,Exchange ProxyLogon server-side request forgery vulnerability
 CVE-2021-41773,Apache,HTTP Server,7.5,HIGH,true,true,Apache HTTP Server 路径遍历漏洞,Apache HTTP Server path traversal vulnerability
 CVE-2021-42013,Apache,HTTP Server,9.8,CRITICAL,true,true,Apache HTTP Server 路径遍历与远程代码执行漏洞,Apache HTTP Server path traversal and remote code execution vulnerability
+CVE-2024-1709,ConnectWise,ScreenConnect,10.0,CRITICAL,true,true,ScreenConnect 身份验证绕过漏洞,ScreenConnect authentication bypass vulnerability
+CVE-2024-1708,ConnectWise,ScreenConnect,8.4,HIGH,false,true,ScreenConnect 路径遍历漏洞,ScreenConnect path traversal vulnerability
+CVE-2024-21887,Ivanti,Connect Secure,9.1,CRITICAL,true,true,Ivanti Connect Secure 命令注入漏洞,Ivanti Connect Secure command injection vulnerability
+CVE-2024-21893,Ivanti,Connect Secure,8.2,HIGH,true,true,Ivanti Connect Secure 服务端请求伪造漏洞,Ivanti Connect Secure server-side request forgery vulnerability
+CVE-2024-24919,Check Point,Security Gateway,8.6,HIGH,true,true,Check Point Quantum Gateway 信息泄露漏洞,Check Point Quantum Gateway information disclosure vulnerability
+CVE-2023-46805,Ivanti,Connect Secure,8.2,HIGH,true,true,Ivanti Connect Secure 身份验证绕过漏洞,Ivanti Connect Secure authentication bypass vulnerability
+CVE-2023-20198,Cisco,IOS XE,10.0,CRITICAL,true,true,Cisco IOS XE Web UI 权限提升漏洞,Cisco IOS XE Web UI privilege escalation vulnerability
+CVE-2023-20273,Cisco,IOS XE,7.2,HIGH,true,true,Cisco IOS XE Web UI 命令注入漏洞,Cisco IOS XE Web UI command injection vulnerability
+CVE-2023-34362,Progress,MOVEit Transfer,9.8,CRITICAL,true,true,MOVEit Transfer SQL 注入漏洞,MOVEit Transfer SQL injection vulnerability
+CVE-2023-35078,Ivanti,Endpoint Manager Mobile,9.8,CRITICAL,true,true,Ivanti EPMM 身份验证绕过漏洞,Ivanti EPMM authentication bypass vulnerability
+CVE-2023-28771,Zyxel,ZLD Firewall,9.8,CRITICAL,true,true,Zyxel 防火墙操作系统命令注入漏洞,Zyxel firewall OS command injection vulnerability
+CVE-2023-27997,Fortinet,FortiOS,9.8,CRITICAL,true,true,FortiOS SSL VPN 堆缓冲区溢出漏洞,FortiOS SSL VPN heap buffer overflow vulnerability
+CVE-2023-22515,Atlassian,Confluence,10.0,CRITICAL,true,true,Confluence 未授权权限提升漏洞,Confluence unauthenticated privilege escalation vulnerability
+CVE-2022-1388,F5,BIG-IP,9.8,CRITICAL,true,true,F5 BIG-IP iControl REST 身份验证绕过漏洞,F5 BIG-IP iControl REST authentication bypass vulnerability
+CVE-2021-21972,VMware,vCenter Server,9.8,CRITICAL,true,true,VMware vCenter Server 远程代码执行漏洞,VMware vCenter Server remote code execution vulnerability

@@ -158,7 +158,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535","CVE-2023-0465","CVE-2022-0778"));
         addPatch("apache-tomcat-11.0.12","Apache","Tomcat","11.0.12","Apache Tomcat 安全版本更新","Apache Tomcat security release",14.7,true,List.of("CVE-2025-24813"));
         addPatch("jenkins-2.479.3","Jenkins","Jenkins","2.479.3","Jenkins LTS 安全更新","Jenkins LTS security update",92.0,true,List.of("CVE-2024-23897"));
-        addPatch("fortios-7.4.8","Fortinet","FortiOS","7.4.8","FortiOS 安全固件更新","FortiOS security firmware update",640.0,true,List.of("CVE-2024-21762"));
+        addPatch("fortios-7.4.8","Fortinet","FortiOS","7.4.8","FortiOS 安全固件更新","FortiOS security firmware update",640.0,true,List.of("CVE-2024-21762","CVE-2023-27997"));
         addPatch("netscaler-14.1-29.72","Citrix","NetScaler ADC","14.1-29.72","NetScaler ADC 安全构建","NetScaler ADC security build",512.0,true,List.of("CVE-2023-4966","CVE-2023-3519"));
         addPatch("php-8.3.8","PHP","PHP CGI","8.3.8","PHP 8.3.8 安全更新","PHP 8.3.8 security update",31.0,false,List.of("CVE-2024-4577"));
         addPatch("spring-6.1.14","VMware","Spring Framework","6.1.14","Spring Framework 安全更新","Spring Framework security update",7.5,false,List.of("CVE-2024-38812","CVE-2022-22965"));
@@ -173,6 +173,16 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("log4j-core-2.23.1","Apache","Log4j","2.23.1","Log4j Core 安全更新","Log4j Core security update",3.2,false,List.of("CVE-2021-44228"));
         addPatch("httpd-2.4.62","Apache","HTTP Server","2.4.62","Apache HTTP Server 安全更新","Apache HTTP Server security update",12.8,true,List.of("CVE-2021-41773","CVE-2021-42013"));
         addPatch("exchange-se-2026-09","Microsoft","Exchange Server","2026-09","Exchange Server 安全更新","Exchange Server security update",1620.0,true,List.of("CVE-2021-26855","CVE-2022-41040","CVE-2022-41082"));
+        addPatch("screenconnect-23.9.8","ConnectWise","ScreenConnect","23.9.8","ScreenConnect 紧急安全更新","ScreenConnect emergency security update",180.0,true,List.of("CVE-2024-1709","CVE-2024-1708"));
+        addPatch("ivanti-connect-secure-22.7R2.5","Ivanti","Connect Secure","22.7R2.5","Ivanti Connect Secure 安全累积更新","Ivanti Connect Secure cumulative security update",870.0,true,List.of("CVE-2023-46805","CVE-2024-21887","CVE-2024-21893"));
+        addPatch("cisco-iosxe-17.9.4a","Cisco","IOS XE","17.9.4a","Cisco IOS XE Web UI 安全更新","Cisco IOS XE Web UI security update",620.0,true,List.of("CVE-2023-20198","CVE-2023-20273"));
+        addPatch("checkpoint-r81.20-jumbo-take-65","Check Point","Security Gateway","R81.20 Take 65","Check Point Quantum Gateway 安全热修复","Check Point Quantum Gateway security hotfix",760.0,true,List.of("CVE-2024-24919"));
+        addPatch("moveit-2023.0.4","Progress","MOVEit Transfer","2023.0.4","MOVEit Transfer 安全更新","MOVEit Transfer security update",420.0,true,List.of("CVE-2023-34362"));
+        addPatch("ivanti-epmm-11.12.0.1","Ivanti","Endpoint Manager Mobile","11.12.0.1","Ivanti EPMM 安全更新","Ivanti EPMM security update",510.0,true,List.of("CVE-2023-35078"));
+        addPatch("zyxel-zld-5.36-patch2","Zyxel","ZLD Firewall","5.36 Patch 2","Zyxel 防火墙 ZLD 安全更新","Zyxel firewall ZLD security update",310.0,true,List.of("CVE-2023-28771"));
+        addPatch("vcenter-7.0u3p","VMware","vCenter Server","7.0 U3p","VMware vCenter Server 安全更新","VMware vCenter Server security update",6800.0,true,List.of("CVE-2021-21972"));
+        addPatch("bigip-17.1.1.3","F5","BIG-IP","17.1.1.3","F5 BIG-IP iControl REST 安全更新","F5 BIG-IP iControl REST security update",1450.0,true,List.of("CVE-2022-1388"));
+        addPatch("confluence-8.5.15-hf","Atlassian","Confluence","8.5.15 HF","Confluence 权限提升安全热修复","Confluence privilege escalation security hotfix",990.0,true,List.of("CVE-2023-22515"));
         // The library flag must describe an actual drill-down result, not a disconnected demo label.
         for(VulnerabilityDefinition v:vulns.findAll()){
             boolean available=!patchCves.findByCveId(v.getCveId()).isEmpty();

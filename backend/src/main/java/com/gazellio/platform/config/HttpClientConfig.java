@@ -9,7 +9,7 @@ public class HttpClientConfig {
   @Bean RestClient.Builder restClientBuilder(){
     SimpleClientHttpRequestFactory f=new SimpleClientHttpRequestFactory();
     f.setConnectTimeout(5000);
-    f.setReadTimeout(20000);
+    f.setReadTimeout(30000);
     return RestClient.builder().requestFactory(f);
   }
 }

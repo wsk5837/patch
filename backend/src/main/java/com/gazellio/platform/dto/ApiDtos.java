@@ -13,6 +13,9 @@ public final class ApiDtos {
     public record UserView(Long id, String username, String displayName, String email, String role) {}
     public record LoginResponse(String token, UserView user) {}
     public record MessageResponse(String message) {}
+    public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
+                                    int matchedByPatchLibrary, int created, int updated, int skipped,
+                                    String syncedAt, String source) {}
 
     public record ScanCreateRequest(@NotBlank String name, @NotBlank String scanType, @NotBlank String targetType,
                                     @NotBlank String targetValue, String credentialType) {}
