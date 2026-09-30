@@ -108,6 +108,7 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("remediation_tasks", "last_retested_by", "varchar(120)");
         addColumn("remediation_tasks", "last_retested_at", "timestamp with time zone");
         normalizeTaskNumbers();
+        reconcileOperationalAssetReferences();
 
         // Retest runs intentionally have no patch deployment. Older Gazellio databases created this
         // column as NOT NULL, and Hibernate ddl-auto=update does not consistently remove that constraint.
@@ -142,6 +143,38 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
                  where task_no is null
                     or task_no not like 'RMD-______'
                 """);
+    }
+
+    private void reconcileOperationalAssetReferences() {
+        if (!tableExists("remediation_tasks") || !tableExists("findings") || !tableExists("assets")) return;
+        jdbc.update("""
+                update remediation_tasks t
+                   set asset_id = f.asset_id,
+                       owner_id = a.owner_id,
+                       owner_name = a.owner_name,
+                       updated_at = current_timestamp
+                  from findings f
+                  join assets a on a.id = f.asset_id
+                 where t.finding_id = f.id
+                   and (t.asset_id is distinct from f.asset_id
+                     or t.owner_id is distinct from a.owner_id
+                     or t.owner_name is distinct from a.owner_name)
+                """);
+        if (tableExists("security_incidents")) {
+            jdbc.update("""
+                    update security_incidents i
+                       set asset_id = f.asset_id,
+                           owner_id = a.owner_id,
+                           owner_name = a.owner_name,
+                           updated_at = current_timestamp
+                      from findings f
+                      join assets a on a.id = f.asset_id
+                     where i.finding_id = f.id
+                       and (i.asset_id is distinct from f.asset_id
+                         or i.owner_id is distinct from a.owner_id
+                         or i.owner_name is distinct from a.owner_name)
+                    """);
+        }
     }
 
     private void upgradeSeverityConstraint() {

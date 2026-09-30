@@ -87,7 +87,7 @@ public final class ApiDtos {
                               boolean kev, Long assetId, String assetCode, String assetName, String environment,
                               String businessService, String ownerName, Integer assetCriticality, boolean internetExposed,
                               List<String> priorityReasons, String status, Double riskScore, Integer occurrences,
-                              Long scanJobId, String scanJobNo, Long remediationTaskId, String firstSeenAt, String lastSeenAt,
+                              Long scanJobId, String scanJobNo, Long remediationTaskId, String remediationTaskNo, String firstSeenAt, String lastSeenAt,
                               String evidence, String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
                               Long securityIncidentId, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
 
@@ -199,6 +199,5 @@ public final class ApiDtos {
                              long openTasks, long approvalsPending, long automationRuns, long automationSucceeded,
                              double automationSuccessRate, double patchCompliance,
                              Map<String,Long> severityDistribution, Map<String,Long> environmentDistribution,
-                             List<FindingView> pendingFindings, List<FindingView> exceptionFindings,
-                             List<DeploymentView> recentDeployments) {}
+                             Map<String,Long> deploymentStatusDistribution) {}
 }

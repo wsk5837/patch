@@ -75,6 +75,9 @@ public class DashboardReportService {
             Map<String, Long> environment = new LinkedHashMap<>();
             Map<EnvironmentType, Long> environmentRaw = environmentCounts();
             for (EnvironmentType value : EnvironmentType.values()) environment.put(value.name(), environmentRaw.getOrDefault(value, 0L));
+            Map<String,Long> deploymentStatus=new LinkedHashMap<>();
+            for(DeploymentStatus value:DeploymentStatus.values())deploymentStatus.put(value.name(),0L);
+            deployments.countByStatusGrouped().forEach(row->deploymentStatus.put(row.getStatus().name(),row.getTotal()));
             Instant reportNow=now;
 
             ReportView result = new ReportView(
@@ -95,9 +98,7 @@ public class DashboardReportService {
                     patchCompliance(),
                     severity,
                     environment,
-                    view.findingViews(findings.findTop200ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED_FINDINGS)),
-                    view.findingViews(findings.findTop200ByStatusOrderByRiskScoreDescLastSeenAtDesc(FindingStatus.EXEMPTED)),
-                    view.deploymentViews(deployments.findTop200ByOrderByCreatedAtDesc())
+                    deploymentStatus
             );
             cachedReport = result;
             reportExpiresAt = now.plus(REPORT_CACHE_TTL);

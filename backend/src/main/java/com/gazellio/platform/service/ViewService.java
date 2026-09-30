@@ -115,9 +115,11 @@ public class ViewService {
         Set<String> cveIds = rows.stream().map(Finding::getCveId).collect(Collectors.toSet());
         Set<Long> assetIds = rows.stream().map(Finding::getAssetId).collect(Collectors.toSet());
         Set<Long> scanIds = rows.stream().map(Finding::getScanJobId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> taskIds = rows.stream().map(Finding::getRemediationTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String, VulnerabilityDefinition> vulnerabilityById = index(vulns.findAllById(cveIds), VulnerabilityDefinition::getCveId);
         Map<Long, Asset> assetById = index(assets.findAllById(assetIds), Asset::getId);
         Map<Long, ScanJob> scanById = scanIds.isEmpty() ? Map.of() : index(scans.findAllById(scanIds), ScanJob::getId);
+        Map<Long, RemediationTask> taskById = taskIds.isEmpty() ? Map.of() : index(tasks.findAllById(taskIds), RemediationTask::getId);
 
         List<PatchCve> links = patchCves.findByCveIdIn(cveIds);
         Set<Long> patchIds = links.stream().map(PatchCve::getPatchId).collect(Collectors.toSet());
@@ -135,6 +137,7 @@ public class ViewService {
             VulnerabilityDefinition v = vulnerabilityById.get(f.getCveId());
             Asset a = assetById.get(f.getAssetId());
             ScanJob scan = f.getScanJobId() == null ? null : scanById.get(f.getScanJobId());
+            RemediationTask task = f.getRemediationTaskId() == null ? null : taskById.get(f.getRemediationTaskId());
             List<String> reasons=new ArrayList<>();
             if(v!=null&&v.isKev())reasons.add("KNOWN_EXPLOITED");
             if(v!=null&&v.getSeverity()==Enums.Severity.CRITICAL)reasons.add("CRITICAL_SEVERITY");
@@ -149,7 +152,7 @@ public class ViewService {
                     a == null ? null : s(a.getEnvironment()), a == null ? null : a.getBusinessService(),
                     f.getOwnerName(), a==null?null:a.getCriticality(), a!=null&&Boolean.TRUE.equals(a.getInternetExposed()), reasons,
                     s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
-                    scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), s(f.getFirstSeenAt()),
+                    scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), task == null ? null : task.getTaskNo(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
                     s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(),
                     patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
@@ -218,9 +221,10 @@ public class ViewService {
     public List<TaskView> taskViews(List<RemediationTask> rows) {
         if (rows.isEmpty()) return List.of();
         Set<Long> findingIds = rows.stream().map(RemediationTask::getFindingId).collect(Collectors.toSet());
-        Set<Long> assetIds = rows.stream().map(RemediationTask::getAssetId).collect(Collectors.toSet());
         Set<Long> patchIds = rows.stream().map(RemediationTask::getPatchId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, Finding> findingById = index(findings.findAllById(findingIds), Finding::getId);
+        Set<Long> assetIds = new HashSet<>(rows.stream().map(RemediationTask::getAssetId).filter(Objects::nonNull).collect(Collectors.toSet()));
+        findingById.values().stream().map(Finding::getAssetId).filter(Objects::nonNull).forEach(assetIds::add);
         Set<String> cveIds = findingById.values().stream().map(Finding::getCveId).collect(Collectors.toSet());
         Map<String, VulnerabilityDefinition> vulnerabilityById = cveIds.isEmpty() ? Map.of() : index(vulns.findAllById(cveIds), VulnerabilityDefinition::getCveId);
         Map<Long, Asset> assetById = index(assets.findAllById(assetIds), Asset::getId);
@@ -228,11 +232,12 @@ public class ViewService {
         return rows.stream().map(t -> {
             Finding finding = findingById.get(t.getFindingId());
             VulnerabilityDefinition v = finding == null ? null : vulnerabilityById.get(finding.getCveId());
-            Asset asset = assetById.get(t.getAssetId());
+            Long effectiveAssetId=finding==null||finding.getAssetId()==null?t.getAssetId():finding.getAssetId();
+            Asset asset = assetById.get(effectiveAssetId);
             Patch patch = t.getPatchId() == null ? null : patchById.get(t.getPatchId());
             return new TaskView(
                     t.getId(), t.getTaskNo(), t.getFindingId(), finding == null ? null : finding.getCveId(),
-                    v == null ? null : v.getTitleZh(), v == null ? null : v.getTitleEn(), t.getAssetId(),
+                    v == null ? null : v.getTitleZh(), v == null ? null : v.getTitleEn(), effectiveAssetId,
                     asset == null ? null : asset.getAssetCode(), asset == null ? null : asset.getName(),
                     asset == null ? null : s(asset.getEnvironment()), asset == null ? null : asset.getBusinessService(),
                     t.getPatchId(), patch == null ? null : patch.getPatchId(), t.getOwnerName(), t.getPriority(),

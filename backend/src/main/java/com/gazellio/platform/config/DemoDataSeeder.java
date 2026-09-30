@@ -61,6 +61,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedLowerSeverityFindings();
         upgradeFindingEvidence();
         seedWorkOrders();
+        reconcileOperationalAssetReferences();
         seedTemplatesAndRuns();
         seedDeploymentTargets();
         seedSettings();
@@ -744,6 +745,39 @@ public class DemoDataSeeder implements CommandLineRunner {
                 if(task.getApprovalId()!=null)approvals.findById(task.getApprovalId()).ifPresent(a->{a.setChangeOrderId(change.getId());approvals.save(a);});
             }
         }
+    }
+
+    /**
+     * A finding is the authoritative asset-to-vulnerability relation. Earlier demo versions
+     * copied the asset id into tasks and work orders, so records could drift after CMDB data was
+     * migrated. Reconcile only those operational references; no imported CMDB identity is changed.
+     */
+    private void reconcileOperationalAssetReferences(){
+        Map<Long,Finding> findingById=new HashMap<>();findings.findAll().forEach(f->findingById.put(f.getId(),f));
+        Map<Long,Asset> assetById=new HashMap<>();assets.findAll().forEach(a->assetById.put(a.getId(),a));
+        List<RemediationTask> changedTasks=new ArrayList<>();
+        for(RemediationTask task:tasks.findAll()){
+            Finding finding=findingById.get(task.getFindingId());
+            if(finding==null)continue;
+            Asset asset=assetById.get(finding.getAssetId());
+            if(asset==null)continue;
+            boolean changed=!Objects.equals(task.getAssetId(),asset.getId())
+                    ||!Objects.equals(task.getOwnerId(),asset.getOwnerId())
+                    ||!Objects.equals(task.getOwnerName(),asset.getOwnerName());
+            if(changed){task.setAssetId(asset.getId());task.setOwnerId(asset.getOwnerId());task.setOwnerName(asset.getOwnerName());task.setUpdatedAt(Instant.now());changedTasks.add(task);}
+            if(!asset.isActive()){asset.setActive(true);assets.save(asset);}
+        }
+        if(!changedTasks.isEmpty())tasks.saveAll(changedTasks);
+        List<SecurityIncident> changedIncidents=new ArrayList<>();
+        for(SecurityIncident incident:incidents.findAll()){
+            Finding finding=findingById.get(incident.getFindingId());
+            if(finding==null||Objects.equals(incident.getAssetId(),finding.getAssetId()))continue;
+            Asset asset=assetById.get(finding.getAssetId());
+            incident.setAssetId(finding.getAssetId());
+            if(asset!=null){incident.setOwnerId(asset.getOwnerId());incident.setOwnerName(asset.getOwnerName());}
+            incident.setUpdatedAt(Instant.now());changedIncidents.add(incident);
+        }
+        if(!changedIncidents.isEmpty())incidents.saveAll(changedIncidents);
     }
 
     private void seedTemplatesAndRuns(){
