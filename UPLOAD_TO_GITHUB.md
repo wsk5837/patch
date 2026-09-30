@@ -17,7 +17,7 @@
 2. 解压新工程包。
 3. 进入解压得到的 `patch-main` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `patch-main` 这一层目录嵌套进仓库。
 4. 打开 GitHub Desktop，确认变更列表中没有 `node_modules`、`dist` 或 `target`。
-5. Summary 填写 `Add CIDR batch patching and risk reports`，点击 **Commit to main**。
+5. Summary 填写 `Fix legacy database schema migration`，点击 **Commit to main**。
 6. 点击 **Push origin**。Git 只会上传真正变化的文件，即使你刚才覆盖了整个目录。
 
 ## 三、如果只使用 GitHub 网页
@@ -48,5 +48,8 @@ patch-main/
 3. 确认 Render 将管理三个资源：`gazellio-web`、`gazellio` 和 `gazellio-db`。
 4. 不要删除 `gazellio-db`。原有 `gazellio` 服务保留为 Java API。
 5. 部署完成后，打开 `gazellio-web` 的 URL，不再把 `gazellio` API URL 当作页面地址。
+
+本次升级会在后端启动时自动补齐旧 PostgreSQL 数据库缺失的字段，包括
+`assets.internet_exposed`。不要删除数据库，也不需要手工执行 SQL。
 
 以后仅修改 `frontend/` 时，Render 只构建静态站点；仅修改 `backend/` 时，Render 只构建 Java API。
