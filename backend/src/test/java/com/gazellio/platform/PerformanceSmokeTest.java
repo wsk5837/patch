@@ -47,6 +47,21 @@ class PerformanceSmokeTest {
     @Autowired RemediationTaskRepository taskRepository;
 
     @Test
+    void customerAssetCatalogAndSelectableScopesAreAvailable() {
+        Set<String> expected = Set.of("Oracle MySQL", "Apache Tomcat", "Open SSH", "Spring Boot", "PHP",
+                "Apache HTTP Server", "Eclipse Jetty", "OpenSSL", "Apache Struts2", "Redis", "Python",
+                "MariaDB", "Grafana", "Atlassian Jira", "Samba", "Elasticsearch", "Ruby", "PostgreSQL",
+                "Shiro", "MongoDB");
+        var rows = assets.list();
+        assertEquals(expected, rows.stream().map(item -> item.name()).collect(Collectors.toSet()));
+        assertTrue(rows.stream().map(item -> item.assetType()).collect(Collectors.toSet()).size() >= 8);
+        assertTrue(rows.stream().noneMatch(item -> "VIRTUAL_MACHINE".equals(item.assetType())));
+        var options = assets.scopeOptions();
+        assertTrue(options.networkSegments().size() >= 10);
+        assertTrue(options.assetTypes().containsAll(Set.of("DATABASE", "MIDDLEWARE", "APPLICATION_RUNTIME")));
+    }
+
+    @Test
     void warmListEndpointsStayWithinOneSecond() {
         // First calls initialize query plans; the timed pass represents a warm Render instance.
         assets.list();
@@ -183,8 +198,8 @@ class PerformanceSmokeTest {
         var patch = patches.list().stream()
                 .filter(item -> item.product() != null && item.product().toLowerCase().contains("openssh"))
                 .findFirst().orElseThrow();
-        var request = new BatchScopeRequest(patch.id(), List.of("10.20.10.0/24", "10.30.10.0/24"),
-                List.of(), List.of("VIRTUAL_MACHINE"), null, null, true, List.of(),
+        var request = new BatchScopeRequest(patch.id(), List.of("10.60.30.0/24", "10.70.30.0/24"),
+                List.of(), List.of("SECURITY_COMPONENT"), null, null, true, List.of(),
                 10, 5, 5.0, "CIDR integration test", "Sun 01:00-05:00");
         var preview = batchPatch.preview(request);
         assertTrue(preview.matchedCount() > 0);

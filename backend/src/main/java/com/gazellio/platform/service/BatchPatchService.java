@@ -153,6 +153,9 @@ public class BatchPatchService {
         if (product.isBlank()) return true;
         if (product.contains("windows server")) return installed.contains("windows server");
         if (product.contains("red hat") || product.equals("rhel")) return installed.contains("red hat") || installed.contains("rocky");
+        if (product.contains("php cgi")) return installed.contains("php ");
+        if (product.contains("spring framework")) return installed.contains("spring framework") || installed.contains("spring boot");
+        if (product.equals("mysql")) return installed.contains("mysql");
         return installed.contains(product) || (product.equals("tomcat") && installed.contains("apache tomcat"));
     }
 

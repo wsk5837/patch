@@ -41,6 +41,9 @@ public final class ApiDtos {
                             String agentStatus, String patchBaseline, String installedProducts, String maintenanceWindow,
                             Instant lastSeenAt, long openFindings) {}
 
+    public record AssetScopeOptions(List<String> networkSegments, List<String> assetTypes,
+                                    List<String> businessServices, List<String> osNames) {}
+
     public record BatchScopeRequest(@NotNull Long patchId, @NotNull List<String> cidrs,
                                     List<String> environments, List<String> assetTypes, String osName,
                                     String businessService, boolean onlineOnly, List<Long> excludedAssetIds,

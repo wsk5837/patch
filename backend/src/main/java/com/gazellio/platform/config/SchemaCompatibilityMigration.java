@@ -28,7 +28,7 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         // fails. Apply the additive changes explicitly before any data seeder queries the tables.
         addColumn("assets", "hostname", "varchar(160)");
         addColumn("assets", "network_segment", "varchar(40)");
-        addColumn("assets", "asset_type", "varchar(40) default 'VIRTUAL_MACHINE'");
+        addColumn("assets", "asset_type", "varchar(40) default 'UNCLASSIFIED'");
         addColumn("assets", "zone", "varchar(80)");
         addColumn("assets", "internet_exposed", "boolean default false");
         addColumn("assets", "installed_products", "text");

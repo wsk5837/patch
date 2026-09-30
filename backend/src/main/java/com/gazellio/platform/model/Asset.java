@@ -19,7 +19,7 @@ public class Asset {
     @Column(length=160) private String hostname;
     @Column(length=80) private String ipAddress;
     @Column(length=40) private String networkSegment;
-    @Column(length=40) @Builder.Default private String assetType = "VIRTUAL_MACHINE";
+    @Column(length=40) @Builder.Default private String assetType = "UNCLASSIFIED";
     @Column(length=80) private String zone;
     // Nullable at ORM bootstrap so an existing populated table can be upgraded safely. The
     // compatibility migration immediately backfills NULL to false and restores NOT NULL.
