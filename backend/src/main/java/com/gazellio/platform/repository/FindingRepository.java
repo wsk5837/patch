@@ -17,6 +17,8 @@ public interface FindingRepository extends JpaRepository<Finding, Long> {
     List<Finding> findTop200ByOrderByRiskScoreDescLastSeenAtDesc();
     List<Finding> findTop200ByCveIdInOrderByRiskScoreDescLastSeenAtDesc(Collection<String> cveIds);
  List<Finding> findTop6ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(Collection<FindingStatus> statuses);
+ List<Finding> findTop200ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(Collection<FindingStatus> statuses);
+ List<Finding> findTop200ByStatusOrderByRiskScoreDescLastSeenAtDesc(FindingStatus status);
  long countByStatus(FindingStatus status);
  long countByStatusIn(Collection<FindingStatus> statuses);
  long countByStatusNotIn(Collection<FindingStatus> statuses);

@@ -13,7 +13,7 @@ import static com.gazellio.platform.model.Enums.DeploymentStatus;
 public class PatchDeployment {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
     @Column(unique=true, nullable=false, length=80) private String deploymentNo;
-    @Column(nullable=false) private Long taskId;
+    private Long taskId;
     @Column(nullable=false) private Long patchId;
     @Column(nullable=false, length=20) private String environment;
     @Column(nullable=false, length=80) private String ring;
@@ -23,6 +23,13 @@ public class PatchDeployment {
     @Column(nullable=false) @Builder.Default private Integer targetCount = 1;
     @Column(nullable=false) @Builder.Default private Integer successCount = 0;
     @Column(nullable=false) @Builder.Default private Integer failureCount = 0;
+    @Column(length=30) @Builder.Default private String selectionMode = "TASK";
+    @Column(columnDefinition="TEXT") private String cidrScopes;
+    @Builder.Default private Integer batchSize = 1;
+    @Builder.Default private Integer concurrency = 1;
+    @Builder.Default private Double failureThreshold = 5.0;
+    @Builder.Default private Integer totalBatches = 1;
+    @Column(columnDefinition="TEXT") private String scopeSummary;
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
     private Instant startedAt;
     private Instant completedAt;

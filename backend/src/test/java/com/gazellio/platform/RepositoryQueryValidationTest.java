@@ -37,6 +37,8 @@ class RepositoryQueryValidationTest {
     void optimizedQueriesAreValid() {
         assertThatCode(() -> {
             findings.findTop6ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED);
+            findings.findTop200ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED);
+            findings.findTop200ByStatusOrderByRiskScoreDescLastSeenAtDesc(FindingStatus.EXEMPTED);
             findings.countOpenByAsset(CLOSED);
             findings.countAffectedByCve(CLOSED);
             findings.countOpenBySeverity(CLOSED);

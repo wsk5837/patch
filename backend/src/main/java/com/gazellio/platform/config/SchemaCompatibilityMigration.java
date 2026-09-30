@@ -33,6 +33,14 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         // Retest runs intentionally have no patch deployment. Older Gazellio databases created this
         // column as NOT NULL, and Hibernate ddl-auto=update does not consistently remove that constraint.
         jdbc.execute("alter table deployment_targets alter column deployment_id drop not null");
-        log.info("Schema compatibility verified: deployment_targets.deployment_id accepts retest targets");
+        Integer deploymentTaskColumns = jdbc.queryForObject("""
+                select count(*) from information_schema.columns
+                where lower(table_name) = 'patch_deployments'
+                  and lower(column_name) = 'task_id'
+                """, Integer.class);
+        if (deploymentTaskColumns != null && deploymentTaskColumns > 0) {
+            jdbc.execute("alter table patch_deployments alter column task_id drop not null");
+        }
+        log.info("Schema compatibility verified: standalone batch deployments and retest targets are supported");
     }
 }

@@ -14,7 +14,7 @@ public final class ApiDtos {
     public record LoginResponse(String token, UserView user) {}
     public record MessageResponse(String message) {}
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
-                                    int matchedByPatchLibrary, int created, int updated, int skipped,
+                                    int matchedByPatchLibrary, int created, int updated, int withoutPatchMapping,
                                     String syncedAt, String source) {}
 
     public record ScanCreateRequest(@NotBlank String name, @NotBlank String scanType, @NotBlank String targetType,
@@ -35,9 +35,25 @@ public final class ApiDtos {
     public record ApprovalActionRequest(String comment) {}
     public record SettingsUpdateRequest(Map<String,String> values) {}
 
-    public record AssetView(Long id, String assetCode, String name, String ipAddress, String osName, String osVersion,
+    public record AssetView(Long id, String assetCode, String name, String hostname, String ipAddress, String networkSegment,
+                            String assetType, String zone, boolean internetExposed, String osName, String osVersion,
                             String environment, String businessService, Long ownerId, String ownerName, Integer criticality,
-                            String agentStatus, String patchBaseline, Instant lastSeenAt, long openFindings) {}
+                            String agentStatus, String patchBaseline, String installedProducts, String maintenanceWindow,
+                            Instant lastSeenAt, long openFindings) {}
+
+    public record BatchScopeRequest(@NotNull Long patchId, @NotNull List<String> cidrs,
+                                    List<String> environments, List<String> assetTypes, String osName,
+                                    String businessService, boolean onlineOnly, List<Long> excludedAssetIds,
+                                    Integer batchSize, Integer concurrency, Double failureThreshold,
+                                    String planName, String maintenanceWindow) {}
+    public record BatchScopePreview(long matchedCount, long applicableCount, long selectedCount,
+                                    long excludedCount, long offlineCount,
+                                    int batchSize, int concurrency, int totalBatches, double failureThreshold,
+                                    String patchCode, String patchProduct, List<String> cidrs,
+                                    Map<String,Long> environmentCounts, Map<String,Long> typeCounts,
+                                    List<AssetView> assets, List<String> warnings) {}
+    public record BatchRunResult(Long runId, String runNo, Long deploymentId, String deploymentNo,
+                                 int targetCount, int totalBatches) {}
 
     public record PatchCandidateView(Long id, String patchId, String titleZh, String titleEn, String version,
                                      String signatureStatus, boolean rebootRequired, String status) {}
@@ -46,11 +62,19 @@ public final class ApiDtos {
                                     String descriptionZh, String descriptionEn, Double cvss, String severity, boolean kev,
                                     boolean ransomwareKnown, boolean patchAvailable, String referenceUrl,
                                     String publishedDate, String kevDueDate, long affectedAssets, List<String> patchIds,
-                                    List<PatchCandidateView> patches) {}
+                                    List<PatchCandidateView> patches, String internalAdvisoryId, String attackVector,
+                                    String attackComplexity, String privilegesRequired, String affectedVersionRange,
+                                    String detectionGuidanceZh, String detectionGuidanceEn,
+                                    String remediationGuidanceZh, String remediationGuidanceEn,
+                                    String mitigationZh, String mitigationEn, boolean virtualPatchAvailable,
+                                    String virtualPatchGuidanceZh, String virtualPatchGuidanceEn) {}
+    public record VulnerabilityPageView(List<VulnerabilityView> items, long totalElements, int page,
+                                        int size, int totalPages) {}
 
     public record FindingView(Long id, String cveId, String titleZh, String titleEn, Double cvss, String severity,
                               boolean kev, Long assetId, String assetCode, String assetName, String environment,
-                              String businessService, String ownerName, String status, Double riskScore, Integer occurrences,
+                              String businessService, String ownerName, Integer assetCriticality, boolean internetExposed,
+                              List<String> priorityReasons, String status, Double riskScore, Integer occurrences,
                               Long scanJobId, String scanJobNo, Long remediationTaskId, String firstSeenAt, String lastSeenAt,
                               String evidence, String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
                               Long securityIncidentId, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
@@ -131,7 +155,8 @@ public final class ApiDtos {
     public record RunStepView(Long id, Integer stepOrder, String code, String nameZh, String nameEn, String status,
                               String startedAt, String completedAt, String messageZh, String messageEn) {}
     public record DeploymentTargetView(Long id, Long assetId, String assetCode, String assetName, String environment,
-                                       String status, Integer progress, String startedAt, String completedAt, String message) {}
+                                       Integer batchNo, String status, Integer progress, String startedAt,
+                                       String completedAt, String message) {}
     public record RunView(Long id, String runNo, Long templateId, String templateCode, String templateNameZh,
                           String templateNameEn, Long taskId, String taskNo, Long deploymentId, String environment,
                           String ring, String status, Integer currentStep, Integer progress, String createdAt,
@@ -141,7 +166,9 @@ public final class ApiDtos {
     public record DeploymentView(Long id, String deploymentNo, Long taskId, String taskNo, Long patchId, String patchCode,
                                  String environment, String ring, String status, Integer progress, Long orchestrationRunId,
                                  Integer targetCount, Integer successCount, Integer failureCount, String createdAt,
-                                 String startedAt, String completedAt, List<DeploymentTargetView> targets) {}
+                                 String startedAt, String completedAt, String selectionMode, String cidrScopes,
+                                 Integer batchSize, Integer concurrency, Double failureThreshold, Integer totalBatches,
+                                 String scopeSummary, List<DeploymentTargetView> targets) {}
 
     public record AuditView(Long id, String entityType, String entityId, String action, String messageZh,
                             String messageEn, String actor, String createdAt) {}
@@ -151,8 +178,11 @@ public final class ApiDtos {
                                 List<FindingView> topFindings, List<ScanJobView> recentScans,
                                 List<RunView> recentRuns) {}
 
-    public record ReportView(long totalLibrary, long openFindings, long resolvedFindings, long falsePositives,
+    public record ReportView(long totalLibrary, long openFindings, long resolvedFindings, long falsePositives, long exemptions,
+                             long slaOverdue, long runningDeployments, long failedDeployments,
                              long openTasks, long approvalsPending, long automationRuns, long automationSucceeded,
                              double automationSuccessRate, double patchCompliance,
-                             Map<String,Long> severityDistribution, Map<String,Long> environmentDistribution) {}
+                             Map<String,Long> severityDistribution, Map<String,Long> environmentDistribution,
+                             List<FindingView> pendingFindings, List<FindingView> exceptionFindings,
+                             List<DeploymentView> recentDeployments) {}
 }

@@ -58,6 +58,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedAgentsAndScans();
         seedFindingsTasksApprovals();
         seedLowerSeverityFindings();
+        upgradeFindingEvidence();
         seedWorkOrders();
         seedTemplatesAndRuns();
         seedDeploymentTargets();
@@ -97,9 +98,9 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedAssets() {
-        if (assets.count() > 0) return;
         var ownerOps=users.findByUsername("ops").orElseThrow();
         var ownerApp=users.findByUsername("appowner").orElseThrow();
+        if(assets.count()==0){
         List<Asset> list=List.of(
           asset("APP-PROD-01","支付应用节点 01","10.20.10.11","Red Hat Enterprise Linux","9.4",EnvironmentType.PROD,"支付服务",ownerOps,5,"Linux-2026Q3"),
           asset("APP-PROD-02","支付应用节点 02","10.20.10.12","Red Hat Enterprise Linux","9.4",EnvironmentType.PROD,"支付服务",ownerOps,5,"Linux-2026Q3"),
@@ -126,11 +127,92 @@ public class DemoDataSeeder implements CommandLineRunner {
           asset("VPN-UAT-01","远程接入预生产网关","10.25.81.31","FortiOS","7.4",EnvironmentType.PREPROD,"远程接入",ownerApp,4,"Network-2026-09")
         );
         assets.saveAll(list);
+        }
+        enrichExistingAssets();
+        seedNetworkScaleAssets(ownerOps,ownerApp);
     }
 
     private Asset asset(String code,String name,String ip,String os,String ver,EnvironmentType env,String service,UserAccount owner,int crit,String baseline){
         return Asset.builder().assetCode(code).name(name).ipAddress(ip).osName(os).osVersion(ver).environment(env).businessService(service)
+                .hostname(code.toLowerCase(Locale.ROOT)).networkSegment(segmentFor(ip)).assetType(inferAssetType(code,os))
+                .zone(env==EnvironmentType.PROD?"主数据中心":"测试云区").internetExposed(code.contains("WEB")||code.contains("VPN")||code.contains("ADC"))
+                .installedProducts(inferProducts(code,os))
+                .maintenanceWindow(env==EnvironmentType.PROD?"周日 01:00-05:00":"周三 20:00-23:00")
                 .ownerId(owner.getId()).ownerName(owner.getDisplayName()).criticality(crit).agentStatus("ONLINE").patchBaseline(baseline).lastSeenAt(Instant.now()).build();
+    }
+
+    private void enrichExistingAssets(){
+        List<Asset> changed=new ArrayList<>();
+        for(Asset asset:assets.findAll()){
+            boolean update=false;
+            if(asset.getHostname()==null){asset.setHostname(asset.getAssetCode().toLowerCase(Locale.ROOT));update=true;}
+            if(asset.getNetworkSegment()==null){asset.setNetworkSegment(segmentFor(asset.getIpAddress()));update=true;}
+            if(asset.getAssetType()==null){asset.setAssetType(inferAssetType(asset.getAssetCode(),asset.getOsName()));update=true;}
+            if(asset.getZone()==null){asset.setZone(asset.getEnvironment()==EnvironmentType.PROD?"主数据中心":"测试云区");update=true;}
+            if(!asset.isInternetExposed()&&(asset.getAssetCode().contains("WEB")||asset.getAssetCode().contains("VPN")||asset.getAssetCode().contains("ADC"))){asset.setInternetExposed(true);update=true;}
+            if(asset.getInstalledProducts()==null){asset.setInstalledProducts(inferProducts(asset.getAssetCode(),asset.getOsName()));update=true;}
+            if(asset.getMaintenanceWindow()==null){asset.setMaintenanceWindow(asset.getEnvironment()==EnvironmentType.PROD?"周日 01:00-05:00":"周三 20:00-23:00");update=true;}
+            if(update)changed.add(asset);
+        }
+        if(!changed.isEmpty())assets.saveAll(changed);
+    }
+
+    private void seedNetworkScaleAssets(UserAccount ownerOps,UserAccount ownerApp){
+        List<Asset> rows=new ArrayList<>();
+        addNetworkAssets(rows,"CMDB-PAY-PROD",24,"10.20.10",101,EnvironmentType.PROD,"支付服务",ownerOps,
+                "Red Hat Enterprise Linux","9.4","OpenSSH, OpenSSL, Apache Tomcat","虚拟机");
+        addNetworkAssets(rows,"CMDB-WEB-PROD",18,"10.20.20",101,EnvironmentType.PROD,"互联网门户",ownerOps,
+                "Ubuntu Server","24.04","OpenSSH, OpenSSL, Nginx, Python","虚拟机");
+        addNetworkAssets(rows,"CMDB-WIN-PROD",18,"10.20.30",101,EnvironmentType.PROD,"核心业务",ownerOps,
+                "Windows Server","2022","Windows Server, Microsoft IIS","虚拟机");
+        addNetworkAssets(rows,"CMDB-PAY-TEST",16,"10.30.10",101,EnvironmentType.TEST,"支付服务",ownerApp,
+                "Red Hat Enterprise Linux","9.4","OpenSSH, OpenSSL, Apache Tomcat","虚拟机");
+        addNetworkAssets(rows,"CMDB-PAY-UAT",8,"10.25.10",101,EnvironmentType.PREPROD,"支付服务",ownerApp,
+                "Red Hat Enterprise Linux","9.4","OpenSSH, OpenSSL, Apache Tomcat","虚拟机");
+        addNetworkAssets(rows,"CMDB-DB-PROD",8,"10.20.60",101,EnvironmentType.PROD,"数据服务",ownerOps,
+                "Red Hat Enterprise Linux","9.4","OpenSSH, OpenSSL, MySQL, Redis, PostgreSQL","物理机");
+        if(!rows.isEmpty())assets.saveAll(rows);
+    }
+
+    private void addNetworkAssets(List<Asset> rows,String prefix,int count,String subnet,int start,EnvironmentType environment,
+                                  String service,UserAccount owner,String os,String version,String products,String type){
+        for(int i=0;i<count;i++){
+            String code=prefix+"-"+String.format("%03d",i+1);
+            if(assets.findByAssetCode(code).isPresent())continue;
+            String ip=subnet+"."+(start+i);
+            rows.add(Asset.builder().assetCode(code).name(service+" "+type+" "+String.format("%03d",i+1))
+                    .hostname(code.toLowerCase(Locale.ROOT)).ipAddress(ip).networkSegment(subnet+".0/24")
+                    .assetType("物理机".equals(type)?"PHYSICAL_SERVER":"VIRTUAL_MACHINE")
+                    .zone(environment==EnvironmentType.PROD?"主数据中心":"测试云区").internetExposed(prefix.contains("WEB"))
+                    .osName(os).osVersion(version).environment(environment).businessService(service)
+                    .ownerId(owner.getId()).ownerName(owner.getDisplayName()).criticality(environment==EnvironmentType.PROD?5:3)
+                    .agentStatus(i%17==0?"OFFLINE":"ONLINE").patchBaseline(os.startsWith("Windows")?"MS-2026-09":"Linux-2026Q3")
+                    .installedProducts(products).maintenanceWindow(environment==EnvironmentType.PROD?"周日 01:00-05:00":"周三 20:00-23:00")
+                    .lastSeenAt(Instant.now().minusSeconds(i%17==0?7200:i*11L)).active(true).build());
+        }
+    }
+
+    private String segmentFor(String ip){
+        if(ip==null||!ip.matches("\\d+\\.\\d+\\.\\d+\\.\\d+"))return null;
+        String[] p=ip.split("\\.");return p[0]+"."+p[1]+"."+p[2]+".0/24";
+    }
+
+    private String inferAssetType(String code,String os){
+        String raw=(code+" "+os).toLowerCase(Locale.ROOT);
+        if(raw.contains("vpn")||raw.contains("adc")||raw.contains("fortios")||raw.contains("netscaler"))return "NETWORK_DEVICE";
+        if(raw.contains("db-"))return "PHYSICAL_SERVER";
+        return "VIRTUAL_MACHINE";
+    }
+
+    private String inferProducts(String code,String os){
+        String raw=(code+" "+os).toLowerCase(Locale.ROOT);
+        if(raw.contains("windows"))return "Windows Server, Microsoft IIS";
+        if(raw.contains("tomcat"))return "OpenSSH, OpenSSL, Apache Tomcat";
+        if(raw.contains("db-"))return "OpenSSH, OpenSSL, MySQL, Redis, PostgreSQL";
+        if(raw.contains("vpn"))return "FortiOS, SSL VPN";
+        if(raw.contains("adc"))return "NetScaler ADC";
+        if(raw.contains("web"))return "OpenSSH, OpenSSL, Nginx, PHP";
+        return "OpenSSH, OpenSSL, Python";
     }
 
     private void seedVulnerabilities() throws IOException {
@@ -183,11 +265,17 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("vcenter-7.0u3p","VMware","vCenter Server","7.0 U3p","VMware vCenter Server 安全更新","VMware vCenter Server security update",6800.0,true,List.of("CVE-2021-21972"));
         addPatch("bigip-17.1.1.3","F5","BIG-IP","17.1.1.3","F5 BIG-IP iControl REST 安全更新","F5 BIG-IP iControl REST security update",1450.0,true,List.of("CVE-2022-1388"));
         addPatch("confluence-8.5.15-hf","Atlassian","Confluence","8.5.15 HF","Confluence 权限提升安全热修复","Confluence privilege escalation security hotfix",990.0,true,List.of("CVE-2023-22515"));
-        // The library flag must describe an actual drill-down result, not a disconnected demo label.
+        // Keep imported catalog rows accurate without issuing one relation query per vulnerability.
+        Set<String> supportedCves=new HashSet<>();
+        patchCves.findAll().forEach(link->supportedCves.add(link.getCveId()));
+        List<VulnerabilityDefinition> corrected=new ArrayList<>();
         for(VulnerabilityDefinition v:vulns.findAll()){
-            boolean available=!patchCves.findByCveId(v.getCveId()).isEmpty();
-            if(v.isPatchAvailable()!=available){v.setPatchAvailable(available);v.setUpdatedAt(Instant.now());vulns.save(v);}
+            boolean changed=false,available=supportedCves.contains(v.getCveId());
+            if(v.isPatchAvailable()!=available){v.setPatchAvailable(available);changed=true;}
+            if(v.getCvss()==null&&v.getSeverity()!=Severity.UNKNOWN){v.setSeverity(Severity.UNKNOWN);changed=true;}
+            if(changed){v.setUpdatedAt(Instant.now());corrected.add(v);}
         }
+        if(!corrected.isEmpty())vulns.saveAll(corrected);
     }
 
     private void addPatch(String code,String vendor,String product,String version,String zh,String en,double size,boolean reboot,List<String> cves){
@@ -300,6 +388,59 @@ public class DemoDataSeeder implements CommandLineRunner {
                     .evidence("authenticated-package-version:"+vulnerability.getProduct()).firstSeenAt(Instant.now().minus(Duration.ofDays(8)))
                     .lastSeenAt(Instant.now().minus(Duration.ofHours(6))).build());
         }
+    }
+
+    private void upgradeFindingEvidence(){
+        Map<Long,Asset> assetById=new HashMap<>();assets.findAll().forEach(a->assetById.put(a.getId(),a));
+        Map<String,VulnerabilityDefinition> vulnById=new HashMap<>();vulns.findAll().forEach(v->vulnById.put(v.getCveId(),v));
+        Map<Long,ScanJob> scanById=new HashMap<>();scans.findAll().forEach(s->scanById.put(s.getId(),s));
+        List<Finding> changed=new ArrayList<>();
+        for(Finding finding:findings.findAll()){
+            Asset asset=assetById.get(finding.getAssetId());VulnerabilityDefinition vulnerability=vulnById.get(finding.getCveId());
+            ScanJob scan=finding.getScanJobId()==null?null:scanById.get(finding.getScanJobId());
+            if(asset==null||vulnerability==null)continue;
+            String product=vulnerability.getProduct()==null?"Unknown component":vulnerability.getProduct();
+            String observed=observedVersion(product,asset);
+            String method=asset.getOsName()!=null&&asset.getOsName().toLowerCase(Locale.ROOT).contains("windows")
+                    ?"Registry + signed package inventory + service fingerprint"
+                    :"Authenticated package inventory + process fingerprint + version rule";
+            String proof="SCAN EVIDENCE / 扫描证据\n"
+                    +"evidence_id: EV-"+finding.getCveId()+"-"+asset.getAssetCode()+"\n"
+                    +"scan_job: "+(scan==null?"AUTH-BASELINE":scan.getJobNo())+"\n"
+                    +"scanner: Gazellio Agent 1.6.0\n"
+                    +"policy: Authenticated Vulnerability Baseline v2026.09\n"
+                    +"target: "+asset.getHostname()+" ("+asset.getIpAddress()+")\n"
+                    +"asset_ci: "+asset.getAssetCode()+"\n"
+                    +"transport: mTLS agent channel\n"
+                    +"detection_rule: GZ-"+finding.getCveId()+"\n"
+                    +"method: "+method+"\n"
+                    +"component: "+product+"\n"
+                    +"observed_version: "+observed+"\n"
+                    +"installed_inventory: "+asset.getInstalledProducts()+"\n"
+                    +"rule_result: observed version matched affected range\n"
+                    +"service_state: running\n"
+                    +"confidence: HIGH\n"
+                    +"result: VULNERABLE\n"
+                    +"collected_at: "+finding.getLastSeenAt()+"\n"
+                    +"evidence_sha256: "+UUID.nameUUIDFromBytes((finding.getCveId()+asset.getAssetCode()).getBytes(StandardCharsets.UTF_8)).toString().replace("-","");
+            double prioritized=Math.min(10.0,(vulnerability.getCvss()==null?5.0:vulnerability.getCvss())
+                    +(asset.getCriticality()-3)*0.25+(vulnerability.isKev()?0.5:0)+(asset.isInternetExposed()?0.75:0));
+            boolean update=!proof.equals(finding.getEvidence())||!Objects.equals(finding.getRiskScore(),prioritized);
+            if(update){finding.setEvidence(proof);finding.setRiskScore(prioritized);changed.add(finding);}
+        }
+        if(!changed.isEmpty())findings.saveAll(changed);
+    }
+
+    private String observedVersion(String product,Asset asset){
+        String p=product.toLowerCase(Locale.ROOT);
+        if(p.contains("openssh"))return "8.7p1-38.el9";
+        if(p.contains("openssl"))return "3.0.7-28.el9";
+        if(p.contains("tomcat"))return "9.0.86";
+        if(p.contains("nginx"))return "1.24.0";
+        if(p.contains("windows"))return "10.0.20348.2527";
+        if(p.contains("redis"))return "7.2.4";
+        if(p.contains("mysql"))return "8.0.36";
+        return asset.getOsVersion()==null?"inventory match":asset.getOsVersion();
     }
 
     private void seedWorkOrders(){

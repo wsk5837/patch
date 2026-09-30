@@ -4,6 +4,8 @@ import com.gazellio.platform.dto.ApiDtos.*;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
@@ -20,7 +22,6 @@ import static com.gazellio.platform.model.Enums.*;
 public class FindingService {
     private final VulnerabilityDefinitionRepository vulns;
     private final FindingRepository findings;
-    private final AssetRepository assets;
     private final PatchRepository patches;
     private final PatchCveRepository patchCves;
     private final RemediationTaskRepository tasks;
@@ -30,26 +31,37 @@ public class FindingService {
     private final CurrentUserService currentUser;
     private final WorkOrderService workOrders;
 
-    public List<VulnerabilityView> library(String q,String severity,Boolean kev){
-        Set<String> supportedCves=patchCves.findAll().stream().map(PatchCve::getCveId)
-                .collect(java.util.stream.Collectors.toSet());
-        if(supportedCves.isEmpty()) return List.of();
+    public VulnerabilityPageView library(String q,String severity,Boolean kev,Boolean patchAvailable,int page,int size){
         Severity sev=null; if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")) try{sev=Severity.valueOf(severity.toUpperCase());}catch(Exception ignored){}
         String query=q==null||q.isBlank()?null:q;
-        Specification<VulnerabilityDefinition> spec=(root,cq,cb)->root.get("cveId").in(supportedCves);
+        Specification<VulnerabilityDefinition> spec=(root,cq,cb)->cb.conjunction();
         if(query!=null){
             String pattern="%"+query.toLowerCase(Locale.ROOT)+"%";
-            spec=spec.and((root,cq,cb)->cb.or(
+            Set<Long> patchIds=patches.findByPatchIdContainingIgnoreCaseOrTitleZhContainingIgnoreCaseOrTitleEnContainingIgnoreCase(query,query,query)
+                    .stream().map(Patch::getId).collect(java.util.stream.Collectors.toSet());
+            Set<String> patchCveIds=patchIds.isEmpty()?Set.of():patchCves.findByPatchIdIn(patchIds).stream()
+                    .map(PatchCve::getCveId).collect(java.util.stream.Collectors.toSet());
+            spec=spec.and((root,cq,cb)->patchCveIds.isEmpty()?cb.or(
                     cb.like(cb.lower(root.get("cveId")),pattern),
                     cb.like(cb.lower(root.get("titleZh")),pattern),
                     cb.like(cb.lower(root.get("titleEn")),pattern),
                     cb.like(cb.lower(root.get("vendor")),pattern),
-                    cb.like(cb.lower(root.get("product")),pattern)));
+                    cb.like(cb.lower(root.get("product")),pattern)):cb.or(
+                    cb.like(cb.lower(root.get("cveId")),pattern),
+                    cb.like(cb.lower(root.get("titleZh")),pattern),
+                    cb.like(cb.lower(root.get("titleEn")),pattern),
+                    cb.like(cb.lower(root.get("vendor")),pattern),
+                    cb.like(cb.lower(root.get("product")),pattern),
+                    root.get("cveId").in(patchCveIds)));
         }
         if(sev!=null){ Severity selected=sev; spec=spec.and((root,cq,cb)->cb.equal(root.get("severity"),selected)); }
         if(kev!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("kev"),kev));
-        Sort sort=Sort.by(Sort.Order.desc("kev"),Sort.Order.desc("cvss"),Sort.Order.desc("updatedAt"));
-        return view.vulnerabilityViews(vulns.findAll(spec,sort));
+        if(patchAvailable!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("patchAvailable"),patchAvailable));
+        int safePage=Math.max(0,page),safeSize=Math.max(1,Math.min(size,100));
+        Sort sort=Sort.by(Sort.Order.desc("kev"),Sort.Order.desc("cvss").nullsLast(),Sort.Order.desc("updatedAt"));
+        Page<VulnerabilityDefinition> result=vulns.findAll(spec,PageRequest.of(safePage,safeSize,sort));
+        return new VulnerabilityPageView(view.vulnerabilityViews(result.getContent()),result.getTotalElements(),
+                result.getNumber()+1,result.getSize(),Math.max(1,result.getTotalPages()));
     }
     public VulnerabilityView vulnerability(String cve){ return view.vulnerability(vulns.findById(cve).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND))); }
 

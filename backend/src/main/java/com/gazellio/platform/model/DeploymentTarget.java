@@ -18,6 +18,7 @@ public class DeploymentTarget {
     @Column(name = "deployment_id") private Long deploymentId;
     @Column(name = "run_id") private Long runId;
     @Column(name = "asset_id", nullable = false) private Long assetId;
+    @Builder.Default private Integer batchNo = 1;
     @Column(nullable = false, length = 30) @Builder.Default private String status = "WAITING";
     @Column(nullable = false) @Builder.Default private Integer progress = 0;
     private Instant startedAt;

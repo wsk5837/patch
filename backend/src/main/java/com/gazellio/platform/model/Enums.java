@@ -5,7 +5,7 @@ public final class Enums {
 
     public enum UserRole { ADMIN, SECURITY, OPS, APP_OWNER, APPROVER }
     public enum EnvironmentType { DEV, TEST, PREPROD, PROD }
-    public enum Severity { CRITICAL, HIGH, MEDIUM, LOW }
+    public enum Severity { CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN }
     public enum FindingStatus { NEW, CONFIRMED, IN_REMEDIATION, EXEMPTED, FALSE_POSITIVE, RESOLVED, REOPENED }
     public enum IncidentStatus { OPEN, ASSIGNED, IN_REMEDIATION, PENDING_CHANGE, IMPLEMENTING, RESOLVED, CLOSED, EXEMPTED, FALSE_POSITIVE }
     public enum ChangeStatus { DRAFT, PENDING_APPROVAL, APPROVED, IMPLEMENTING, VALIDATING, CLOSED, REJECTED, CANCELLED }

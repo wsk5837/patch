@@ -50,28 +50,17 @@ public class ViewService {
                 p.getSignatureStatus(), p.isRebootRequired(), p.getStatus());
     }
 
-    private static boolean patchMatches(VulnerabilityDefinition vulnerability, Patch patch) {
-        String vulnerabilityProduct = normalize(vulnerability.getProduct());
-        String patchProduct = normalize(patch.getProduct());
-        if (vulnerabilityProduct.isBlank() || patchProduct.isBlank()) return false;
-        return vulnerabilityProduct.equals(patchProduct)
-                || vulnerabilityProduct.contains(patchProduct)
-                || patchProduct.contains(vulnerabilityProduct);
-    }
-
-    private static String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
-    }
-
     public List<AssetView> assetViews(List<Asset> rows) {
         if (rows.isEmpty()) return List.of();
         Map<Long, Long> openCounts = findings.countOpenByAsset(CLOSED_FINDING_STATUSES).stream()
                 .collect(Collectors.toMap(FindingRepository.AssetOpenCount::getAssetId,
                         FindingRepository.AssetOpenCount::getTotal));
         return rows.stream().map(a -> new AssetView(
-                a.getId(), a.getAssetCode(), a.getName(), a.getIpAddress(), a.getOsName(), a.getOsVersion(),
+                a.getId(), a.getAssetCode(), a.getName(), a.getHostname(), a.getIpAddress(), a.getNetworkSegment(),
+                a.getAssetType(), a.getZone(), a.isInternetExposed(), a.getOsName(), a.getOsVersion(),
                 s(a.getEnvironment()), a.getBusinessService(), a.getOwnerId(), a.getOwnerName(), a.getCriticality(),
-                a.getAgentStatus(), a.getPatchBaseline(), a.getLastSeenAt(), openCounts.getOrDefault(a.getId(), 0L)
+                a.getAgentStatus(), a.getPatchBaseline(), a.getInstalledProducts(), a.getMaintenanceWindow(),
+                a.getLastSeenAt(), openCounts.getOrDefault(a.getId(), 0L)
         )).toList();
     }
 
@@ -96,23 +85,40 @@ public class ViewService {
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
         }
-        List<Patch> catalog = patches.findAllByOrderByPublishedDateDesc();
-        for (VulnerabilityDefinition vulnerability : rows) {
-            if (patchCandidatesByCve.containsKey(vulnerability.getCveId())) continue;
-            List<Patch> matched = catalog.stream().filter(p -> patchMatches(vulnerability, p)).limit(4).toList();
-            if (!matched.isEmpty()) {
-                patchCodesByCve.put(vulnerability.getCveId(), matched.stream().map(Patch::getPatchId).toList());
-                patchCandidatesByCve.put(vulnerability.getCveId(), matched.stream().map(ViewService::patchCandidate).toList());
-            }
-        }
-        return rows.stream().map(v -> new VulnerabilityView(
-                v.getCveId(), v.getTitleZh(), v.getTitleEn(), v.getVendor(), v.getProduct(),
-                v.getDescriptionZh(), v.getDescriptionEn(), v.getCvss(), s(v.getSeverity()), v.isKev(),
-                v.isRansomwareKnown(), !patchCandidatesByCve.getOrDefault(v.getCveId(), List.of()).isEmpty(), v.getReferenceUrl(), s(v.getPublishedDate()),
-                s(v.getKevDueDate()), affected.getOrDefault(v.getCveId(), 0L),
-                patchCodesByCve.getOrDefault(v.getCveId(), List.of()),
-                patchCandidatesByCve.getOrDefault(v.getCveId(), List.of())
-        )).toList();
+        return rows.stream().map(v -> {
+            List<PatchCandidateView> candidates=patchCandidatesByCve.getOrDefault(v.getCveId(), List.of());
+            String fixed=candidates.isEmpty()?null:candidates.getFirst().version();
+            String affectedRange=fixed==null?"Refer to the locally archived vendor applicability rule":"< "+fixed;
+            String product=v.getProduct()==null?"component":v.getProduct();
+            String remediationZh=candidates.isEmpty()
+                    ?"暂无已批准补丁；建议先限制暴露面、启用访问控制并进入风险接受审批。"
+                    :"安装本地补丁库中已校验的 "+candidates.getFirst().patchId()+"，完成应用健康检查和漏洞定向复测后关闭。";
+            String remediationEn=candidates.isEmpty()
+                    ?"No approved package is available. Restrict exposure, enforce access controls, and route the risk through exception approval."
+                    :"Install verified package "+candidates.getFirst().patchId()+" from the internal patch library, validate application health, and close only after a targeted retest.";
+            String productLower=product.toLowerCase(Locale.ROOT);
+            boolean virtualPatch=List.of("tomcat","apache","nginx","jetty","struts","jira","php")
+                    .stream().anyMatch(productLower::contains);
+            String mitigationZh=virtualPatch
+                    ?"补丁窗口前可在WAF部署针对该CVE的请求特征阻断规则，限制管理端口和非必要访问，并开启告警监测。"
+                    :"补丁窗口前建议限制漏洞服务的网络暴露，通过ACL、访问控制或临时停用非必要服务降低风险。";
+            String mitigationEn=virtualPatch
+                    ?"Before the patch window, deploy a CVE-specific request blocking rule on the WAF, restrict administrative endpoints and unnecessary access, and enable alerting."
+                    :"Before the patch window, restrict network exposure with ACLs and access controls, or temporarily disable the non-essential vulnerable service.";
+            return new VulnerabilityView(
+                    v.getCveId(), v.getTitleZh(), v.getTitleEn(), v.getVendor(), v.getProduct(),
+                    v.getDescriptionZh(), v.getDescriptionEn(), v.getCvss(), s(v.getSeverity()), v.isKev(),
+                    v.isRansomwareKnown(), !candidates.isEmpty(), v.getReferenceUrl(), s(v.getPublishedDate()),
+                    s(v.getKevDueDate()), affected.getOrDefault(v.getCveId(), 0L),
+                    patchCodesByCve.getOrDefault(v.getCveId(), List.of()), candidates,
+                    "GZ-ADV-"+v.getCveId(),"NETWORK","LOW","NONE",affectedRange,
+                    "通过认证扫描读取 "+product+" 的软件包、进程或服务指纹，核对版本区间并执行定向规则验证。",
+                    "Use authenticated package, process, or service fingerprint collection for "+product+", compare the observed version with the affected range, and run the targeted detection rule.",
+                    remediationZh,remediationEn,mitigationZh,mitigationEn,virtualPatch,
+                    virtualPatch?"建议规则模板：匹配异常请求路径、参数和协议特征；先以观察模式发布，验证无误报后切换阻断。":"该类组件不适合使用WAF虚拟补丁，应使用网络隔离、ACL或主机级缓解措施。",
+                    virtualPatch?"Suggested template: match abnormal request paths, parameters, and protocol characteristics; deploy in monitor mode first and switch to blocking after false-positive validation.":"This component is not suitable for a WAF virtual patch. Use network isolation, ACLs, or host-level mitigations."
+            );
+        }).toList();
     }
 
     public VulnerabilityView vulnerability(VulnerabilityDefinition row) { return vulnerabilityViews(List.of(row)).getFirst(); }
@@ -138,27 +144,24 @@ public class ViewService {
                 patchCandidatesByCve.computeIfAbsent(link.getCveId(), ignored -> new ArrayList<>()).add(patchCandidate(patch));
             }
         }
-        List<Patch> catalog = patches.findAllByOrderByPublishedDateDesc();
-        for (VulnerabilityDefinition vulnerability : vulnerabilityById.values()) {
-            if (patchCandidatesByCve.containsKey(vulnerability.getCveId())) continue;
-            List<Patch> matched = catalog.stream().filter(p -> patchMatches(vulnerability, p)).limit(4).toList();
-            if (!matched.isEmpty()) {
-                patchCodesByCve.put(vulnerability.getCveId(), matched.stream().map(Patch::getPatchId).toList());
-                patchCandidatesByCve.put(vulnerability.getCveId(), matched.stream().map(ViewService::patchCandidate).toList());
-            }
-        }
-
         return rows.stream().map(f -> {
             VulnerabilityDefinition v = vulnerabilityById.get(f.getCveId());
             Asset a = assetById.get(f.getAssetId());
             ScanJob scan = f.getScanJobId() == null ? null : scanById.get(f.getScanJobId());
+            List<String> reasons=new ArrayList<>();
+            if(v!=null&&v.isKev())reasons.add("KNOWN_EXPLOITED");
+            if(v!=null&&v.getSeverity()==Enums.Severity.CRITICAL)reasons.add("CRITICAL_SEVERITY");
+            if(a!=null&&a.isInternetExposed())reasons.add("INTERNET_EXPOSED");
+            if(a!=null&&a.getCriticality()!=null&&a.getCriticality()>=5)reasons.add("CORE_ASSET");
+            if(f.getExemptionExpiresAt()!=null)reasons.add("EXCEPTION_ACTIVE");
             return new FindingView(
                     f.getId(), f.getCveId(), v == null ? f.getCveId() : v.getTitleZh(),
                     v == null ? f.getCveId() : v.getTitleEn(), v == null ? null : v.getCvss(),
                     v == null ? null : s(v.getSeverity()), v != null && v.isKev(), f.getAssetId(),
                     a == null ? null : a.getAssetCode(), a == null ? null : a.getName(),
                     a == null ? null : s(a.getEnvironment()), a == null ? null : a.getBusinessService(),
-                    f.getOwnerName(), s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
+                    f.getOwnerName(), a==null?null:a.getCriticality(), a!=null&&a.isInternetExposed(), reasons,
+                    s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
                     s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(),
@@ -425,10 +428,10 @@ public class ViewService {
 
     public List<DeploymentView> deploymentViews(List<PatchDeployment> rows) {
         if (rows.isEmpty()) return List.of();
-        Set<Long> taskIds = rows.stream().map(PatchDeployment::getTaskId).collect(Collectors.toSet());
+        Set<Long> taskIds = rows.stream().map(PatchDeployment::getTaskId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> patchIds = rows.stream().map(PatchDeployment::getPatchId).collect(Collectors.toSet());
         Set<Long> deploymentIds = rows.stream().map(PatchDeployment::getId).collect(Collectors.toSet());
-        Map<Long, RemediationTask> taskById = index(tasks.findAllById(taskIds), RemediationTask::getId);
+        Map<Long, RemediationTask> taskById = taskIds.isEmpty()?Map.of():index(tasks.findAllById(taskIds), RemediationTask::getId);
         Map<Long, Patch> patchById = index(patches.findAllById(patchIds), Patch::getId);
         Map<Long, List<DeploymentTargetView>> targetsByDeployment = deploymentTargetViews(deploymentIds);
         return rows.stream().map(d -> {
@@ -439,7 +442,9 @@ public class ViewService {
                     d.getPatchId(), patch == null ? null : patch.getPatchId(), d.getEnvironment(), d.getRing(),
                     s(d.getStatus()), d.getProgress(), d.getOrchestrationRunId(), d.getTargetCount(),
                     d.getSuccessCount(), d.getFailureCount(), s(d.getCreatedAt()), s(d.getStartedAt()),
-                    s(d.getCompletedAt()), targetsByDeployment.getOrDefault(d.getId(), List.of())
+                    s(d.getCompletedAt()), d.getSelectionMode(), d.getCidrScopes(), d.getBatchSize(), d.getConcurrency(),
+                    d.getFailureThreshold(), d.getTotalBatches(), d.getScopeSummary(),
+                    targetsByDeployment.getOrDefault(d.getId(), List.of())
             );
         }).toList();
     }
@@ -456,7 +461,7 @@ public class ViewService {
             return new AbstractMap.SimpleEntry<>(target.getDeploymentId(), new DeploymentTargetView(
                     target.getId(), target.getAssetId(), asset == null ? null : asset.getAssetCode(),
                     asset == null ? null : asset.getName(), asset == null ? null : s(asset.getEnvironment()),
-                    target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
+                    target.getBatchNo(), target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
                     target.getMessage()
             ));
         }).collect(Collectors.groupingBy(Map.Entry::getKey, LinkedHashMap::new,
@@ -473,7 +478,7 @@ public class ViewService {
             return new AbstractMap.SimpleEntry<>(target.getRunId(), new DeploymentTargetView(
                     target.getId(), target.getAssetId(), asset == null ? null : asset.getAssetCode(),
                     asset == null ? null : asset.getName(), asset == null ? null : s(asset.getEnvironment()),
-                    target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
+                    target.getBatchNo(), target.getStatus(), target.getProgress(), s(target.getStartedAt()), s(target.getCompletedAt()),
                     target.getMessage()
             ));
         }).collect(Collectors.groupingBy(Map.Entry::getKey, LinkedHashMap::new,

@@ -238,10 +238,24 @@ public class OrchestrationService {
             if(run.getDeploymentId()!=null)deployments.findById(run.getDeploymentId()).ifPresent(d -> {
                 d.setProgress(run.getProgress());deployments.save(d);
             });
+            PatchDeployment activeDeployment=run.getDeploymentId()==null?null:deployments.findById(run.getDeploymentId()).orElse(null);
+            Integer activeBatch=batchNumber(next.getCode());
             for (DeploymentTarget target : targetsForRun(run)) {
-                target.setStatus("RUNNING");
-                target.setProgress(run.getProgress());
-                target.setMessage(next.getNameZh() + " · " + run.getProgress() + "%");
+                if(activeDeployment!=null&&"CIDR".equalsIgnoreCase(activeDeployment.getSelectionMode())&&activeBatch!=null){
+                    int targetBatch=target.getBatchNo()==null?1:target.getBatchNo();
+                    if(targetBatch<activeBatch){
+                        target.setStatus("SUCCEEDED");target.setProgress(100);target.setCompletedAt(Instant.now());
+                        target.setMessage("批次 "+targetBatch+" · 已完成");
+                    }else if(targetBatch==activeBatch){
+                        target.setStatus("RUNNING");target.setStartedAt(target.getStartedAt()==null?Instant.now():target.getStartedAt());
+                        target.setProgress(batchProgress(next.getCode()));target.setMessage(next.getNameZh());
+                    }else{
+                        target.setStatus("WAITING");target.setProgress(0);target.setMessage("批次 "+targetBatch+" · 等待执行");
+                    }
+                }else{
+                    target.setStatus("RUNNING");target.setProgress(run.getProgress());
+                    target.setMessage(next.getNameZh() + " · " + run.getProgress() + "%");
+                }
                 deploymentTargets.save(target);
             }
         }
@@ -273,6 +287,15 @@ public class OrchestrationService {
             for (DeploymentTarget target : targetsForRun(run)) {
                 target.setStatus("SUCCEEDED"); target.setProgress(100); target.setCompletedAt(Instant.now());
                 target.setMessage("补丁安装、健康检查与证据回写完成"); deploymentTargets.save(target);
+            }
+            if(task==null&&"CIDR".equalsIgnoreCase(dep.getSelectionMode())){
+                for(DeploymentTarget target:targetsForRun(run)){
+                    AssetPatchState state=assetPatchStates.findByAssetIdAndPatchId(target.getAssetId(),dep.getPatchId())
+                            .orElseGet(AssetPatchState::new);
+                    state.setAssetId(target.getAssetId());state.setPatchId(dep.getPatchId());state.setInstalled(true);
+                    state.setVerified(true);state.setInstalledAt(Instant.now());state.setVerifiedAt(Instant.now());
+                    state.setDeploymentNo(dep.getDeploymentNo());assetPatchStates.save(state);
+                }
             }
         }
 
@@ -363,7 +386,7 @@ public class OrchestrationService {
         r.setCompletedAt(Instant.now());
         runs.save(r);
 
-        RemediationTask task = tasks.findById(r.getTaskId()).orElse(null);
+        RemediationTask task = r.getTaskId()==null?null:tasks.findById(r.getTaskId()).orElse(null);
         if (task != null) {
             Asset source = assets.findById(task.getAssetId()).orElse(null);
             if (source != null) {
@@ -420,5 +443,18 @@ public class OrchestrationService {
         List<DeploymentTarget> targets=deploymentTargets.findByRunIdOrderByAssetIdAsc(run.getId());
         if(targets.isEmpty()&&run.getDeploymentId()!=null)targets=deploymentTargets.findByDeploymentIdOrderByAssetIdAsc(run.getDeploymentId());
         return targets;
+    }
+
+    private Integer batchNumber(String code){
+        if(code==null||!code.matches("B\\d{3}_.*"))return null;
+        try{return Integer.parseInt(code.substring(1,4));}catch(Exception ignored){return null;}
+    }
+
+    private int batchProgress(String code){
+        if(code==null)return 1;
+        if(code.endsWith("PRECHECK"))return 20;
+        if(code.endsWith("INSTALL"))return 70;
+        if(code.endsWith("VERIFY"))return 95;
+        return 1;
     }
 }

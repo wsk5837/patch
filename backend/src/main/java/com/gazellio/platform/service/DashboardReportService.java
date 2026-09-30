@@ -25,6 +25,8 @@ public class DashboardReportService {
     private final ScanJobRepository scans;
     private final OrchestrationRunRepository runs;
     private final RemediationTaskRepository tasks;
+    private final SecurityIncidentRepository incidents;
+    private final PatchDeploymentRepository deployments;
     private final ViewService view;
 
     private volatile DashboardView cachedDashboard;
@@ -73,12 +75,18 @@ public class DashboardReportService {
             Map<String, Long> environment = new LinkedHashMap<>();
             Map<EnvironmentType, Long> environmentRaw = environmentCounts();
             for (EnvironmentType value : EnvironmentType.values()) environment.put(value.name(), environmentRaw.getOrDefault(value, 0L));
+            Instant reportNow=now;
 
             ReportView result = new ReportView(
                     vulns.count(),
                     findings.countByStatusNotIn(CLOSED_FINDINGS),
                     findings.countByStatus(FindingStatus.RESOLVED),
                     findings.countByStatus(FindingStatus.FALSE_POSITIVE),
+                    findings.countByStatus(FindingStatus.EXEMPTED),
+                    incidents.findTop200ByOrderByUpdatedAtDesc().stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(reportNow)
+                            &&!List.of(IncidentStatus.CLOSED,IncidentStatus.RESOLVED,IncidentStatus.EXEMPTED,IncidentStatus.FALSE_POSITIVE).contains(i.getStatus())).count(),
+                    deployments.countByStatus(DeploymentStatus.RUNNING),
+                    deployments.countByStatus(DeploymentStatus.FAILED),
                     tasks.countByStatusIn(List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)),
                     approvals.countByStatus(ApprovalStatus.PENDING),
                     totalRuns,
@@ -86,7 +94,10 @@ public class DashboardReportService {
                     totalRuns == 0 ? 100.0 : Math.round(succeededRuns * 1000.0 / totalRuns) / 10.0,
                     patchCompliance(),
                     severity,
-                    environment
+                    environment,
+                    view.findingViews(findings.findTop200ByStatusNotInOrderByRiskScoreDescLastSeenAtDesc(CLOSED_FINDINGS)),
+                    view.findingViews(findings.findTop200ByStatusOrderByRiskScoreDescLastSeenAtDesc(FindingStatus.EXEMPTED)),
+                    view.deploymentViews(deployments.findTop200ByOrderByCreatedAtDesc())
             );
             cachedReport = result;
             reportExpiresAt = now.plus(REPORT_CACHE_TTL);

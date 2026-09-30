@@ -47,7 +47,7 @@ public class ThreatIntelSyncService {
     }
 
     @Transactional
-    public CisaKevSyncResult syncCisaKev(){
+    public synchronized CisaKevSyncResult syncCisaKev(){
         FeedResponse feed=fetchCatalog();
         JsonNode root=feed.body();
         if(root==null||!root.path("vulnerabilities").isArray()) {
@@ -56,20 +56,20 @@ public class ThreatIntelSyncService {
         List<JsonNode> entries=new ArrayList<>();
         root.get("vulnerabilities").elements().forEachRemaining(entries::add);
         Set<String> supportedCves=patchCves.findAll().stream().map(x->x.getCveId().toUpperCase(Locale.ROOT)).collect(Collectors.toSet());
-        List<JsonNode> matched=entries.stream().filter(x->{String cve=text(x,"cveID");return cve!=null&&supportedCves.contains(cve.toUpperCase(Locale.ROOT));}).toList();
-        Set<String> cves=matched.stream().map(x->text(x,"cveID")).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> cves=entries.stream().map(x->text(x,"cveID")).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<String,VulnerabilityDefinition> existing=repo.findAllById(cves).stream().collect(Collectors.toMap(VulnerabilityDefinition::getCveId,Function.identity()));
-        List<VulnerabilityDefinition> updates=new ArrayList<>(matched.size());
+        List<VulnerabilityDefinition> updates=new ArrayList<>(entries.size());
         int created=0,changed=0;
-        for(JsonNode x:matched){
+        for(JsonNode x:entries){
             String cve=text(x,"cveID"); if(cve==null)continue;
             boolean isNew=!existing.containsKey(cve);
-            VulnerabilityDefinition v=existing.getOrDefault(cve,VulnerabilityDefinition.builder().cveId(cve).cvss(null).severity(Severity.HIGH).patchAvailable(true).build());
+            VulnerabilityDefinition v=existing.getOrDefault(cve,VulnerabilityDefinition.builder().cveId(cve).cvss(null).severity(Severity.UNKNOWN).patchAvailable(false).build());
+            if(v.getCvss()==null)v.setSeverity(Severity.UNKNOWN);
             String vendor=limit(text(x,"vendorProject"),160),product=limit(text(x,"product"),160),name=limit(text(x,"vulnerabilityName"),500);
             v.setVendor(vendor); v.setProduct(product); v.setKev(true); v.setRansomwareKnown("Known".equalsIgnoreCase(text(x,"knownRansomwareCampaignUse")));
             v.setTitleEn(name==null?cve:name); v.setTitleZh(limit((vendor==null?"":vendor+" ")+(product==null?"":product+" ")+"已知利用漏洞（"+cve+"）",500));
             v.setDescriptionEn(text(x,"shortDescription")); v.setDescriptionZh("该漏洞已被列入 CISA 已知被利用漏洞目录，需结合资产影响范围和厂商修复方案优先处置。");
-            v.setPatchAvailable(true);
+            v.setPatchAvailable(supportedCves.contains(cve.toUpperCase(Locale.ROOT)));
             v.setReferenceUrl("https://www.cisa.gov/known-exploited-vulnerabilities-catalog");
             try{String d=text(x,"dateAdded");if(d!=null)v.setPublishedDate(LocalDate.parse(d));}catch(Exception ignored){}
             try{String d=text(x,"dueDate");if(d!=null)v.setKevDueDate(LocalDate.parse(d));}catch(Exception ignored){}
@@ -78,9 +78,11 @@ public class ThreatIntelSyncService {
         }
         repo.saveAll(updates);
         int catalogTotal=root.path("count").asInt(entries.size());
+        int matched=(int)entries.stream().map(x->text(x,"cveID")).filter(Objects::nonNull)
+                .filter(cve->supportedCves.contains(cve.toUpperCase(Locale.ROOT))).count();
         CisaKevSyncResult result=new CisaKevSyncResult(text(root,"catalogVersion"),text(root,"dateReleased"),catalogTotal,
-                matched.size(),created,changed,Math.max(0,catalogTotal-matched.size()),Instant.now().toString(),feed.source());
-        log.info("CISA KEV sync completed: source={}, catalogTotal={}, matched={}, created={}, updated={}",feed.source(),catalogTotal,matched.size(),created,changed);
+                matched,created,changed,Math.max(0,catalogTotal-matched),Instant.now().toString(),feed.source());
+        log.info("CISA KEV sync completed: source={}, catalogTotal={}, matched={}, created={}, updated={}",feed.source(),catalogTotal,matched,created,changed);
         return result;
     }
 
