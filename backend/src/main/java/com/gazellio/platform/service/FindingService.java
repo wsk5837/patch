@@ -70,7 +70,8 @@ public class FindingService {
     @Transactional
     public FindingView confirm(Long id, FindingActionRequest req){
         Finding f=findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if(f.getStatus()==FindingStatus.RESOLVED||f.getStatus()==FindingStatus.FALSE_POSITIVE||f.getStatus()==FindingStatus.EXEMPTED) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finding is closed");
+        if(f.getStatus()!=FindingStatus.NEW&&f.getStatus()!=FindingStatus.REOPENED&&f.getStatus()!=FindingStatus.CONFIRMED)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Only a new or reopened finding can be confirmed");
         f.setStatus(FindingStatus.CONFIRMED); findings.save(f);
         SecurityIncident incident=workOrders.ensureForFinding(f);
         audit.log("FINDING",f.getId(),"CONFIRM","确认漏洞并生成安全事件工单 "+incident.getIncidentNo(),"Finding confirmed and security incident created: "+incident.getIncidentNo(),currentUser.name());

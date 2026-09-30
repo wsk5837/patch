@@ -298,6 +298,19 @@ public class DemoDataSeeder implements CommandLineRunner {
             VulnerabilityDefinition vulnerability=vulns.findById(f.getCveId()).orElse(null);
             if(asset==null||vulnerability==null)continue;
             RemediationTask task=tasks.findByFindingId(f.getId()).orElse(null);
+            // A scan finding remains in the confirmation queue. Older demo
+            // versions created incidents at scan time; remove only those empty
+            // legacy shells so the event appears after explicit confirmation.
+            if((f.getStatus()==FindingStatus.NEW||f.getStatus()==FindingStatus.REOPENED)&&task==null){
+                incidents.findByFindingId(f.getId()).ifPresent(incident->{
+                    if(incident.getRemediationTaskId()==null&&incident.getChangeOrderId()==null){
+                        incidents.delete(incident);
+                        f.setSecurityIncidentId(null);
+                        findings.save(f);
+                    }
+                });
+                continue;
+            }
             IncidentStatus incidentStatus;
             if(f.getStatus()==FindingStatus.RESOLVED)incidentStatus=IncidentStatus.CLOSED;
             else if(f.getStatus()==FindingStatus.FALSE_POSITIVE)incidentStatus=IncidentStatus.FALSE_POSITIVE;

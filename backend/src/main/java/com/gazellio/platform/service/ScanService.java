@@ -28,7 +28,6 @@ public class ScanService {
     private final RemediationTaskRepository tasks;
     private final ApprovalRequestRepository approvals;
     private final OrchestrationService orchestrationService;
-    private final WorkOrderService workOrderService;
     private final SecurityIncidentRepository incidents;
     private final ChangeWorkOrderRepository changeOrders;
     private final OrchestrationRunRepository runs;
@@ -133,9 +132,9 @@ public class ScanService {
             if(f.getStatus()==FindingStatus.RESOLVED) { f.setStatus(FindingStatus.REOPENED); f.setResolvedAt(null); }
             if(f.getStatus()==FindingStatus.EXEMPTED && f.getExemptionExpiresAt()!=null && !f.getExemptionExpiresAt().isAfter(Instant.now())) { f.setStatus(FindingStatus.REOPENED); f.setExemptedAt(null); f.setExemptionExpiresAt(null); f.setExemptionReason(null); }
         }
-        Finding saved=findings.save(f);
-        workOrderService.ensureForFinding(saved);
-        return saved;
+        // A scanner only records evidence. Creating an ITSM security incident is
+        // a separate human decision made when the finding is confirmed.
+        return findings.save(f);
     }
 
     private double risk(VulnerabilityDefinition v,Asset a){

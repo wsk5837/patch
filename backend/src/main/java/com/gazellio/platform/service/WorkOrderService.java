@@ -32,10 +32,25 @@ public class WorkOrderService {
     private final CurrentUserService currentUser;
 
     public List<SecurityIncidentView> incidents() {
-        return view.incidentViews(incidents.findTop200ByOrderByUpdatedAtDesc());
+        List<SecurityIncident> rows = incidents.findTop200ByOrderByUpdatedAtDesc();
+        Set<Long> pendingConfirmation = findings.findAllById(rows.stream().map(SecurityIncident::getFindingId).toList())
+                .stream()
+                .filter(f -> f.getStatus() == FindingStatus.NEW || f.getStatus() == FindingStatus.REOPENED)
+                .map(Finding::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        return view.incidentViews(rows.stream()
+                .filter(i -> !pendingConfirmation.contains(i.getFindingId()))
+                .toList());
     }
 
-    public SecurityIncidentView incident(Long id) { return view.incident(requireIncident(id)); }
+    public SecurityIncidentView incident(Long id) {
+        SecurityIncident incident = requireIncident(id);
+        Finding finding = findings.findById(incident.getFindingId()).orElseThrow();
+        if (finding.getStatus() == FindingStatus.NEW || finding.getStatus() == FindingStatus.REOPENED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Finding must be confirmed before opening its security incident");
+        }
+        return view.incident(incident);
+    }
 
     public List<ChangeWorkOrderView> changes() {
         return view.changeViews(changes.findTop200ByOrderByUpdatedAtDesc());
@@ -54,8 +69,27 @@ public class WorkOrderService {
 
     @Transactional
     public SecurityIncident ensureForFinding(Finding finding) {
+        if (finding.getStatus() != FindingStatus.CONFIRMED && finding.getStatus() != FindingStatus.IN_REMEDIATION) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Finding must be confirmed before a security incident can be created");
+        }
         SecurityIncident existing = incidents.findByFindingId(finding.getId()).orElse(null);
-        if (existing != null) return existing;
+        if (existing != null) {
+            if (Set.of(IncidentStatus.CLOSED, IncidentStatus.RESOLVED, IncidentStatus.EXEMPTED,
+                    IncidentStatus.FALSE_POSITIVE).contains(existing.getStatus())) {
+                existing.setStatus(existing.getOwnerId() == null ? IncidentStatus.OPEN : IncidentStatus.ASSIGNED);
+                existing.setResolvedAt(null);
+                existing.setClosedAt(null);
+                existing.setDecisionReason(null);
+                existing.setUpdatedAt(Instant.now());
+                incidents.save(existing);
+            }
+            if (!Objects.equals(finding.getSecurityIncidentId(), existing.getId())) {
+                finding.setSecurityIncidentId(existing.getId());
+                findings.save(finding);
+            }
+            return existing;
+        }
         Asset asset = assets.findById(finding.getAssetId()).orElseThrow();
         VulnerabilityDefinition vulnerability = vulnerabilities.findById(finding.getCveId()).orElseThrow();
         String priority = priority(vulnerability, asset);
@@ -73,13 +107,10 @@ public class WorkOrderService {
                 .dueAt(Instant.now().plus(Duration.ofDays(days)))
                 .build());
         finding.setSecurityIncidentId(incident.getId());
-        if (finding.getStatus() == FindingStatus.NEW || finding.getStatus() == FindingStatus.REOPENED) {
-            finding.setStatus(FindingStatus.CONFIRMED);
-        }
         findings.save(finding);
         audit.log("SECURITY_INCIDENT", incident.getId(), "CREATE",
-                "漏洞实例已同步生成安全事件工单 " + incident.getIncidentNo(),
-                "Security incident created from finding " + incident.getIncidentNo(), actor());
+                "漏洞确认后生成安全事件工单 " + incident.getIncidentNo(),
+                "Security incident created after finding confirmation " + incident.getIncidentNo(), actor());
         return incident;
     }
 
