@@ -70,6 +70,10 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
 
         addColumn("approval_requests", "change_order_id", "bigint");
         addColumn("findings", "security_incident_id", "bigint");
+        addColumn("findings", "compensating_control", "text");
+        addColumn("findings", "residual_risk", "text");
+        addColumn("findings", "exemption_approved_by", "varchar(120)");
+        addColumn("findings", "exemption_approved_at", "timestamp with time zone");
         addColumn("scan_jobs", "automation_run_id", "bigint");
         addColumn("audit_events", "source_ip", "varchar(80)");
         addColumn("audit_events", "user_agent", "varchar(500)");
@@ -93,6 +97,7 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("patches", "known_issues_en", "text");
 
         addColumn("patch_deployments", "selection_mode", "varchar(30) default 'TASK'");
+        addColumn("patch_deployments", "change_order_id", "bigint");
         addColumn("patch_deployments", "cidr_scopes", "text");
         addColumn("patch_deployments", "batch_size", "integer default 1");
         addColumn("patch_deployments", "concurrency", "integer default 1");
@@ -149,30 +154,20 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         if (!tableExists("remediation_tasks") || !tableExists("findings") || !tableExists("assets")) return;
         jdbc.update("""
                 update remediation_tasks t
-                   set asset_id = f.asset_id,
-                       owner_id = a.owner_id,
-                       owner_name = a.owner_name,
+                   set asset_id = (select f.asset_id from findings f where f.id = t.finding_id),
+                       owner_id = (select a.owner_id from findings f join assets a on a.id = f.asset_id where f.id = t.finding_id),
+                       owner_name = (select a.owner_name from findings f join assets a on a.id = f.asset_id where f.id = t.finding_id),
                        updated_at = current_timestamp
-                  from findings f
-                  join assets a on a.id = f.asset_id
-                 where t.finding_id = f.id
-                   and (t.asset_id is distinct from f.asset_id
-                     or t.owner_id is distinct from a.owner_id
-                     or t.owner_name is distinct from a.owner_name)
+                 where exists (select 1 from findings f join assets a on a.id = f.asset_id where f.id = t.finding_id)
                 """);
         if (tableExists("security_incidents")) {
             jdbc.update("""
                     update security_incidents i
-                       set asset_id = f.asset_id,
-                           owner_id = a.owner_id,
-                           owner_name = a.owner_name,
+                       set asset_id = (select f.asset_id from findings f where f.id = i.finding_id),
+                           owner_id = (select a.owner_id from findings f join assets a on a.id = f.asset_id where f.id = i.finding_id),
+                           owner_name = (select a.owner_name from findings f join assets a on a.id = f.asset_id where f.id = i.finding_id),
                            updated_at = current_timestamp
-                      from findings f
-                      join assets a on a.id = f.asset_id
-                     where i.finding_id = f.id
-                       and (i.asset_id is distinct from f.asset_id
-                         or i.owner_id is distinct from a.owner_id
-                         or i.owner_name is distinct from a.owner_name)
+                     where exists (select 1 from findings f join assets a on a.id = f.asset_id where f.id = i.finding_id)
                     """);
         }
     }

@@ -136,12 +136,18 @@ public class FindingService {
         if(f.getRemediationTaskId()!=null) throw new ResponseStatusException(HttpStatus.CONFLICT,"Finding already has a remediation task");
         String reason=req==null?null:req.reason();
         if(reason==null||reason.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Exemption reason is required");
+        String control=req.compensatingControl();
+        String residualRisk=req.residualRisk();
+        if(control==null||control.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Compensating control is required");
+        if(residualRisk==null||residualRisk.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Residual risk assessment is required");
         Instant expires=Instant.now().plus(Duration.ofDays(30));
         if(req.expiresAt()!=null&&!req.expiresAt().isBlank()){
             try{expires=LocalDate.parse(req.expiresAt()).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();}
             catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid exemption expiry date");}
         }
-        f.setStatus(FindingStatus.EXEMPTED);f.setExemptionReason(reason);f.setExemptedAt(Instant.now());f.setExemptionExpiresAt(expires);findings.save(f);
+        f.setStatus(FindingStatus.EXEMPTED);f.setExemptionReason(reason.trim());f.setCompensatingControl(control.trim());
+        f.setResidualRisk(residualRisk.trim());f.setExemptedAt(Instant.now());f.setExemptionExpiresAt(expires);
+        f.setExemptionApprovedBy(currentUser.name());f.setExemptionApprovedAt(Instant.now());findings.save(f);
         incidents.findByFindingId(id).ifPresent(i->{i.setStatus(IncidentStatus.EXEMPTED);i.setDecisionReason(reason);i.setUpdatedAt(Instant.now());incidents.save(i);});
         audit.log("FINDING",f.getId(),"EXEMPT","漏洞已豁免至 "+expires,"Finding exempted until "+expires,currentUser.name());
         return view.finding(f);
@@ -155,7 +161,8 @@ public class FindingService {
         List<String> errors=new ArrayList<>();int succeeded=0;
         for(Long id:ids){
             try{
-                FindingActionRequest item=new FindingActionRequest(req.reason(),null,req.expiresAt());
+                FindingActionRequest item=new FindingActionRequest(req.reason(),null,req.expiresAt(),
+                        req.compensatingControl(),req.residualRisk());
                 switch(action){
                     case "CONFIRM" -> confirm(id,item);
                     case "FALSE_POSITIVE" -> {

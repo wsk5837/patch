@@ -33,4 +33,8 @@ public class Finding {
     @Column(columnDefinition="TEXT") private String evidence;
     @Column(columnDefinition="TEXT") private String falsePositiveReason;
     @Column(columnDefinition="TEXT") private String exemptionReason;
+    @Column(columnDefinition="TEXT") private String compensatingControl;
+    @Column(columnDefinition="TEXT") private String residualRisk;
+    @Column(length=120) private String exemptionApprovedBy;
+    private Instant exemptionApprovedAt;
 }

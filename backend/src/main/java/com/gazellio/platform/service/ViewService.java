@@ -159,7 +159,9 @@ public class ViewService {
                     s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), task == null ? null : task.getTaskNo(), s(f.getFirstSeenAt()),
                     s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
-                    s(f.getExemptionExpiresAt()), f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
+                    s(f.getExemptionExpiresAt()), f.getCompensatingControl(), f.getResidualRisk(),
+                    f.getExemptionApprovedBy(), s(f.getExemptionApprovedAt()),
+                    f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
                     patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
                     patchCandidatesByCve.getOrDefault(f.getCveId(), List.of())
             );

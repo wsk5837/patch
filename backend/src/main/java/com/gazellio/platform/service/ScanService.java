@@ -43,8 +43,18 @@ public class ScanService {
 
     @Transactional
     public ScanJobView create(ScanCreateRequest req){
+        String scanType=req.scanType().trim().toUpperCase(Locale.ROOT);
+        String targetType=req.targetType().trim().toUpperCase(Locale.ROOT);
+        if(!Set.of("AUTHENTICATED","NETWORK").contains(scanType))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan type");
+        if(!Set.of("ALL","NETWORK_SEGMENT","CIDR","ENVIRONMENT","SERVICE","ASSET","ASSET_IDS").contains(targetType))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan target type");
+        if("AUTHENTICATED".equals(scanType)&&(req.credentialType()==null||"NONE".equalsIgnoreCase(req.credentialType())))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Authenticated scan requires an agent or credential");
         UserAccount u=currentUser.current();
-        ScanJob j=scans.save(ScanJob.builder().jobNo("SCN-"+System.currentTimeMillis()).name(req.name()).scanType(req.scanType()).targetType(req.targetType()).targetValue(req.targetValue()).credentialType(req.credentialType()).status(ScanStatus.QUEUED).progress(0).requestedById(u==null?null:u.getId()).requestedByName(currentUser.name()).build());
+        ScanJob j=scans.save(ScanJob.builder().jobNo("SCN-"+System.currentTimeMillis()).name(req.name().trim()).scanType(scanType).targetType(targetType).targetValue(req.targetValue().trim()).credentialType(req.credentialType()).status(ScanStatus.QUEUED).progress(0).requestedById(u==null?null:u.getId()).requestedByName(currentUser.name()).build());
+        if(resolveTargets(j).isEmpty())
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"No active assets match the selected scan scope");
         audit.log("SCAN",j.getId(),"CREATE","创建扫描任务 "+j.getJobNo(),"Created scan job "+j.getJobNo(),currentUser.name());
         return view.scan(j);
     }
@@ -94,15 +104,44 @@ public class ScanService {
         String type=j.getTargetType().toUpperCase(Locale.ROOT); String val=j.getTargetValue()==null?"":j.getTargetValue();
         List<Asset> all=assets.findByActiveTrueOrderByNameAsc();
         return switch(type){
+            case "ALL" -> all;
             case "ASSET", "ASSET_IDS" -> {
-                Set<String> ids=new HashSet<>(Arrays.asList(val.split(",")));
+                Set<String> ids=Arrays.stream(val.split("[,\\s]+"))
+                        .map(String::trim).filter(v->!v.isBlank()).collect(java.util.stream.Collectors.toSet());
                 yield all.stream().filter(a->ids.contains(String.valueOf(a.getId()))||ids.contains(a.getAssetCode())).toList();
+            }
+            case "NETWORK_SEGMENT" -> all.stream().filter(a->a.getNetworkSegment()!=null&&a.getNetworkSegment().equalsIgnoreCase(val)).toList();
+            case "CIDR" -> {
+                Cidr cidr;
+                try{cidr=Cidr.parse(val);}catch(IllegalArgumentException ex){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,ex.getMessage());}
+                yield all.stream().filter(a->cidr.contains(a.getIpAddress())).toList();
             }
             case "ENVIRONMENT" -> all.stream().filter(a->a.getEnvironment().name().equalsIgnoreCase(val)).toList();
             case "SERVICE" -> all.stream().filter(a->a.getBusinessService()!=null&&a.getBusinessService().equalsIgnoreCase(val)).toList();
             case "SERVICE_ENV" -> { String[] parts=val.split("\\|",2); String svc=parts.length>0?parts[0]:""; String env=parts.length>1?parts[1]:""; yield all.stream().filter(a->a.getBusinessService()!=null&&a.getBusinessService().equalsIgnoreCase(svc)&&a.getEnvironment().name().equalsIgnoreCase(env)).toList(); }
-            default -> all;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan target type");
         };
+    }
+
+    private record Cidr(long network,long mask){
+        static Cidr parse(String input){
+            String[] parts=input==null?new String[0]:input.trim().split("/");
+            if(parts.length!=2)throw new IllegalArgumentException("Invalid CIDR: "+input);
+            int prefix;
+            try{prefix=Integer.parseInt(parts[1]);}catch(Exception e){throw new IllegalArgumentException("Invalid CIDR prefix: "+input);}
+            if(prefix<0||prefix>32)throw new IllegalArgumentException("Invalid CIDR prefix: "+input);
+            long mask=prefix==0?0:(0xffffffffL<<(32-prefix))&0xffffffffL;
+            long address=ipv4(parts[0]);
+            return new Cidr(address&mask,mask);
+        }
+        boolean contains(String ip){try{return (ipv4(ip)&mask)==network;}catch(Exception ignored){return false;}}
+        private static long ipv4(String input){
+            String[] octets=input==null?new String[0]:input.trim().split("\\.");
+            if(octets.length!=4)throw new IllegalArgumentException("Invalid IPv4 address: "+input);
+            long result=0;
+            for(String octet:octets){int value=Integer.parseInt(octet);if(value<0||value>255)throw new IllegalArgumentException("Invalid IPv4 address: "+input);result=(result<<8)|value;}
+            return result;
+        }
     }
 
     private List<String> candidateCves(Asset a){
@@ -132,7 +171,7 @@ public class ScanService {
         } else {
             f.setScanJobId(scanJobId); f.setLastSeenAt(Instant.now()); f.setOccurrences(f.getOccurrences()+1); f.setEvidence(evidence); f.setRiskScore(risk(v,asset));
             if(f.getStatus()==FindingStatus.RESOLVED) { f.setStatus(FindingStatus.REOPENED); f.setResolvedAt(null); }
-            if(f.getStatus()==FindingStatus.EXEMPTED && f.getExemptionExpiresAt()!=null && !f.getExemptionExpiresAt().isAfter(Instant.now())) { f.setStatus(FindingStatus.REOPENED); f.setExemptedAt(null); f.setExemptionExpiresAt(null); f.setExemptionReason(null); }
+            if(f.getStatus()==FindingStatus.EXEMPTED && f.getExemptionExpiresAt()!=null && !f.getExemptionExpiresAt().isAfter(Instant.now())) { f.setStatus(FindingStatus.REOPENED); f.setExemptedAt(null); f.setExemptionExpiresAt(null); f.setExemptionReason(null); f.setCompensatingControl(null); f.setResidualRisk(null); f.setExemptionApprovedBy(null); f.setExemptionApprovedAt(null); }
         }
         // A scanner only records evidence. Creating an ITSM security incident is
         // a separate human decision made when the finding is confirmed.

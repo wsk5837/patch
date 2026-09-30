@@ -128,18 +128,27 @@ class PerformanceSmokeTest {
         RemediationTask task = taskRepository.findById(dispatched.remediationTaskId()).orElseThrow();
         task.setStage(RELEASE_APPROVAL);
         taskRepository.save(task);
+        var windowStart=java.time.Instant.now().plus(java.time.Duration.ofHours(1));
+        var windowEnd=windowStart.plus(java.time.Duration.ofHours(2));
         var change = workOrders.createChange(incident.id(), new ChangeCreateRequest(
                 "NORMAL", "生产环境补丁发布", "已完成风险评估", "按批次执行并验证",
-                "失败时回退", null, null));
+                "失败时回退", windowStart.toString(), windowEnd.toString()));
 
         assertNotNull(change.approvalId());
         assertEquals(incident.id(), change.incidentId());
         assertEquals(change.id(), taskRepository.findById(task.getId()).orElseThrow().getChangeOrderId());
 
-        approvals.reject(change.approvalId(), new ApprovalActionRequest("补充回退验证后重新提交"));
+        var context=org.springframework.security.core.context.SecurityContextHolder.getContext();
+        var previousAuthentication=context.getAuthentication();
+        context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("ops",""));
+        try {
+            approvals.reject(change.approvalId(), new ApprovalActionRequest("补充回退验证后重新提交"));
+        } finally {
+            context.setAuthentication(previousAuthentication);
+        }
         var resubmitted = workOrders.resubmitChange(change.id(), new ChangeCreateRequest(
                 "NORMAL", "修订后的生产环境补丁发布", "已补充业务风险评估", "按灰度批次执行并验证",
-                "已验证快照回退", null, null));
+                "已验证快照回退", windowStart.toString(), windowEnd.toString()));
         assertEquals("PENDING_APPROVAL", resubmitted.status());
         assertNotEquals(change.approvalId(), resubmitted.approvalId());
     }
@@ -207,9 +216,9 @@ class PerformanceSmokeTest {
         var patch = patches.list().stream()
                 .filter(item -> item.product() != null && item.product().toLowerCase().contains("openssh"))
                 .findFirst().orElseThrow();
-        var request = new BatchScopeRequest(patch.id(), List.of("10.60.30.0/24", "10.70.30.0/24"),
-                List.of(), List.of("SECURITY_COMPONENT"), null, null, true, List.of(),
-                10, 5, 5.0, "CIDR integration test", "Sun 01:00-05:00");
+        var request = new BatchScopeRequest(patch.id(), List.of("10.70.30.0/24"),
+                List.of("TEST"), List.of("SECURITY_COMPONENT"), null, null, true, List.of(),
+                10, 5, 5.0, "CIDR integration test", "Sun 01:00-05:00", null);
         var preview = batchPatch.preview(request);
         assertTrue(preview.matchedCount() > 0);
         assertTrue(preview.selectedCount() > 0);

@@ -360,10 +360,10 @@ public class OrchestrationService {
         if(retest){
             for(DeploymentTarget target:targetsForRun(run)){
                 target.setStatus("SUCCEEDED");target.setProgress(100);target.setCompletedAt(Instant.now());
-                target.setMessage("安装状态、版本标识、漏洞探针与应用健康验证通过");deploymentTargets.save(target);
+                target.setMessage("补丁安装状态、版本标识与应用健康验证完成，等待定向漏洞扫描");deploymentTargets.save(target);
             }
-            audit.log("RUN",run.getId(),"RETEST_SUCCEEDED","补丁效果复测完成，未重复下载或安装补丁",
-                    "Patch effect retest completed without package download or reinstall","Gazellio Scanner");
+            audit.log("RUN",run.getId(),"RETEST_VALIDATION_READY","补丁安装状态与效果校验完成，等待定向漏洞扫描结果",
+                    "Patch state and effect validation completed; waiting for the targeted vulnerability scan","Gazellio Scanner");
             return;
         }
 

@@ -9,13 +9,14 @@ import PageHeader from '../components/PageHeader'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {envLabel} from '../utils/format'
 
-const initialForm={patchId:'',cidrs:[],environment:'ALL',assetType:'ALL',osName:'',businessService:'',onlineOnly:true,batchSize:20,concurrency:10,failureThreshold:5,planName:'',maintenanceWindow:''}
+const initialForm={patchId:'',cidrs:[],environment:'TEST',assetType:'ALL',osName:'',businessService:'',onlineOnly:true,batchSize:20,concurrency:10,failureThreshold:5,planName:'',maintenanceWindow:'',changeOrderId:''}
 const typeKeys={DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM:'applicationPlatform',APPLICATION_RUNTIME:'applicationRuntime',SECURITY_COMPONENT:'securityComponent',OBSERVABILITY:'observability',COLLABORATION:'collaboration',FILE_SERVICE:'fileService',SEARCH_PLATFORM:'searchPlatform',UNCLASSIFIED:'unclassified',VIRTUAL_MACHINE:'virtualMachine',PHYSICAL_SERVER:'physicalServer',NETWORK_DEVICE:'networkDevice'}
 const typeLabel=(t,value)=>t(typeKeys[value]||value)
 
 export default function BatchPatchPage(){
  const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate()
  const {data:patches=[],loading:patchLoading}=useApiData('/api/patches',{initial:[]})
+ const {data:changes=[]}=useApiData('/api/work-orders/changes',{initial:[]})
  const {data:scopeOptions={networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}})
  const [form,setForm]=useState(initialForm),[preview,setPreview]=useState(null),[excluded,setExcluded]=useState(new Set()),[busy,setBusy]=useState(false)
  const initializedSegments=useRef(false)
@@ -23,7 +24,9 @@ export default function BatchPatchPage(){
  useEffect(()=>{if(!initializedSegments.current&&scopeOptions.networkSegments?.length){initializedSegments.current=true;setForm(v=>({...v,cidrs:scopeOptions.networkSegments.slice(0,1)}))}},[scopeOptions.networkSegments])
  const cidrs=()=>form.cidrs
  const toggleCidr=cidr=>{setForm(v=>({...v,cidrs:v.cidrs.includes(cidr)?v.cidrs.filter(x=>x!==cidr):[...v.cidrs,cidr]}));setPreview(null)}
- const body=(excludedAssetIds=[...excluded])=>({patchId:Number(form.patchId),cidrs:cidrs(),environments:form.environment==='ALL'?[]:[form.environment],assetTypes:form.assetType==='ALL'?[]:[form.assetType],osName:form.osName,businessService:form.businessService,onlineOnly:form.onlineOnly,excludedAssetIds,batchSize:Number(form.batchSize),concurrency:Number(form.concurrency),failureThreshold:Number(form.failureThreshold),planName:form.planName||t('defaultBatchPlan'),maintenanceWindow:form.maintenanceWindow})
+ const productionScope=form.environment==='ALL'||form.environment==='PROD'
+ const eligibleChanges=useMemo(()=>changes.filter(c=>['APPROVED','IMPLEMENTING'].includes(c.status)&&String(c.patchId)===String(form.patchId)),[changes,form.patchId])
+ const body=(excludedAssetIds=[...excluded])=>({patchId:Number(form.patchId),cidrs:cidrs(),environments:form.environment==='ALL'?[]:[form.environment],assetTypes:form.assetType==='ALL'?[]:[form.assetType],osName:form.osName,businessService:form.businessService,onlineOnly:form.onlineOnly,excludedAssetIds,batchSize:Number(form.batchSize),concurrency:Number(form.concurrency),failureThreshold:Number(form.failureThreshold),planName:form.planName||t('defaultBatchPlan'),maintenanceWindow:form.maintenanceWindow,changeOrderId:form.changeOrderId?Number(form.changeOrderId):null})
  const previewScope=async()=>{setBusy(true);try{const result=await api('/api/automation/batch/preview',{method:'POST',body:body([]),timeout:30000});setPreview(result);setExcluded(new Set());toast.push(t('scopeMatched'))}catch(e){toast.push(e.message||t('operationFailed'),'red')}finally{setBusy(false)}}
  const execute=async()=>{setBusy(true);try{const result=await api('/api/automation/batch/runs',{method:'POST',body:body(),timeout:30000});toast.push(t('batchRunStarted'));nav(`/automation/runs/${result.runId}`)}catch(e){toast.push(e.message||t('operationFailed'),'red')}finally{setBusy(false)}}
  const toggle=id=>setExcluded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next})
@@ -31,7 +34,7 @@ export default function BatchPatchPage(){
  const totalSelected=Math.max(0,(preview?.selectedCount||0)-excluded.size)
  const selectedPatch=patches.find(p=>String(p.id)===String(form.patchId))
  return <>
-  <PageHeader title={t('batchPatch')}><button className="btn" disabled={busy} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></PageHeader>
+  <PageHeader title={t('batchPatch')}><button className="btn" disabled={busy||productionScope&&!form.changeOrderId} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0||productionScope&&!form.changeOrderId} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></PageHeader>
   <div className="batch-layout">
    <section className="panel batch-scope-panel"><div className="panel-head"><h2><Network size={18}/>{t('assetScope')}</h2><StatusBadge tone="purple">CIDR</StatusBadge></div><div className="panel-body form-grid">
     <label className="form-field full"><span>{t('choosePatch')}</span><select value={form.patchId} onChange={e=>{setForm({...form,patchId:e.target.value});setPreview(null)}} disabled={patchLoading}>{patches.map(p=><option key={p.id} value={p.id}>{p.patchId} · {pick(p)}</option>)}</select></label>
@@ -40,8 +43,9 @@ export default function BatchPatchPage(){
     <label className="form-field"><span>{t('assetType')}</span><select value={form.assetType} onChange={e=>{setForm({...form,assetType:e.target.value});setPreview(null)}}><option value="ALL">{t('all')}</option>{scopeOptions.assetTypes?.map(value=><option key={value} value={value}>{typeLabel(t,value)}</option>)}</select></label>
     <label className="form-field"><span>{t('os')}</span><select value={form.osName} onChange={e=>{setForm({...form,osName:e.target.value});setPreview(null)}}><option value="">{t('all')}</option>{scopeOptions.osNames?.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
     <label className="form-field"><span>{t('businessService')}</span><select value={form.businessService} onChange={e=>{setForm({...form,businessService:e.target.value});setPreview(null)}}><option value="">{t('all')}</option>{scopeOptions.businessServices?.map(value=><option key={value} value={value}>{localize(value)}</option>)}</select></label>
+    {productionScope&&<label className="form-field full"><span>{t('approvedChange')} *</span><select value={form.changeOrderId} onChange={e=>{setForm({...form,changeOrderId:e.target.value});setPreview(null)}}><option value="">{t('productionChangeRequired')}</option>{eligibleChanges.map(c=><option key={c.id} value={c.id}>{c.changeNo} · {c.patchCode} · {localize(c.summary)}</option>)}</select></label>}
     <label className="check-field full"><input type="checkbox" checked={form.onlineOnly} onChange={e=>{setForm({...form,onlineOnly:e.target.checked});setPreview(null)}}/><span>{t('onlineOnly')}</span></label>
-    <button className="btn primary full" disabled={busy||!form.patchId||cidrs().length===0} onClick={previewScope}><ShieldCheck size={15}/>{t('matchAssets')}</button>
+    <button className="btn primary full" disabled={busy||!form.patchId||cidrs().length===0||productionScope&&!form.changeOrderId} onClick={previewScope}><ShieldCheck size={15}/>{t('matchAssets')}</button>
    </div></section>
    <section className="panel batch-strategy-panel"><div className="panel-head"><h2><SquareStack size={18}/>{t('batchStrategy')}</h2></div><div className="panel-body form-grid">
     <label className="form-field full"><span>{t('planName')}</span><input value={form.planName} onChange={e=>setForm({...form,planName:e.target.value})} placeholder={t('planNamePlaceholder')}/></label>

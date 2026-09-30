@@ -27,9 +27,11 @@ public final class ApiDtos {
     public record AgentFindingItem(@NotBlank String cveId, String evidence) {}
     public record AgentResultRequest(@NotNull Long scanJobId, @NotNull Long assetId, @NotNull List<AgentFindingItem> findings) {}
 
-    public record FindingActionRequest(String reason, Long patchId, String expiresAt) {}
+    public record FindingActionRequest(String reason, Long patchId, String expiresAt,
+                                       String compensatingControl, String residualRisk) {}
     public record BulkFindingActionRequest(@NotNull List<Long> findingIds, @NotBlank String action,
-                                           String reason, String expiresAt) {}
+                                           String reason, String expiresAt, String compensatingControl,
+                                           String residualRisk) {}
     public record BulkFindingActionResult(int requested, int succeeded, int failed, List<String> errors) {}
     public record IncidentActionRequest(Long ownerId, String ownerName, Long patchId, String reason) {}
     public record ChangeCreateRequest(@NotBlank String changeType, @NotBlank String summary,
@@ -59,7 +61,7 @@ public final class ApiDtos {
                                     List<String> environments, List<String> assetTypes, String osName,
                                     String businessService, boolean onlineOnly, List<Long> excludedAssetIds,
                                     Integer batchSize, Integer concurrency, Double failureThreshold,
-                                    String planName, String maintenanceWindow) {}
+                                    String planName, String maintenanceWindow, Long changeOrderId) {}
     public record BatchScopePreview(long matchedCount, long applicableCount, long selectedCount,
                                     long excludedCount, long offlineCount,
                                     int batchSize, int concurrency, int totalBatches, double failureThreshold,
@@ -97,6 +99,8 @@ public final class ApiDtos {
                               List<String> priorityReasons, String status, Double riskScore, Integer occurrences,
                               Long scanJobId, String scanJobNo, Long remediationTaskId, String remediationTaskNo, String firstSeenAt, String lastSeenAt,
                               String evidence, String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
+                              String compensatingControl, String residualRisk, String exemptionApprovedBy,
+                              String exemptionApprovedAt,
                               Long securityIncidentId, String slaDueAt, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
 
     public record ScanJobView(Long id, String jobNo, String name, String scanType, String targetType, String targetValue,

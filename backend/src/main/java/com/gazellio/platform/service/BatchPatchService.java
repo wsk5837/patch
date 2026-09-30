@@ -27,6 +27,8 @@ public class BatchPatchService {
     private final OrchestrationRunStepRepository runSteps;
     private final PatchDeploymentRepository deployments;
     private final DeploymentTargetRepository deploymentTargets;
+    private final ChangeWorkOrderRepository changeOrders;
+    private final RemediationTaskRepository remediationTasks;
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
@@ -69,12 +71,15 @@ public class BatchPatchService {
         String cidrs = String.join(", ", normalizedCidrs(request.cidrs()));
         String planName = value(request.planName(), "CIDR batch patch");
         PatchDeployment deployment = deployments.save(PatchDeployment.builder()
-                .deploymentNo("BDEP-" + now).taskId(null).patchId(scope.patch.getId()).environment(environment)
+                .deploymentNo("BDEP-" + now).taskId(null)
+                .changeOrderId(scope.change == null ? null : scope.change.getId())
+                .patchId(scope.patch.getId()).environment(environment)
                 .ring(planName).status(DeploymentStatus.RUNNING).progress(1).targetCount(scope.targets.size())
                 .selectionMode("CIDR").cidrScopes(cidrs).batchSize(batchSize).concurrency(concurrency)
                 .failureThreshold(threshold).totalBatches(totalBatches)
                 .scopeSummary(scope.targets.size()+" targets · "+totalBatches+" batches · concurrency "+concurrency+
-                        " · window "+value(request.maintenanceWindow(), "not specified"))
+                        " · window "+value(request.maintenanceWindow(), "not specified")+
+                        (scope.change == null ? "" : " · change "+scope.change.getChangeNo()))
                 .startedAt(Instant.now()).build());
         OrchestrationRun run = runs.save(OrchestrationRun.builder()
                 .runNo("BRUN-" + now).templateId(template.getId()).taskId(null).deploymentId(deployment.getId())
@@ -106,8 +111,10 @@ public class BatchPatchService {
         steps.add(step(run.getId(), order, "EVIDENCE", "汇总结果与归档证据", "Aggregate results and archive evidence", false));
         runSteps.saveAll(steps);
         audit.log("BATCH_PATCH", deployment.getId(), "START",
-                "按网段启动批量补丁："+scope.patch.getPatchId()+"，"+scope.targets.size()+"台资产，"+totalBatches+"个批次",
-                "CIDR batch patch started: "+scope.patch.getPatchId()+", "+scope.targets.size()+" assets in "+totalBatches+" batches",
+                "按网段启动批量补丁："+scope.patch.getPatchId()+"，"+scope.targets.size()+"台资产，"+totalBatches+"个批次"+
+                        (scope.change == null ? "" : "，变更单 "+scope.change.getChangeNo()),
+                "CIDR batch patch started: "+scope.patch.getPatchId()+", "+scope.targets.size()+" assets in "+totalBatches+" batches"+
+                        (scope.change == null ? "" : ", change "+scope.change.getChangeNo()),
                 currentUser.name());
         return new BatchRunResult(run.getId(), run.getRunNo(), deployment.getId(), deployment.getDeploymentNo(), scope.targets.size(), totalBatches);
     }
@@ -144,7 +151,28 @@ public class BatchPatchService {
                 .filter(a -> !request.onlineOnly() || "ONLINE".equalsIgnoreCase(a.getAgentStatus()))
                 .toList();
         long excludedCount = applicable.stream().filter(a -> excluded.contains(a.getId())).count();
-        return new Scope(patch, matched.size(), applicable.size(), excludedCount, offline, targets);
+        boolean containsProduction = targets.stream().anyMatch(a -> a.getEnvironment() == EnvironmentType.PROD);
+        ChangeWorkOrder change = null;
+        if (containsProduction) {
+            if (request.changeOrderId() == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "An approved change order is required for production assets");
+            }
+            change = changeOrders.findById(request.changeOrderId()).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.NOT_FOUND, "Change order not found"));
+            if (change.getStatus() != ChangeStatus.APPROVED && change.getStatus() != ChangeStatus.IMPLEMENTING) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "The selected change order is not approved for implementation");
+            }
+            RemediationTask task = remediationTasks.findById(change.getRemediationTaskId()).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.CONFLICT, "The selected change order has no remediation task"));
+            if (!Objects.equals(task.getPatchId(), patch.getId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "The change order does not authorize the selected patch");
+            }
+            if (change.getMaintenanceStart() == null || change.getMaintenanceEnd() == null ||
+                    !change.getMaintenanceEnd().isAfter(change.getMaintenanceStart())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "The selected change order has no valid maintenance window");
+            }
+        }
+        return new Scope(patch, matched.size(), applicable.size(), excludedCount, offline, targets, change);
     }
 
     private boolean applicable(Asset asset, Patch patch) {
@@ -183,7 +211,7 @@ public class BatchPatchService {
     private static double bounded(Double value, double fallback, double min, double max) { return Math.max(min, Math.min(max, value == null ? fallback : value)); }
 
     private record Scope(Patch patch, long matchedCount, long applicableCount, long excludedCount,
-                         long offlineCount, List<Asset> targets) {}
+                         long offlineCount, List<Asset> targets, ChangeWorkOrder change) {}
 
     private record Cidr(long network, long mask) {
         static Cidr parse(String input) {

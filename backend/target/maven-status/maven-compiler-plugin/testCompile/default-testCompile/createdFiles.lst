@@ -1,0 +1,3 @@
+com/gazellio/platform/RepositoryQueryValidationTest.class
+com/gazellio/platform/PerformanceSmokeTest.class
+com/gazellio/platform/SchemaCompatibilityMigrationTest.class

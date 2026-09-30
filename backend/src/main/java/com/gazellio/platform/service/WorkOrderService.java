@@ -142,11 +142,25 @@ public class WorkOrderService {
         SecurityIncident incident = requireIncident(id);
         if (incident.getRemediationTaskId() != null) return view.incident(incident);
         Finding finding = findings.findById(incident.getFindingId()).orElseThrow();
+        if (finding.getStatus() != FindingStatus.CONFIRMED && finding.getStatus() != FindingStatus.IN_REMEDIATION) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Finding must be confirmed before remediation starts");
+        }
+        if (Set.of(IncidentStatus.CLOSED, IncidentStatus.RESOLVED, IncidentStatus.EXEMPTED,
+                IncidentStatus.FALSE_POSITIVE).contains(incident.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Closed incident cannot start remediation");
+        }
         Long patchId = req == null ? null : req.patchId();
         if (patchId == null) patchId = patchCves.findByCveId(finding.getCveId()).stream()
                 .map(PatchCve::getPatchId).filter(pid -> patches.existsById(pid)).findFirst().orElse(null);
         if (patchId == null) throw new ResponseStatusException(HttpStatus.CONFLICT, "No applicable patch selected");
         patches.findById(patchId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Patch not found"));
+        if (!patchCves.existsByPatchIdAndCveId(patchId, finding.getCveId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Selected patch is not mapped to " + finding.getCveId());
+        }
+        if (req == null || req.reason() == null || req.reason().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Patch selection rationale is required");
+        }
         RemediationTask task = tasks.save(RemediationTask.builder()
                 .taskNo("RMD-PENDING-" + UUID.randomUUID())
                 .findingId(finding.getId()).securityIncidentId(incident.getId())
@@ -190,18 +204,16 @@ public class WorkOrderService {
         ChangeType type;
         try { type = ChangeType.valueOf(req.changeType().toUpperCase(Locale.ROOT)); }
         catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid change type"); }
+        validateChangeRequest(req);
         Instant maintenanceStart = parseInstant(req.maintenanceStart());
         Instant maintenanceEnd = parseInstant(req.maintenanceEnd());
-        if (maintenanceStart != null && maintenanceEnd != null && !maintenanceEnd.isAfter(maintenanceStart)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maintenance end must be after start");
-        }
         long stamp = System.currentTimeMillis();
         ChangeWorkOrder change = changes.save(ChangeWorkOrder.builder()
                 .changeNo("CHG-" + stamp).externalChangeNo("AITSM-CHG-" + stamp)
                 .incidentId(incident.getId()).remediationTaskId(task.getId()).changeType(type)
                 .status(ChangeStatus.PENDING_APPROVAL).summary(req.summary().trim())
-                .riskAssessment(blank(req.riskAssessment())).implementationPlan(blank(req.implementationPlan()))
-                .rollbackPlan(blank(req.rollbackPlan())).maintenanceStart(maintenanceStart)
+                .riskAssessment(req.riskAssessment().trim()).implementationPlan(req.implementationPlan().trim())
+                .rollbackPlan(req.rollbackPlan().trim()).maintenanceStart(maintenanceStart)
                 .maintenanceEnd(maintenanceEnd).build());
         ApprovalRequest approval = approvalService.createForTask(task, type,
                 change.getRiskAssessment() == null ? change.getSummary() : change.getRiskAssessment(),
@@ -241,16 +253,14 @@ public class WorkOrderService {
         ChangeType type;
         try { type = ChangeType.valueOf(req.changeType().toUpperCase(Locale.ROOT)); }
         catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid change type"); }
+        validateChangeRequest(req);
         Instant maintenanceStart = parseInstant(req.maintenanceStart());
         Instant maintenanceEnd = parseInstant(req.maintenanceEnd());
-        if (maintenanceStart != null && maintenanceEnd != null && !maintenanceEnd.isAfter(maintenanceStart)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maintenance end must be after start");
-        }
         change.setChangeType(type);
         change.setSummary(req.summary().trim());
-        change.setRiskAssessment(blank(req.riskAssessment()));
-        change.setImplementationPlan(blank(req.implementationPlan()));
-        change.setRollbackPlan(blank(req.rollbackPlan()));
+        change.setRiskAssessment(req.riskAssessment().trim());
+        change.setImplementationPlan(req.implementationPlan().trim());
+        change.setRollbackPlan(req.rollbackPlan().trim());
         change.setMaintenanceStart(maintenanceStart);
         change.setMaintenanceEnd(maintenanceEnd);
         change.setStatus(ChangeStatus.PENDING_APPROVAL);
@@ -293,6 +303,22 @@ public class WorkOrderService {
     }
 
     private static String blank(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+
+    private static void validateChangeRequest(ChangeCreateRequest req) {
+        if (req == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Change request is required");
+        if (blank(req.riskAssessment()) == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Risk assessment is required");
+        if (blank(req.implementationPlan()) == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Implementation plan is required");
+        if (blank(req.rollbackPlan()) == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rollback plan is required");
+        Instant start = parseInstant(req.maintenanceStart());
+        Instant end = parseInstant(req.maintenanceEnd());
+        if (start == null || end == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maintenance window is required");
+        if (!end.isAfter(start))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Maintenance end must be after start");
+    }
 
     private static Instant parseInstant(String value) {
         if (value == null || value.isBlank()) return null;
