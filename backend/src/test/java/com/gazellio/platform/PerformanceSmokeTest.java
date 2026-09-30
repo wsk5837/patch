@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.Duration;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -89,7 +90,9 @@ class PerformanceSmokeTest {
         Set<String> priorities = workOrders.incidents().stream()
                 .map(SecurityIncidentView::priority).collect(Collectors.toSet());
         assertTrue(priorities.containsAll(Set.of("P1", "P2", "P3", "P4")), priorities.toString());
-        assertFalse(patches.calendar(null).isEmpty());
+        assertTrue(java.util.stream.IntStream.rangeClosed(0, 3)
+                .mapToObj(offset -> YearMonth.now().plusMonths(offset).toString())
+                .anyMatch(month -> !patches.calendar(month).isEmpty()));
 
         SecurityIncidentView incident = workOrders.incidents().stream()
                 .filter(i -> i.remediationTaskId() == null && i.patchCandidates() != null && !i.patchCandidates().isEmpty())

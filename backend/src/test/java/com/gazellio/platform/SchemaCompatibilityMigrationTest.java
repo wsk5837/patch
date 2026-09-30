@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:gazellio-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
@@ -36,5 +37,22 @@ class SchemaCompatibilityMigrationTest {
                   and lower(column_name) = 'deployment_id'
                 """, String.class);
         assertEquals("YES", nullable);
+    }
+
+    @Test
+    void restoresColumnsMissingFromALegacyAssetTable() {
+        jdbc.execute("alter table assets drop column internet_exposed");
+
+        migration.migrate();
+
+        assertTrue(columnExists("assets", "internet_exposed"));
+    }
+
+    private boolean columnExists(String table, String column) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from information_schema.columns
+                where lower(table_name) = lower(?) and lower(column_name) = lower(?)
+                """, Integer.class, table, column);
+        return count != null && count > 0;
     }
 }

@@ -6,7 +6,6 @@ import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -58,8 +57,17 @@ public class FindingService {
         if(kev!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("kev"),kev));
         if(patchAvailable!=null) spec=spec.and((root,cq,cb)->cb.equal(root.get("patchAvailable"),patchAvailable));
         int safePage=Math.max(0,page),safeSize=Math.max(1,Math.min(size,100));
-        Sort sort=Sort.by(Sort.Order.desc("kev"),Sort.Order.desc("cvss").nullsLast(),Sort.Order.desc("updatedAt"));
-        Page<VulnerabilityDefinition> result=vulns.findAll(spec,PageRequest.of(safePage,safeSize,sort));
+        spec=spec.and((root,cq,cb)->{
+            // Spring Data's Criteria implementation rejects Sort.Order.nullsLast(). Express the
+            // same ordering through COALESCE so unscored CVEs stay behind scored vulnerabilities.
+            if(cq.getResultType()!=Long.class&&cq.getResultType()!=long.class){
+                cq.orderBy(cb.desc(root.get("kev")),
+                        cb.desc(cb.coalesce(root.<Double>get("cvss"),-1.0)),
+                        cb.desc(root.get("updatedAt")));
+            }
+            return cb.conjunction();
+        });
+        Page<VulnerabilityDefinition> result=vulns.findAll(spec,PageRequest.of(safePage,safeSize));
         return new VulnerabilityPageView(view.vulnerabilityViews(result.getContent()),result.getTotalElements(),
                 result.getNumber()+1,result.getSize(),Math.max(1,result.getTotalPages()));
     }
