@@ -1,5 +1,5 @@
 import React,{useState} from 'react'
-import { ArrowLeft, CheckCircle2, Ban, ShieldCheck, ExternalLink } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Ban, ShieldCheck, ExternalLink, BookOpenText } from 'lucide-react'
 import { useNavigate,useParams } from 'react-router-dom'
 import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
@@ -25,6 +25,7 @@ export default function FindingDetailPage(){
  const reasonLabels={KNOWN_EXPLOITED:t('reasonKnownExploited'),CRITICAL_SEVERITY:t('reasonCritical'),INTERNET_EXPOSED:t('reasonInternetExposed'),CORE_ASSET:t('reasonCoreAsset'),EXCEPTION_ACTIVE:t('reasonException')}
  return <>
   <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions">
+   <button className="btn" onClick={()=>nav(`/vulnerabilities/library/${encodeURIComponent(f.cveId)}`)}><BookOpenText size={15}/>{t('vulnerabilityLibraryDetail')}</button>
    {f.securityIncidentId&&<button className={!f.remediationTaskId&&f.status==='CONFIRMED'?'btn primary next-action':'btn'} onClick={()=>nav(`/work-orders/incidents/${f.securityIncidentId}`)}><ExternalLink size={15}/>{t('securityIncident')}</button>}{f.remediationTaskId&&<button className={f.status==='IN_REMEDIATION'?'btn primary next-action':'btn'} onClick={()=>nav(`/tasks/${f.remediationTaskId}`)}><ExternalLink size={15}/>{t('remediationTask')}</button>}
    {pendingConfirmation&&<><button className="btn" onClick={()=>{setReason('');setFp(true)}}><Ban size={15}/>{t('markFalsePositive')}</button><button className="btn" onClick={()=>{setReason('');setExempt(true)}}><ShieldCheck size={15}/>{t('exemptFinding')}</button><button className="btn primary next-action" onClick={confirm} disabled={busy}><CheckCircle2 size={15}/>{t('confirmFinding')}</button></>}
   </div></div>
