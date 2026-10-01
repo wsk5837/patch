@@ -21,6 +21,8 @@ public class AutomationController {
     @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @PostMapping("/templates") public TemplateView createTemplate(@jakarta.validation.Valid @RequestBody TemplateSaveRequest req){return service.createTemplate(req);}
     @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @PutMapping("/templates/{id}") public TemplateView updateTemplate(@PathVariable Long id,@jakarta.validation.Valid @RequestBody TemplateSaveRequest req){return service.updateTemplate(id,req);}
     @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @DeleteMapping("/templates/{id}") public void deleteTemplate(@PathVariable Long id){service.deleteTemplate(id);}
+    @GetMapping("/bindings") public List<AutomationBindingView> bindings(){return service.bindings();}
+    @PreAuthorize("hasAuthority('AUTOMATION_TEMPLATE_EDIT')") @PutMapping("/bindings") public List<AutomationBindingView> updateBindings(@RequestBody AutomationBindingsUpdateRequest req){return service.updateBindings(req);}
     @GetMapping("/runs") public List<RunView> runs(){return service.runs();}
     @GetMapping("/runs/{id}") public RunView run(@PathVariable Long id){return service.run(id);}
     @PreAuthorize("hasAnyAuthority('AUTOMATION_RUN_CONTROL','AUTOMATION_EXECUTE')") @PostMapping("/runs/{id}/pause") public RunView pause(@PathVariable Long id){return service.pause(id);}

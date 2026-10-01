@@ -22,7 +22,7 @@ public class BatchPatchService {
 
     private final AssetRepository assets;
     private final PatchRepository patches;
-    private final OrchestrationTemplateRepository templates;
+    private final OrchestrationService orchestration;
     private final OrchestrationRunRepository runs;
     private final OrchestrationRunStepRepository runSteps;
     private final PatchDeploymentRepository deployments;
@@ -32,12 +32,13 @@ public class BatchPatchService {
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
+    private final SettingsService settings;
 
     public BatchScopePreview preview(BatchScopeRequest request) {
         Scope scope = resolve(request);
-        int batchSize = bounded(request.batchSize(), 20, 1, 500);
-        int concurrency = bounded(request.concurrency(), Math.min(10, batchSize), 1, Math.min(200, batchSize));
-        double threshold = bounded(request.failureThreshold(), 5.0, 0.1, 100.0);
+        int batchSize = bounded(request.batchSize(), settings.intValue("batchSize",20,1,500), 1, 500);
+        int concurrency = bounded(request.concurrency(), Math.min(settings.intValue("batchConcurrency",10,1,200), batchSize), 1, Math.min(200, batchSize));
+        double threshold = bounded(request.failureThreshold(), settings.intValue("autoRollbackThreshold",5,1,100), 0.1, 100.0);
         int batches = scope.targets.isEmpty() ? 0 : (int) Math.ceil(scope.targets.size() / (double) batchSize);
         List<String> warnings = new ArrayList<>();
         if (scope.offlineCount > 0) warnings.add(scope.offlineCount + " assets are offline");
@@ -59,15 +60,14 @@ public class BatchPatchService {
     public BatchRunResult execute(BatchScopeRequest request) {
         Scope scope = resolve(request);
         if (scope.targets.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "No applicable online assets in the selected scope");
-        int batchSize = bounded(request.batchSize(), 20, 1, 500);
-        int concurrency = bounded(request.concurrency(), Math.min(10, batchSize), 1, Math.min(200, batchSize));
-        double threshold = bounded(request.failureThreshold(), 5.0, 0.1, 100.0);
+        int batchSize = bounded(request.batchSize(), settings.intValue("batchSize",20,1,500), 1, 500);
+        int concurrency = bounded(request.concurrency(), Math.min(settings.intValue("batchConcurrency",10,1,200), batchSize), 1, Math.min(200, batchSize));
+        double threshold = bounded(request.failureThreshold(), settings.intValue("autoRollbackThreshold",5,1,100), 0.1, 100.0);
         int totalBatches = (int) Math.ceil(scope.targets.size() / (double) batchSize);
         Set<EnvironmentType> environments = scope.targets.stream().map(Asset::getEnvironment).collect(Collectors.toCollection(LinkedHashSet::new));
         String environment = environments.size() == 1 ? environments.iterator().next().name() : "MIXED";
         String now = String.valueOf(System.currentTimeMillis());
-        OrchestrationTemplate template = templates.findByCode("PATCH-STANDARD").orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.CONFLICT, "Patch orchestration template is unavailable"));
+        OrchestrationTemplate template = orchestration.resolveBoundTemplate("BATCH_PATCH");
         String cidrs = String.join(", ", normalizedCidrs(request.cidrs()));
         String planName = value(request.planName(), "CIDR batch patch");
         PatchDeployment deployment = deployments.save(PatchDeployment.builder()
@@ -78,7 +78,7 @@ public class BatchPatchService {
                 .selectionMode("CIDR").cidrScopes(cidrs).batchSize(batchSize).concurrency(concurrency)
                 .failureThreshold(threshold).totalBatches(totalBatches)
                 .scopeSummary(scope.targets.size()+" targets · "+totalBatches+" batches · concurrency "+concurrency+
-                        " · window "+value(request.maintenanceWindow(), "not specified")+
+                        " · window "+value(request.maintenanceWindow(), settings.value("maintenanceWindow", "not specified"))+
                         (scope.change == null ? "" : " · change "+scope.change.getChangeNo()))
                 .startedAt(Instant.now()).build());
         OrchestrationRun run = runs.save(OrchestrationRun.builder()

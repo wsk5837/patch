@@ -28,6 +28,7 @@ public class DashboardReportService {
     private final RemediationTaskRepository tasks;
     private final SecurityIncidentRepository incidents;
     private final PatchDeploymentRepository deployments;
+    private final PatchCveRepository patchCves;
     private final ViewService view;
 
     private volatile DashboardView cachedDashboard;
@@ -109,32 +110,61 @@ public class DashboardReportService {
             for(DeploymentStatus value:DeploymentStatus.values())deploymentStatus.put(value.name(),0L);
             deployments.countByStatusGrouped().forEach(row->deploymentStatus.put(row.getStatus().name(),row.getTotal()));
             Instant reportNow=now;
+            List<com.gazellio.platform.model.Finding> allActive=findings.findAllActive();
+            List<com.gazellio.platform.model.Finding> openRows=allActive.stream().filter(f->!CLOSED_FINDINGS.contains(f.getStatus())).toList();
+            Set<String> openCves=openRows.stream().map(com.gazellio.platform.model.Finding::getCveId).collect(java.util.stream.Collectors.toSet());
+            Set<String> mappedCves=patchCves.findByCveIdIn(openCves).stream().map(com.gazellio.platform.model.PatchCve::getCveId).collect(java.util.stream.Collectors.toSet());
+            long withoutPatch=openRows.stream().filter(f->!mappedCves.contains(f.getCveId())).count();
+            Map<Long,com.gazellio.platform.model.Asset> assetById=assets.findByActiveTrueOrderByNameAsc().stream()
+                    .collect(java.util.stream.Collectors.toMap(com.gazellio.platform.model.Asset::getId,java.util.function.Function.identity()));
+            Map<String,com.gazellio.platform.model.VulnerabilityDefinition> vulnById=vulns.findAllById(openCves).stream()
+                    .collect(java.util.stream.Collectors.toMap(com.gazellio.platform.model.VulnerabilityDefinition::getCveId,java.util.function.Function.identity()));
+            long exposedCritical=openRows.stream().filter(f->{var a=assetById.get(f.getAssetId());var v=vulnById.get(f.getCveId());return a!=null&&Boolean.TRUE.equals(a.getInternetExposed())&&v!=null&&(v.getSeverity()==Severity.CRITICAL||v.getSeverity()==Severity.HIGH);}).count();
+            List<com.gazellio.platform.model.SecurityIncident> incidentRows=incidents.findActive(PageRequest.of(0,1000));
+            List<com.gazellio.platform.model.SecurityIncident> openIncidents=incidentRows.stream().filter(i->!List.of(IncidentStatus.CLOSED,IncidentStatus.RESOLVED,IncidentStatus.EXEMPTED,IncidentStatus.FALSE_POSITIVE).contains(i.getStatus())).toList();
+            long overdueCount=openIncidents.stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(reportNow)).count();
+            double slaCompliance=openIncidents.isEmpty()?100.0:Math.round((openIncidents.size()-overdueCount)*1000.0/openIncidents.size())/10.0;
+            Map<String,long[]> ownerStats=new HashMap<>();
+            openRows.forEach(f->ownerStats.computeIfAbsent(value(f.getOwnerName(),"未分派"),k->new long[2])[0]++);
+            openIncidents.stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(reportNow)).forEach(i->ownerStats.computeIfAbsent(value(i.getOwnerName(),"未分派"),k->new long[2])[1]++);
+            List<OwnerBacklogView> ownerBacklog=ownerStats.entrySet().stream()
+                    .map(e->new OwnerBacklogView(e.getKey(),e.getValue()[0],e.getValue()[1]))
+                    .sorted(Comparator.comparingLong(OwnerBacklogView::openFindings).reversed()).limit(8).toList();
+            Map<Long,List<com.gazellio.platform.model.Finding>> byAsset=openRows.stream().collect(java.util.stream.Collectors.groupingBy(com.gazellio.platform.model.Finding::getAssetId));
+            List<RiskAssetView> riskAssets=byAsset.entrySet().stream().map(e->{var a=assetById.get(e.getKey());if(a==null)return null;double highest=e.getValue().stream().mapToDouble(com.gazellio.platform.model.Finding::getRiskScore).max().orElse(0);return new RiskAssetView(a.getId(),a.getAssetCode(),a.getName(),a.getEnvironment().name(),Boolean.TRUE.equals(a.getInternetExposed()),a.getCriticality(),e.getValue().size(),Math.round(highest*10.0)/10.0);})
+                    .filter(Objects::nonNull).sorted((left,right)->{int byRisk=Double.compare(right.highestRisk(),left.highestRisk());return byRisk!=0?byRisk:Long.compare(right.openFindings(),left.openFindings());}).limit(8).toList();
 
             ReportView result = new ReportView(
+                    reportNow.toString(),30,assets.countByActiveTrue(),
                     vulns.count(),
                     findings.countActiveOpen(CLOSED_FINDINGS),
                     findings.countActiveByStatus(FindingStatus.RESOLVED),
                     findings.countActiveByStatus(FindingStatus.FALSE_POSITIVE),
                     findings.countActiveByStatus(FindingStatus.EXEMPTED),
-                    incidents.findTop200ByOrderByUpdatedAtDesc().stream().filter(i->i.getDueAt()!=null&&i.getDueAt().isBefore(reportNow)
-                            &&!List.of(IncidentStatus.CLOSED,IncidentStatus.RESOLVED,IncidentStatus.EXEMPTED,IncidentStatus.FALSE_POSITIVE).contains(i.getStatus())).count(),
+                    overdueCount,
                     deployments.countByStatus(DeploymentStatus.RUNNING),
                     deployments.countByStatus(DeploymentStatus.FAILED),
                     tasks.countActiveByStatusIn(List.of(TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED)),
                     approvals.countActiveByStatus(ApprovalStatus.PENDING),
                     totalRuns,
                     succeededRuns,
+                    withoutPatch,
+                    exposedCritical,
+                    slaCompliance,
                     totalRuns == 0 ? 100.0 : Math.round(succeededRuns * 1000.0 / totalRuns) / 10.0,
                     patchCompliance(),
                     severity,
                     environment,
-                    deploymentStatus
+                    deploymentStatus,
+                    trend(allActive,reportNow,30),ownerBacklog,riskAssets
             );
             cachedReport = result;
             reportExpiresAt = now.plus(REPORT_CACHE_TTL);
             return result;
         }
     }
+
+    private static String value(String value,String fallback){return value==null||value.isBlank()?fallback:value;}
 
     private Map<Severity, Long> severityCounts() {
         EnumMap<Severity, Long> result = new EnumMap<>(Severity.class);

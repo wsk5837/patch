@@ -979,11 +979,17 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedSettings(){
-        if(settings.count()>0) return;
-        settings.save(SystemSetting.builder().settingKey("defaultLanguage").settingValue("zh-CN").build());
-        settings.save(SystemSetting.builder().settingKey("scanPolicyProd").settingValue("0 0 2 * * SAT").build());
-        settings.save(SystemSetting.builder().settingKey("scanPolicyTest").settingValue("0 0 */6 * * *").build());
-        settings.save(SystemSetting.builder().settingKey("maintenanceWindow").settingValue("Sat 00:00-04:00").build());
-        settings.save(SystemSetting.builder().settingKey("autoRollbackThreshold").settingValue("5").build());
+        settingDefault("scanPolicyProd","0 0 2 * * SAT");
+        settingDefault("scanPolicyTest","0 0 */6 * * *");
+        settingDefault("maintenanceWindow","Sat 00:00-04:00");
+        settingDefault("autoRollbackThreshold","5");
+        settingDefault("batchSize","20");
+        settingDefault("batchConcurrency","10");
+        settingDefault("slaP1Days","3");
+        settingDefault("slaP2Days","7");
+        settingDefault("slaP3Days","30");
+        settingDefault("slaP4Days","90");
+        settingDefault("auditRetentionMonths","12");
     }
+    private void settingDefault(String key,String value){if(!settings.existsById(key))settings.save(SystemSetting.builder().settingKey(key).settingValue(value).build());}
 }

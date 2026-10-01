@@ -9,8 +9,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.support.CronExpression;
 
 import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -35,6 +37,8 @@ public class ScanService {
     private final CurrentUserService currentUser;
     private final AuditService audit;
     private final ViewService view;
+    private final SettingsService settings;
+    private final Map<String,ZonedDateTime> scheduledSlots=new java.util.concurrent.ConcurrentHashMap<>();
 
     public List<ScanJobView> jobs(){ return scans.findTop100ByOrderByCreatedAtDesc().stream().map(view::scan).toList(); }
     public ScanJobView job(Long id){return view.scan(scans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND)));}
@@ -57,6 +61,27 @@ public class ScanService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,"No active assets match the selected scan scope");
         audit.log("SCAN",j.getId(),"CREATE","创建扫描任务 "+j.getJobNo(),"Created scan job "+j.getJobNo(),currentUser.name());
         return view.scan(j);
+    }
+
+    @Scheduled(fixedDelay = 60000, initialDelayString = "${app.scheduler.initial-delay-ms:60000}")
+    public void createScheduledScans(){
+        schedule("PROD",settings.value("scanPolicyProd","0 0 2 * * SAT"),"生产资产周期扫描");
+        String nonProductionCron=settings.value("scanPolicyTest","0 0 */6 * * *");
+        schedule("TEST",nonProductionCron,"测试资产周期扫描");
+        schedule("PREPROD",nonProductionCron,"预生产资产周期扫描");
+    }
+
+    private void schedule(String environment,String expression,String name){
+        try{
+            ZonedDateTime now=ZonedDateTime.now().withNano(0);
+            ZonedDateTime windowStart=now.minusMinutes(1).withSecond(0);
+            ZonedDateTime slot=CronExpression.parse(expression).next(windowStart.minusSeconds(1));
+            if(slot==null||slot.isAfter(now)||slot.isBefore(windowStart)||slot.equals(scheduledSlots.get(environment)))return;
+            scheduledSlots.put(environment,slot);
+            create(new ScanCreateRequest(name,"AUTHENTICATED","ENVIRONMENT",environment,"AGENT"));
+        }catch(Exception ex){
+            audit.log("SCAN_SCHEDULE",environment,"SKIP","周期扫描未启动："+ex.getMessage(),"Scheduled scan was not started: "+ex.getMessage(),"Gazellio Scheduler");
+        }
     }
 
     @Scheduled(fixedDelay = 3500, initialDelayString = "${app.scheduler.initial-delay-ms:60000}")

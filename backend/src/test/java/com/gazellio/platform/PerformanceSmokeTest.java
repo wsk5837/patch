@@ -180,7 +180,7 @@ class PerformanceSmokeTest {
                 .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PROD)
                 .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
         assetRepository.save(Asset.builder().assetCode("APPROVAL-PREPROD-"+suffix)
-                .name("Open SSH pre-production").hostname("approval-preprod-"+suffix).ipAddress("198.51.100.11")
+                .name("Open SSH").hostname("approval-preprod-"+suffix).ipAddress("198.51.100.11")
                 .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PREPROD)
                 .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
         Finding finding=findingRepository.save(Finding.builder().assetId(asset.getId()).cveId("CVE-2023-38545")
@@ -220,6 +220,8 @@ class PerformanceSmokeTest {
             implementing.setStage(com.gazellio.platform.model.Enums.TaskStage.PREPROD_PATCH);
             implementing.setStatus(com.gazellio.platform.model.Enums.TaskStatus.BLOCKED);
             taskRepository.save(implementing);
+            context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                    "ops","",List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("TASK_EXECUTE"))));
             var retried=tasks.action(implementing.getId(),"retry",
                     new TaskActionRequest(null,null,null,null,null,null));
             assertEquals("PREPROD_PATCH",retried.stage());

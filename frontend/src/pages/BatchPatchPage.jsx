@@ -19,10 +19,12 @@ export default function BatchPatchPage(){
  const {data:patches=[],loading:patchLoading}=useApiData('/api/patches',{initial:[]})
  const {data:changes=[]}=useApiData('/api/work-orders/changes',{initial:[]})
  const {data:scopeOptions={networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}})
+ const {data:runtimeSettings}=useApiData('/api/settings')
  const [form,setForm]=useState(initialForm),[preview,setPreview]=useState(null),[excluded,setExcluded]=useState(new Set()),[busy,setBusy]=useState(false)
- const initializedSegments=useRef(false)
+ const initializedSegments=useRef(false),initializedPolicy=useRef(false)
  useEffect(()=>{if(!form.patchId&&patches.length){const preferred=patches.find(p=>/openssh/i.test(`${p.product||''} ${p.patchId||''}`))||patches[0];setForm(v=>({...v,patchId:String(preferred.id)}))}},[patches,form.patchId])
  useEffect(()=>{if(!initializedSegments.current&&scopeOptions.networkSegments?.length){initializedSegments.current=true;setForm(v=>({...v,cidrs:scopeOptions.networkSegments.slice(0,1)}))}},[scopeOptions.networkSegments])
+ useEffect(()=>{if(runtimeSettings&&!initializedPolicy.current){initializedPolicy.current=true;setForm(v=>({...v,batchSize:Number(runtimeSettings.batchSize||v.batchSize),concurrency:Number(runtimeSettings.batchConcurrency||v.concurrency),failureThreshold:Number(runtimeSettings.autoRollbackThreshold||v.failureThreshold),maintenanceWindow:runtimeSettings.maintenanceWindow||v.maintenanceWindow}))}},[runtimeSettings])
  const cidrs=()=>form.cidrs
  const toggleCidr=cidr=>{setForm(v=>({...v,cidrs:v.cidrs.includes(cidr)?v.cidrs.filter(x=>x!==cidr):[...v.cidrs,cidr]}));setPreview(null)}
  const productionScope=form.environment==='ALL'||form.environment==='PROD'

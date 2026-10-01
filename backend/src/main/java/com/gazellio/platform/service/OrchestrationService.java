@@ -18,6 +18,16 @@ import static com.gazellio.platform.model.Enums.*;
 @Service
 @RequiredArgsConstructor
 public class OrchestrationService {
+    private static final LinkedHashMap<String,String> BINDING_KEYS=new LinkedHashMap<>();
+    private static final Map<String,String> FALLBACK_CODES=Map.of(
+            "STANDARD_PATCH","PATCH-STANDARD","EMERGENCY_PATCH","PATCH-EMERGENCY",
+            "RETEST","PATCH-RETEST","BATCH_PATCH","PATCH-STANDARD");
+    static {
+        BINDING_KEYS.put("STANDARD_PATCH","automation.template.standard");
+        BINDING_KEYS.put("EMERGENCY_PATCH","automation.template.emergency");
+        BINDING_KEYS.put("RETEST","automation.template.retest");
+        BINDING_KEYS.put("BATCH_PATCH","automation.template.batch");
+    }
     private final OrchestrationTemplateRepository templates;
     private final OrchestrationTemplateStepRepository templateSteps;
     private final OrchestrationRunRepository runs;
@@ -29,12 +39,55 @@ public class OrchestrationService {
     private final AssetRepository assets;
     private final AssetPatchStateRepository assetPatchStates;
     private final PatchRepository patches;
+    private final SystemSettingRepository settings;
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
 
     public List<TemplateView> templates(){
-        return view.templateViews(templates.findByEnabledTrueOrderByNameZhAsc());
+        return view.templateViews(templates.findAllByOrderByNameZhAsc());
+    }
+
+    public List<AutomationBindingView> bindings(){
+        List<AutomationBindingView> result=new ArrayList<>();
+        for(String scenario:BINDING_KEYS.keySet()){
+            OrchestrationTemplate template=resolveBoundTemplate(scenario);
+            result.add(new AutomationBindingView(scenario,template.getId(),template.getCode(),template.getNameZh(),
+                    template.getNameEn(),template.getType(),template.getVersion(),template.isEnabled()));
+        }
+        return result;
+    }
+
+    @Transactional
+    public List<AutomationBindingView> updateBindings(AutomationBindingsUpdateRequest request){
+        if(request==null||request.bindings()==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Bindings are required");
+        for(var entry:request.bindings().entrySet()){
+            String scenario=entry.getKey()==null?"":entry.getKey().trim().toUpperCase(Locale.ROOT);
+            String settingKey=BINDING_KEYS.get(scenario);
+            if(settingKey==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported automation scenario: "+scenario);
+            OrchestrationTemplate template=templates.findById(entry.getValue()).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.NOT_FOUND,"Automation template not found"));
+            if(!template.isEnabled())throw new ResponseStatusException(HttpStatus.CONFLICT,"Disabled template cannot be activated");
+            String expected="RETEST".equals(scenario)?"RETEST":"PATCH";
+            if(!expected.equalsIgnoreCase(template.getType()))throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    scenario+" requires a "+expected+" template");
+            SystemSetting setting=settings.findById(settingKey).orElseGet(() -> SystemSetting.builder().settingKey(settingKey).build());
+            setting.setSettingValue(String.valueOf(template.getId()));setting.setUpdatedAt(Instant.now());settings.save(setting);
+        }
+        audit.log("AUTOMATION_BINDING","runtime","UPDATE","自动化执行场景绑定已生效","Automation runtime bindings activated",currentUser.name());
+        return bindings();
+    }
+
+    public OrchestrationTemplate resolveBoundTemplate(String scenario){
+        String normalized=scenario==null?"":scenario.trim().toUpperCase(Locale.ROOT);
+        String settingKey=BINDING_KEYS.get(normalized);
+        if(settingKey==null)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported automation scenario");
+        OrchestrationTemplate selected=settings.findById(settingKey).map(SystemSetting::getSettingValue)
+                .filter(v->v!=null&&!v.isBlank()).flatMap(v->{try{return templates.findById(Long.parseLong(v));}catch(Exception ignored){return Optional.empty();}})
+                .filter(OrchestrationTemplate::isEnabled).orElse(null);
+        if(selected==null)selected=templates.findByCode(FALLBACK_CODES.get(normalized)).filter(OrchestrationTemplate::isEnabled).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.CONFLICT,"No active orchestration template is bound to "+normalized));
+        return selected;
     }
 
     public TemplateView template(Long id){
@@ -56,6 +109,9 @@ public class OrchestrationService {
     @Transactional
     public TemplateView updateTemplate(Long id,TemplateSaveRequest request){
         OrchestrationTemplate template=templates.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        List<String> boundScenarios=boundScenarios(id);
+        if(!boundScenarios.isEmpty()&&!request.enabled())throw new ResponseStatusException(HttpStatus.CONFLICT,"Active runtime template cannot be disabled");
+        for(String scenario:boundScenarios){String expected="RETEST".equals(scenario)?"RETEST":"PATCH";if(!expected.equalsIgnoreCase(request.type()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Active "+scenario+" template must remain type "+expected);}
         String code=normalizeTemplateCode(request.code());
         templates.findByCode(code).filter(other->!other.getId().equals(id)).ifPresent(other->{throw new ResponseStatusException(HttpStatus.CONFLICT,"Template code already exists");});
         template.setCode(code);template.setNameZh(request.nameZh().trim());template.setNameEn(request.nameEn().trim());
@@ -69,6 +125,9 @@ public class OrchestrationService {
     @Transactional
     public void deleteTemplate(Long id){
         OrchestrationTemplate template=templates.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        boolean bound=BINDING_KEYS.values().stream().map(settings::findById).flatMap(Optional::stream)
+                .anyMatch(s->String.valueOf(id).equals(s.getSettingValue()));
+        if(bound)throw new ResponseStatusException(HttpStatus.CONFLICT,"Template is active in runtime settings and cannot be deleted");
         if(runs.existsByTemplateId(id)){
             template.setEnabled(false);template.setUpdatedAt(Instant.now());templates.save(template);
             audit.log("ORCHESTRATION_TEMPLATE",id,"DISABLE","模板已有执行历史，已停用："+template.getNameZh(),"Template has run history and was disabled: "+template.getNameEn(),currentUser.name());
@@ -76,6 +135,12 @@ public class OrchestrationService {
         }
         templateSteps.deleteByTemplateId(id);templates.delete(template);
         audit.log("ORCHESTRATION_TEMPLATE",id,"DELETE","删除自动化编排模板："+template.getNameZh(),"Deleted orchestration template: "+template.getNameEn(),currentUser.name());
+    }
+
+    private List<String> boundScenarios(Long templateId){
+        return BINDING_KEYS.entrySet().stream().filter(entry->settings.findById(entry.getValue())
+                .map(SystemSetting::getSettingValue).filter(String.valueOf(templateId)::equals).isPresent())
+                .map(Map.Entry::getKey).toList();
     }
 
     private void replaceTemplateSteps(Long templateId,List<TemplateStepSaveRequest> steps){
@@ -138,10 +203,8 @@ public class OrchestrationService {
                     "No mapped " + environment + " asset for business service");
         }
 
-        String templateCode = task.getChangeType() == ChangeType.EMERGENCY
-                ? "PATCH-EMERGENCY"
-                : "PATCH-STANDARD";
-        OrchestrationTemplate tpl = templates.findByCode(templateCode).orElseThrow();
+        OrchestrationTemplate tpl = resolveBoundTemplate(task.getChangeType() == ChangeType.EMERGENCY
+                ? "EMERGENCY_PATCH" : "STANDARD_PATCH");
 
         PatchDeployment dep = deployments.save(PatchDeployment.builder()
                 .deploymentNo("DEP-" + System.currentTimeMillis())
@@ -213,9 +276,7 @@ public class OrchestrationService {
         List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env);
         if(targets.isEmpty()&&source.getEnvironment()==env)targets=List.of(source);
         if(targets.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No mapped retest target");
-        OrchestrationTemplate template=templates.findByCode("PATCH-RETEST").orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Retest orchestration template is unavailable; restart the latest Gazellio release"));
+        OrchestrationTemplate template=resolveBoundTemplate("RETEST");
         OrchestrationRun run=runs.save(OrchestrationRun.builder().runNo("RET-"+System.currentTimeMillis())
                 .templateId(template.getId()).taskId(task.getId()).environment(env.name())
                 .ring("Verification only").status(RunStatus.RUNNING).currentStep(1).progress(1).startedAt(Instant.now()).build());

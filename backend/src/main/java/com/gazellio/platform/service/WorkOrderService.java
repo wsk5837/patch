@@ -31,6 +31,7 @@ public class WorkOrderService {
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
+    private final SettingsService settings;
 
     public List<SecurityIncidentView> incidents() {
         List<SecurityIncident> rows = incidents.findActive(PageRequest.of(0,200));
@@ -94,7 +95,8 @@ public class WorkOrderService {
         Asset asset = assets.findById(finding.getAssetId()).orElseThrow();
         VulnerabilityDefinition vulnerability = vulnerabilities.findById(finding.getCveId()).orElseThrow();
         String priority = priority(vulnerability, asset);
-        long days = switch (priority) { case "P1" -> 3; case "P2" -> 7; case "P3" -> 30; default -> 90; };
+        int defaultDays = switch (priority) { case "P1" -> 3; case "P2" -> 7; case "P3" -> 30; default -> 90; };
+        long days = settings.intValue("sla"+priority+"Days",defaultDays,1,3650);
         long stamp = System.currentTimeMillis();
         SecurityIncident incident = incidents.save(SecurityIncident.builder()
                 .incidentNo("SEC-" + stamp)

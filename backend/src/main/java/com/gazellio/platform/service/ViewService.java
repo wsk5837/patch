@@ -181,7 +181,7 @@ public class ViewService {
         String affectedEn=vulnerability==null?fields.get("affected_condition"):first(vulnerability.getAffectedVersionRangeEn(),fields.get("affected_condition"),"See detection rule");
         String fixed=vulnerability==null?fields.get("fixed_version"):first(vulnerability.getFixedVersion(),fields.get("fixed_version"));
         String rule=vulnerability==null?fields.get("detection_rule"):first(vulnerability.getScannerRuleId(),fields.get("detection_rule"),"GZ-"+finding.getCveId());
-        String os=asset==null?"":first(asset.getOsName(),"").toLowerCase(Locale.ROOT);
+        String os=asset==null?"":Optional.ofNullable(first(asset.getOsName())).orElse("").toLowerCase(Locale.ROOT);
         String evidenceType=first(fields.get("evidence_type"),"PACKAGE_VERSION");
         String defaultSource=os.contains("windows")?"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion":os.contains("ubuntu")||os.contains("debian")?"/var/lib/dpkg/status":"/var/lib/rpm";
         String defaultCommand=os.contains("windows")?"Get-Package -Name "+packageName+" | Select Name,Version":os.contains("ubuntu")||os.contains("debian")?"dpkg-query -W -f='${Package}|${Version}|${Status}\\n' "+packageName:"rpm -q --qf '%{NAME}|%{VERSION}-%{RELEASE}|%{ARCH}\\n' "+packageName;

@@ -219,6 +219,10 @@ public final class ApiDtos {
                                           @NotBlank String stepType,boolean rollbackPoint) {}
     public record TemplateSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
                                       @NotBlank String type,boolean enabled,@NotNull List<TemplateStepSaveRequest> steps) {}
+    public record AutomationBindingView(String scenario,Long templateId,String templateCode,
+                                        String templateNameZh,String templateNameEn,String templateType,
+                                        Integer version,boolean enabled) {}
+    public record AutomationBindingsUpdateRequest(@NotNull Map<String,Long> bindings) {}
 
     public record RunStepView(Long id, Integer stepOrder, String code, String nameZh, String nameEn, String status,
                               String startedAt, String completedAt, String messageZh, String messageEn) {}
@@ -249,10 +253,15 @@ public final class ApiDtos {
                                 List<FindingView> topFindings, List<ScanJobView> recentScans,
                                 List<RunView> recentRuns) {}
 
-    public record ReportView(long totalLibrary, long openFindings, long resolvedFindings, long falsePositives, long exemptions,
+    public record OwnerBacklogView(String owner,long openFindings,long overdue) {}
+    public record RiskAssetView(Long assetId,String assetCode,String assetName,String environment,
+                                boolean internetExposed,int criticality,long openFindings,double highestRisk) {}
+    public record ReportView(String generatedAt,int reportingWindowDays,long totalAssets,long totalLibrary, long openFindings, long resolvedFindings, long falsePositives, long exemptions,
                              long slaOverdue, long runningDeployments, long failedDeployments,
                              long openTasks, long approvalsPending, long automationRuns, long automationSucceeded,
+                             long findingsWithoutPatch,long criticalInternetExposed,double slaComplianceRate,
                              double automationSuccessRate, double patchCompliance,
                              Map<String,Long> severityDistribution, Map<String,Long> environmentDistribution,
-                             Map<String,Long> deploymentStatusDistribution) {}
+                             Map<String,Long> deploymentStatusDistribution,List<TrendPointView> remediationTrend,
+                             List<OwnerBacklogView> ownerBacklog,List<RiskAssetView> riskAssets) {}
 }
