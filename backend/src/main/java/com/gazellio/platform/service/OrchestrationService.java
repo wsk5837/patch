@@ -180,6 +180,34 @@ public class OrchestrationService {
 
     @Transactional
     public RunView startPatchRun(RemediationTask task, String environment, String ring){
+        return startPatchRun(task,environment,ring,null);
+    }
+
+    public List<AssetView> deploymentCandidates(RemediationTask task,String environment){
+        EnvironmentType env;
+        try {
+            env = EnvironmentType.valueOf(environment.toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid environment");
+        }
+
+        Asset source = assets.findById(task.getAssetId()).orElseThrow();
+        if (task.getPatchId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "No patch selected");
+        }
+        Patch patch = patches.findById(task.getPatchId()).orElseThrow();
+        List<Asset> candidates=assets.findByActiveTrueOrderByNameAsc().stream()
+                .filter(a->a.getEnvironment()==env)
+                .filter(a->"ONLINE".equalsIgnoreCase(a.getAgentStatus()))
+                .filter(a->Objects.equals(source.getBusinessService(),a.getBusinessService())||patchApplicable(a,patch))
+                .sorted(Comparator.comparing((Asset a)->!Objects.equals(source.getBusinessService(),a.getBusinessService()))
+                        .thenComparing(Asset::getName,String.CASE_INSENSITIVE_ORDER))
+                .toList();
+        return view.assetViews(candidates);
+    }
+
+    @Transactional
+    public RunView startPatchRun(RemediationTask task, String environment, String ring,Long selectedAssetId){
         EnvironmentType env;
         try {
             env = EnvironmentType.valueOf(environment.toUpperCase(Locale.ROOT));
@@ -189,18 +217,25 @@ public class OrchestrationService {
 
         findings.findById(task.getFindingId()).orElseThrow();
         Asset source = assets.findById(task.getAssetId()).orElseThrow();
-        if (task.getPatchId() == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "No patch selected");
-        }
+        if (task.getPatchId() == null) throw new ResponseStatusException(HttpStatus.CONFLICT,"No patch selected");
         Patch patch = patches.findById(task.getPatchId()).orElseThrow();
 
-        List<Asset> targets = assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env);
+        List<Asset> targets;
+        if(selectedAssetId!=null){
+            Asset selected=assets.findById(selectedAssetId).orElseThrow(() ->
+                    new ResponseStatusException(HttpStatus.NOT_FOUND,"Selected validation asset not found"));
+            if(!selected.isActive()||selected.getEnvironment()!=env||!"ONLINE".equalsIgnoreCase(selected.getAgentStatus())||
+                    (!Objects.equals(source.getBusinessService(),selected.getBusinessService())&&!patchApplicable(selected,patch)))
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Selected validation asset is not online or patch-compatible");
+            targets=List.of(selected);
+        }else targets = assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env).stream()
+                .filter(Asset::isActive).toList();
         if (targets.isEmpty() && source.getEnvironment() == env) {
             targets = List.of(source);
         }
         if (targets.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "No mapped " + environment + " asset for business service");
+                    "A compatible " + environment + " validation asset must be selected");
         }
 
         OrchestrationTemplate tpl = resolveBoundTemplate(task.getChangeType() == ChangeType.EMERGENCY
@@ -266,6 +301,21 @@ public class OrchestrationService {
                 currentUser.name());
         return view.run(run);
     }
+
+    private boolean patchApplicable(Asset asset,Patch patch){
+        String product=normalizeProduct(patch.getProduct());
+        String inventory=(value(asset.getInstalledProducts())+" "+value(asset.getName())+" "+
+                value(asset.getBusinessService())+" "+value(asset.getCmdbClassName())+" "+value(asset.getOsName())).toLowerCase(Locale.ROOT);
+        if(product.isBlank())return true;
+        if(product.contains("windows server"))return inventory.contains("windows server");
+        if(product.contains("red hat")||product.equals("rhel"))return inventory.contains("red hat")||inventory.contains("rocky");
+        if(product.contains("php cgi"))return inventory.contains("php");
+        if(product.contains("spring framework"))return inventory.contains("spring framework")||inventory.contains("spring boot");
+        return inventory.contains(product)||(product.equals("tomcat")&&inventory.contains("apache tomcat"));
+    }
+
+    private String normalizeProduct(String value){return value(value).toLowerCase(Locale.ROOT).replace("apache ","").trim();}
+    private String value(String value){return value==null?"":value;}
 
     @Transactional
     public RunView startRetestRun(RemediationTask task,String environment){

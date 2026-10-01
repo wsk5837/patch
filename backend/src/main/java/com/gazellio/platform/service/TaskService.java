@@ -38,7 +38,7 @@ public class TaskService {
             currentUser.requireAnyAuthority("TASK_RETEST","TASK_MANAGE");
         else currentUser.requireAnyAuthority("TASK_EXECUTE","TASK_MANAGE");
         switch(normalizedAction){
-            case "start-test" -> { ensure(t,TaskStage.ASSIGNED); t.setStage(TaskStage.TEST_PATCH);t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);orchestration.startPatchRun(t,"TEST","Ring 0 · Test"); }
+            case "start-test" -> { ensure(t,TaskStage.ASSIGNED); t.setStage(TaskStage.TEST_PATCH);t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);orchestration.startPatchRun(t,"TEST","Ring 0 · Test",req==null?null:req.targetAssetId()); }
             case "verify-test" -> verifyApplication(t,TaskStage.APP_VERIFY,TaskStage.TEST_RESCAN,"TEST",req);
             case "verify-preprod" -> verifyApplication(t,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,"PREPROD",req);
             case "verify-prod" -> verifyApplication(t,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN,"PROD",req);
@@ -46,7 +46,7 @@ public class TaskService {
             case "submit-manual-retest" -> submitManualRetest(t,req);
             case "submit-approval" -> throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Create a production change from the linked security incident before approval");
-            case "retry" -> retry(t);
+            case "retry" -> retry(t,req);
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown action");
         }
         t.setUpdatedAt(Instant.now());tasks.save(t);audit.log("TASK",t.getId(),action,"任务动作："+action,"Task action: "+action,currentUser.name());return view.task(t);
@@ -115,12 +115,20 @@ public class TaskService {
         };
     }
 
-    private void retry(RemediationTask t){
+    public List<AssetView> deploymentCandidates(Long id,String environment){
+        RemediationTask task=require(id);
+        String env=environment==null?"":environment.trim().toUpperCase(Locale.ROOT);
+        if(!Set.of("TEST","PREPROD","PROD").contains(env))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid environment");
+        return orchestration.deploymentCandidates(task,env);
+    }
+
+    private void retry(RemediationTask t,TaskActionRequest req){
         if(t.getStatus()!=TaskStatus.BLOCKED)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Only a blocked patch stage can be retried");
-        if(t.getStage()==TaskStage.TEST_PATCH)orchestration.startPatchRun(t,"TEST","Ring 0 · Test");
-        else if(t.getStage()==TaskStage.PREPROD_PATCH)orchestration.startPatchRun(t,"PREPROD","Ring 0 · Pre-production");
-        else if(t.getStage()==TaskStage.PROD_PATCH)orchestration.startPatchRun(t,"PROD","Ring 0 · 5% → Ring 1 · 20% → Ring 2 · 75%");
+        Long target=req==null?null:req.targetAssetId();
+        if(t.getStage()==TaskStage.TEST_PATCH)orchestration.startPatchRun(t,"TEST","Ring 0 · Test",target);
+        else if(t.getStage()==TaskStage.PREPROD_PATCH)orchestration.startPatchRun(t,"PREPROD","Ring 0 · Pre-production",target);
+        else if(t.getStage()==TaskStage.PROD_PATCH)orchestration.startPatchRun(t,"PROD","Ring 0 · 5% → Ring 1 · 20% → Ring 2 · 75%",target);
         else throw new ResponseStatusException(HttpStatus.CONFLICT,"Task cannot retry at current stage");
         t.setStatus(TaskStatus.IN_PROGRESS);
     }

@@ -578,9 +578,16 @@ public class DemoDataSeeder implements CommandLineRunner {
         p.setSignatureStatus("VERIFIED");
         p.setApplicabilityRule(product+" "+version+"；安装前校验操作系统、产品版本、架构与现有补丁替代关系。");
         p.setApplicabilityRuleEn(product+" "+version+"; validate the operating system, product version, architecture and supersedence before installation.");
-        p.setDownloadUrl("https://patch.gazellio.local/vendor/"+code.replace(":","-").toLowerCase(Locale.ROOT));
-        p.setReleaseNotesZh("包含安全修复、安装前检查、完整性校验、失败回滚与重启策略。建议先在测试和预生产环境验证。");
-        p.setReleaseNotesEn("Includes security fixes, pre-checks, integrity validation, rollback and restart policy. Validate in test and pre-production first.");
+        p.setDownloadUrl(null);
+        String cveList=String.join("、",cves);
+        p.setReleaseNotesZh("本补丁用于将 "+product+" 更新至已验证修复版本 "+version+"，覆盖 "+cveList+"。"
+                +"入库时已完成补丁标识、SHA-256 摘要和签名信息登记，并建立漏洞、产品版本与补丁之间的修复映射。"
+                +"执行前必须核对目标资产的产品分支、操作系统和架构，确认依赖条件、维护窗口及回退点；先在测试环境完成安装、应用健康检查和漏洞定向复测，再进入预生产及生产灰度发布。"
+                +(reboot?"该补丁需要重启，集群或多节点服务必须按批次滚动执行，重启后验证关键进程、端口和业务探针。":"该补丁通常无需重启主机，但仍需检查进程占用、服务状态和关键业务探针。"));
+        p.setReleaseNotesEn("This patch updates "+product+" to verified fixed build "+version+" and remediates "+String.join(", ",cves)+". "
+                +"The catalog records the package identity, SHA-256 digest, signing metadata, and vulnerability-to-version remediation mapping. "
+                +"Before execution, validate the target product branch, operating system, architecture, prerequisites, maintenance window, and rollback point. Complete installation, application health checks, and a targeted vulnerability retest in test before progressive pre-production and production rollout. "
+                +(reboot?"A restart is required; clustered services must use a rolling batch and validate critical processes, ports, and business probes afterwards.":"A host restart is normally not required, but process locks, service state, and critical business probes must still be checked."));
         p.setSignatureIssuer(vendor+" Code Signing CA");
         p.setSignatureFingerprint("SHA256:"+UUID.nameUUIDFromBytes((code+vendor).getBytes(StandardCharsets.UTF_8)).toString().replace("-","").toUpperCase(Locale.ROOT));
         p.setIntegrityVerifiedAt(Instant.now().minus(Duration.ofHours(2)));
@@ -877,13 +884,13 @@ public class DemoDataSeeder implements CommandLineRunner {
 
     private void seedTemplatesAndRuns(){
         if(templates.count()==0){
-            OrchestrationTemplate standard=templates.save(OrchestrationTemplate.builder().code("PATCH-STANDARD").nameZh("标准补丁发布编排").nameEn("Standard Patch Rollout").type("PATCH").version(3).build());
+            OrchestrationTemplate standard=templates.save(OrchestrationTemplate.builder().code("PATCH-STANDARD").nameZh("标准补丁安装编排").nameEn("Standard Patch Installation").type("PATCH").version(5).build());
             addTemplateSteps(standard,List.of(
-                new String[]{"PRECHECK","执行前检查","Pre-check"},new String[]{"SNAPSHOT","快照与回退点","Snapshot & rollback point"},new String[]{"DOWNLOAD","下载补丁包","Download package"},
+                new String[]{"PRECHECK","执行前检查","Pre-check"},new String[]{"SNAPSHOT","快照与回退点","Snapshot & rollback point"},new String[]{"PACKAGE_READY","确认补丁包已入库","Confirm package is available"},
                 new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},new String[]{"INSTALL","安装补丁","Install patch"},new String[]{"RESTART","服务重启/主机重启","Service/host restart"},
-                new String[]{"HEALTH","应用健康检查","Application health check"},new String[]{"RESCAN","漏洞定向复测","Targeted vulnerability rescan"},new String[]{"EVIDENCE","回写执行证据","Write back evidence"}));
-            OrchestrationTemplate emergency=templates.save(OrchestrationTemplate.builder().code("PATCH-EMERGENCY").nameZh("紧急漏洞修复编排").nameEn("Emergency Vulnerability Remediation").type("PATCH").version(2).build());
-            addTemplateSteps(emergency,List.of(new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"DOWNLOAD","下载已批准补丁","Download approved patch"},new String[]{"INSTALL","安装补丁","Install patch"},new String[]{"HEALTH","关键探针验证","Critical probe validation"},new String[]{"RESCAN","漏洞定向复测","Targeted vulnerability rescan"},new String[]{"EVIDENCE","回写执行证据","Write back evidence"}));
+                new String[]{"HEALTH","应用健康检查","Application health check"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
+            OrchestrationTemplate emergency=templates.save(OrchestrationTemplate.builder().code("PATCH-EMERGENCY").nameZh("紧急补丁安装编排").nameEn("Emergency Patch Installation").type("PATCH").version(4).build());
+            addTemplateSteps(emergency,List.of(new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"PACKAGE_READY","确认已批准补丁已入库","Confirm approved package is available"},new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},new String[]{"INSTALL","安装补丁","Install patch"},new String[]{"HEALTH","关键探针验证","Critical probe validation"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
             OrchestrationTemplate lifecycle=templates.save(OrchestrationTemplate.builder().code("VULN-PATCH-CLOSED-LOOP").nameZh("漏洞与补丁闭环编排").nameEn("Vulnerability & Patch Closed-loop Workflow").type("WORKFLOW").version(1).build());
             addTemplateSteps(lifecycle,List.of(
                 new String[]{"SCAN","执行漏洞扫描","Run vulnerability scan"},
@@ -913,13 +920,13 @@ public class DemoDataSeeder implements CommandLineRunner {
             }
             if(changed)templateSteps.saveAll(steps);
         });
-        ensureExecutionTemplate("PATCH-STANDARD","标准补丁安装编排","Standard Patch Installation","PATCH",4,List.of(
+        ensureExecutionTemplate("PATCH-STANDARD","标准补丁安装编排","Standard Patch Installation","PATCH",5,List.of(
                 new String[]{"PRECHECK","执行前检查","Pre-check"},new String[]{"SNAPSHOT","快照与回退点","Snapshot & rollback point"},
-                new String[]{"DOWNLOAD","获取补丁包","Acquire package"},new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},
+                new String[]{"PACKAGE_READY","确认补丁包已入库","Confirm package is available"},new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},
                 new String[]{"INSTALL","安装补丁","Install patch"},new String[]{"RESTART","服务/主机重启","Service/host restart"},
                 new String[]{"HEALTH","应用健康检查","Application health check"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
-        ensureExecutionTemplate("PATCH-EMERGENCY","紧急补丁安装编排","Emergency Patch Installation","PATCH",3,List.of(
-                new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"DOWNLOAD","获取已批准补丁","Acquire approved package"},
+        ensureExecutionTemplate("PATCH-EMERGENCY","紧急补丁安装编排","Emergency Patch Installation","PATCH",4,List.of(
+                new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"PACKAGE_READY","确认已批准补丁已入库","Confirm approved package is available"},
                 new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},new String[]{"INSTALL","安装补丁","Install patch"},
                 new String[]{"HEALTH","关键探针验证","Critical probe validation"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
         ensureExecutionTemplate("PATCH-RETEST","补丁效果复测","Patch Effect Retest","RETEST",1,List.of(

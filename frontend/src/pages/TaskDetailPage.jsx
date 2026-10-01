@@ -25,6 +25,8 @@ export default function TaskDetailPage(){
  const [assignOpen,setAssignOpen]=useState(false)
  const [manualRetest,setManualRetest]=useState(false)
  const [ownerSelection,setOwnerSelection]=useState('')
+ const [targetPicker,setTargetPicker]=useState(null)
+ const [targetAssetId,setTargetAssetId]=useState('')
 
  useEffect(()=>{if(task?.ownerId)setOwnerSelection(String(task.ownerId))},[task?.ownerId])
  if(loading&&!task)return <div className="loading">{t('loading')}</div>
@@ -44,6 +46,21 @@ export default function TaskDetailPage(){
   if(await doAction('submit-manual-retest',{result,comment,retestMode:'MANUAL'})){setManualRetest(false);setComment('')}
  }
  const openManualRetest=()=>{setResult('PASS');setComment('');setManualRetest(true)}
+ const openDeployment=async(action,environment)=>{
+  setBusy(true)
+  try{
+   const candidates=await api(`/api/tasks/${id}/deployment-candidates?environment=${environment}`)
+   if(!candidates.length){toast.push(t('noCompatibleValidationAsset'),'red');return}
+   const exact=candidates.filter(x=>x.businessService===task.businessService)
+   const preferred=(exact.length?exact:candidates)[0]
+   setTargetAssetId(String(preferred.id));setTargetPicker({action,environment,candidates,exact:exact.length>0})
+  }catch(e){toast.push(e.message||t('operationFailed'),'red')}
+  finally{setBusy(false)}
+ }
+ const startDeployment=async()=>{
+  if(!targetPicker||!targetAssetId)return
+  if(await doAction(targetPicker.action,{targetAssetId:Number(targetAssetId)})){setTargetPicker(null);setTargetAssetId('')}
+ }
  const submitAssign=async()=>{
   const u=assignees.find(x=>String(x.id)===String(ownerSelection));if(!u)return
   setBusy(true)
@@ -60,7 +77,7 @@ export default function TaskDetailPage(){
  const actions=[]
  if(task.stage!=='CLOSED'&&(has('TASK_ASSIGN')||has('TASK_MANAGE')))actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
  if(task.assetId)actions.push(<button key="asset" className="btn" onClick={()=>nav(`/assets/${task.assetId}`)}><ExternalLink size={15}/>{t('viewAsset')}</button>)
- if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>doAction('start-test')}><Play size={15}/>{t('startTestPatch')}</button>)
+ if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>openDeployment('start-test','TEST')}><Play size={15}/>{t('startTestPatch')}</button>)
  if(task.stage==='APP_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vt" className="btn primary" onClick={()=>setVerify('TEST')}><CheckCircle2 size={15}/>{t('verifyTest')}</button>)
  if(task.stage==='PREPROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vp" className="btn primary" onClick={()=>setVerify('PREPROD')}><CheckCircle2 size={15}/>{t('verifyPreprod')}</button>)
  if(task.stage==='PROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vprod" className="btn primary" onClick={()=>setVerify('PROD')}><CheckCircle2 size={15}/>{t('verifyProd')}</button>)
@@ -69,7 +86,7 @@ export default function TaskDetailPage(){
   actions.push(<button key="auto-retest" className="btn primary" disabled={busy||running} onClick={()=>doAction('start-auto-retest',{retestMode:'AUTO'})}><ScanSearch size={15}/>{running?t('retestRunning'):t('automaticRetest')}</button>)
   actions.push(<button key="manual-retest" className="btn" disabled={busy||running} onClick={openManualRetest}><UserCheck size={15}/>{t('manualRetest')}</button>)
  }
- if(task.status==='BLOCKED'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage)&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="retry" className="btn primary" onClick={()=>doAction('retry')}><RefreshCw size={15}/>{t('retry')}</button>)
+ if(task.status==='BLOCKED'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage)&&(has('TASK_EXECUTE')||has('TASK_MANAGE'))){const env=task.stage.replace('_PATCH','');actions.push(<button key="retry" className="btn primary" onClick={()=>openDeployment('retry',env)}><RefreshCw size={15}/>{t('retry')}</button>)}
  if(task.securityIncidentId)actions.push(<button key="incident" className={task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'btn primary':'btn'} onClick={()=>nav(`/work-orders/incidents/${task.securityIncidentId}`)}><ExternalLink size={15}/>{t(task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'createChange':'securityIncident')}</button>)
  if(task.changeOrderId)actions.push(<button key="change" className="btn" onClick={()=>nav(`/work-orders/changes/${task.changeOrderId}`)}><ExternalLink size={15}/>{t('changeOrder')}</button>)
  if(task.approvalId)actions.push(<button key="approval" className={approvalIsNext?'btn primary next-action':'btn'} onClick={()=>nav(`/approvals/${task.approvalId}`)}><ExternalLink size={15}/>{t('linkedApproval')}</button>)
@@ -82,5 +99,8 @@ export default function TaskDetailPage(){
   <Modal open={!!verify} title={verify==='TEST'?t('verifyTest'):verify==='PREPROD'?t('verifyPreprod'):t('verifyProd')} onClose={()=>setVerify(null)} footer={<><button className="btn" onClick={()=>setVerify(null)}>{t('cancel')}</button><button className="btn primary" onClick={verifySubmit} disabled={busy||!comment.trim()}>{t('submit')}</button></>}><div className="form-grid"><label className="form-field"><span>{t('validationResult')}</span><select value={result} onChange={e=>setResult(e.target.value)}><option value="PASS">{t('pass')}</option><option value="FAIL">{t('fail')}</option></select></label><label className="form-field full"><span>{t('comment')} *</span><textarea rows={4} value={comment} onChange={e=>setComment(e.target.value)} placeholder={t('verificationBasis')}/></label></div></Modal>
   <Modal open={manualRetest} title={t('manualRetestResult')} onClose={()=>setManualRetest(false)} footer={<><button className="btn" onClick={()=>setManualRetest(false)}>{t('cancel')}</button><button className="btn primary" onClick={manualRetestSubmit} disabled={busy||!comment.trim()}>{t('submit')}</button></>}><div className="form-grid"><label className="form-field"><span>{t('retestResult')}</span><select value={result} onChange={e=>setResult(e.target.value)}><option value="PASS">{t('pass')}</option><option value="FAIL">{t('fail')}</option></select></label><label className="form-field full"><span>{t('comment')} *</span><textarea rows={4} value={comment} onChange={e=>setComment(e.target.value)} placeholder={t('verificationBasis')}/></label></div></Modal>
   <Modal open={assignOpen} title={t('reassign')} onClose={()=>setAssignOpen(false)} footer={<><button className="btn" onClick={()=>setAssignOpen(false)}>{t('cancel')}</button><button className="btn primary" disabled={!ownerSelection||busy} onClick={submitAssign}>{t('confirm')}</button></>}><label className="form-field"><span>{t('assignTo')}</span><select value={ownerSelection} onChange={e=>setOwnerSelection(e.target.value)}><option value="">—</option>{assignees.map(u=><option key={u.id} value={u.id}>{localize(u.displayName)} · {t(`role_${u.role}`)}</option>)}</select></label></Modal>
+  <Modal open={!!targetPicker} title={t('selectValidationAsset')} onClose={()=>setTargetPicker(null)} footer={<><button className="btn" onClick={()=>setTargetPicker(null)}>{t('cancel')}</button><button className="btn primary" disabled={!targetAssetId||busy} onClick={startDeployment}>{t('confirmAndExecute')}</button></>}>
+   <div className="validation-targets">{targetPicker&&!targetPicker.exact&&<div className="target-warning">{t('compatibleAssetFallback')}</div>}{targetPicker?.candidates.map(asset=><label className={`validation-target ${String(asset.id)===targetAssetId?'selected':''}`} key={asset.id}><input type="radio" name="validationTarget" value={asset.id} checked={String(asset.id)===targetAssetId} onChange={e=>setTargetAssetId(e.target.value)}/><span><b>{localize(asset.name)}</b><small>{asset.assetCode} · {asset.ipAddress||'—'} · {localize(asset.businessService)||'—'}</small></span><StatusBadge tone={asset.businessService===task.businessService?'ok':'purple'}>{asset.businessService===task.businessService?t('sameBusinessService'):t('compatibleAsset')}</StatusBadge></label>)}</div>
+  </Modal>
  </>
 }

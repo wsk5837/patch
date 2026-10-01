@@ -41,7 +41,12 @@ public final class ApiDtos {
     public record ChangeCreateRequest(@NotBlank String changeType, @NotBlank String summary,
                                       String riskAssessment, String implementationPlan, String rollbackPlan,
                                       String maintenanceStart, String maintenanceEnd) {}
-    public record TaskActionRequest(String result, String comment, String retestMode, String changeType, String reason, String rollbackPlan) {}
+    public record TaskActionRequest(String result, String comment, String retestMode, String changeType,
+                                    String reason, String rollbackPlan, Long targetAssetId) {
+        public TaskActionRequest(String result,String comment,String retestMode,String changeType,String reason,String rollbackPlan){
+            this(result,comment,retestMode,changeType,reason,rollbackPlan,null);
+        }
+    }
     public record TaskAssignRequest(Long ownerId, @NotBlank String ownerName) {}
     public record ApprovalActionRequest(String comment) {}
     public record SettingsUpdateRequest(Map<String,String> values) {}

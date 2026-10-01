@@ -251,7 +251,8 @@ class PerformanceSmokeTest {
         Set<String> installCodes = install.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
         Set<String> retestCodes = retest.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
 
-        assertTrue(installCodes.containsAll(Set.of("DOWNLOAD", "INSTALL", "HEALTH", "EVIDENCE")));
+        assertTrue(installCodes.containsAll(Set.of("PACKAGE_READY", "VERIFY", "INSTALL", "HEALTH", "EVIDENCE")));
+        assertFalse(installCodes.contains("DOWNLOAD"));
         assertFalse(installCodes.contains("RESCAN"));
         assertTrue(retestCodes.containsAll(Set.of("INSTALL_STATE", "VERSION_PROBE", "VULN_PROBE", "EFFECT_CHECK")));
         assertFalse(retestCodes.contains("DOWNLOAD"));

@@ -12,6 +12,7 @@ public class TaskController {
  private final TaskService service;
  @GetMapping public List<TaskView> list(){return service.list();}
  @GetMapping("/{id}") public TaskView get(@PathVariable Long id){return service.get(id);}
+ @GetMapping("/{id}/deployment-candidates") public List<AssetView> deploymentCandidates(@PathVariable Long id,@RequestParam String environment){return service.deploymentCandidates(id,environment);}
  @PreAuthorize("hasAnyAuthority('TASK_EXECUTE','TASK_RETEST','TASK_MANAGE')")
  @PostMapping("/{id}/actions/{action}") public TaskView action(@PathVariable Long id,@PathVariable String action,@RequestBody(required=false) TaskActionRequest req){return service.action(id,action,req);}
  @PreAuthorize("hasAnyAuthority('TASK_ASSIGN','TASK_MANAGE')")
