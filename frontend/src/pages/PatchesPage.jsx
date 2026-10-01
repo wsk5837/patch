@@ -73,8 +73,8 @@ export default function PatchesPage(){
   return <>
     <PageHeader title={t('patchCenter')}>
       <button className="btn" onClick={()=>{reload();reloadServers();reloadDeployments()}}><RefreshCw size={15}/>{t('refresh')}</button>
-      {has('PATCH_MANAGE')&&tab==='library'&&<button className="btn" onClick={()=>setOpen(true)}><Plus size={15}/>{t('registerPatch')}</button>}
-      {has('PATCH_MANAGE')&&<button className="btn primary" onClick={sync}>{t('syncPatchCatalog')}</button>}
+      {(has('PATCH_REGISTER')||has('PATCH_MANAGE'))&&tab==='library'&&<button className="btn" onClick={()=>setOpen(true)}><Plus size={15}/>{t('registerPatch')}</button>}
+      {(has('PATCH_CATALOG_SYNC')||has('PATCH_MANAGE'))&&<button className="btn primary" onClick={sync}>{t('syncPatchCatalog')}</button>}
     </PageHeader>
     <div className="tabs">
       <button className={tab==='library'?'active':''} onClick={()=>setTab('library')}><Package size={15}/>{t('patchLibrary')}<span>{patches.length}</span></button>

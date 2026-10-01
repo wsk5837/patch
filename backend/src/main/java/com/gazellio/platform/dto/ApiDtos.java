@@ -14,7 +14,9 @@ public final class ApiDtos {
                            String employeeNo, String phone, String accountType, String role,
                            Long roleId, String roleNameZh, String roleNameEn, boolean enabled, boolean locked,
                            Integer failedLoginAttempts, String lastLoginAt, String passwordChangedAt,
-                           String createdAt, List<String> permissions) {}
+                           String createdAt, List<String> permissions, List<Long> roleIds,
+                           List<UserRoleSummary> roles) {}
+    public record UserRoleSummary(Long id,String code,String nameZh,String nameEn,String dataScope) {}
     public record LoginResponse(String token, UserView user) {}
     public record MessageResponse(String message) {}
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
@@ -45,7 +47,7 @@ public final class ApiDtos {
     public record SettingsUpdateRequest(Map<String,String> values) {}
     public record UserSaveRequest(@NotBlank String username,@NotBlank String displayName,String email,
                                   String department,String employeeNo,String phone,String accountType,
-                                  @NotNull Long roleId,Boolean enabled,String password) {}
+                                  Long roleId,List<Long> roleIds,Boolean enabled,String password) {}
     public record RoleSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
                                   String descriptionZh,String descriptionEn,String dataScope,
                                   Boolean enabled,@NotNull List<String> permissions) {}

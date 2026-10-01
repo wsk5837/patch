@@ -33,7 +33,11 @@ public class TaskService {
     @Transactional
     public TaskView action(Long id,String action,TaskActionRequest req){
         RemediationTask t=require(id);
-        switch(action.toLowerCase(Locale.ROOT)){
+        String normalizedAction=action.toLowerCase(Locale.ROOT);
+        if(Set.of("verify-test","verify-preprod","verify-prod","start-auto-retest","submit-manual-retest").contains(normalizedAction))
+            currentUser.requireAnyAuthority("TASK_RETEST","TASK_MANAGE");
+        else currentUser.requireAnyAuthority("TASK_EXECUTE","TASK_MANAGE");
+        switch(normalizedAction){
             case "start-test" -> { ensure(t,TaskStage.ASSIGNED); t.setStage(TaskStage.TEST_PATCH);t.setStatus(TaskStatus.IN_PROGRESS);tasks.save(t);orchestration.startPatchRun(t,"TEST","Ring 0 · Test"); }
             case "verify-test" -> verifyApplication(t,TaskStage.APP_VERIFY,TaskStage.TEST_RESCAN,"TEST",req);
             case "verify-preprod" -> verifyApplication(t,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,"PREPROD",req);

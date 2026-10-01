@@ -5,6 +5,7 @@ import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
 import { useI18n } from '../contexts/I18nContext'
 import { useToast } from '../components/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/Modal'
 import StatusBadge,{severityTone,statusTone} from '../components/StatusBadge'
 import {envLabel,findingStatus,severityLabel,fmtDate} from '../utils/format'
@@ -12,7 +13,7 @@ import {envLabel,findingStatus,severityLabel,fmtDate} from '../utils/format'
 function dateAfter(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
 
 export default function FindingDetailPage(){
- const {id}=useParams();const nav=useNavigate();const {t,pick,lang,localize}=useI18n();const toast=useToast()
+ const {id}=useParams();const nav=useNavigate();const {t,pick,lang,localize}=useI18n();const toast=useToast();const {has}=useAuth()
  const {data:f,loading,reload}=useApiData(`/api/vulnerabilities/findings/${id}`)
  const [fp,setFp]=useState(false),[exempt,setExempt]=useState(false),[reason,setReason]=useState(''),[expiresAt,setExpiresAt]=useState(()=>dateAfter(30)),[compensatingControl,setCompensatingControl]=useState(''),[residualRisk,setResidualRisk]=useState(''),[busy,setBusy]=useState(false)
  if(loading&&!f)return <div className="loading">{t('loading')}</div>;if(!f)return null
@@ -28,7 +29,7 @@ export default function FindingDetailPage(){
   <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions">
    <button className="btn" onClick={()=>nav(`/vulnerabilities/library/${encodeURIComponent(f.cveId)}`)}><BookOpenText size={15}/>{t('vulnerabilityLibraryDetail')}</button>
    {f.securityIncidentId&&<button className={!f.remediationTaskId&&f.status==='CONFIRMED'?'btn primary next-action':'btn'} onClick={()=>nav(`/work-orders/incidents/${f.securityIncidentId}`)}><ExternalLink size={15}/>{t('securityIncident')}</button>}{f.remediationTaskId&&<button className={f.status==='IN_REMEDIATION'?'btn primary next-action':'btn'} onClick={()=>nav(`/tasks/${f.remediationTaskId}`)}><ExternalLink size={15}/>{t('remediationTask')}</button>}
-   {pendingConfirmation&&<><button className="btn" onClick={()=>{setReason('');setFp(true)}}><Ban size={15}/>{t('markFalsePositive')}</button><button className="btn" onClick={()=>{setReason('');setExempt(true)}}><ShieldCheck size={15}/>{t('exemptFinding')}</button><button className="btn primary next-action" onClick={confirm} disabled={busy}><CheckCircle2 size={15}/>{t('confirmFinding')}</button></>}
+   {pendingConfirmation&&<>{(has('VULNERABILITY_FALSE_POSITIVE')||has('VULNERABILITY_MANAGE'))&&<button className="btn" onClick={()=>{setReason('');setFp(true)}}><Ban size={15}/>{t('markFalsePositive')}</button>}{(has('VULNERABILITY_EXEMPT')||has('VULNERABILITY_MANAGE'))&&<button className="btn" onClick={()=>{setReason('');setExempt(true)}}><ShieldCheck size={15}/>{t('exemptFinding')}</button>}{(has('VULNERABILITY_CONFIRM')||has('VULNERABILITY_MANAGE'))&&<button className="btn primary next-action" onClick={confirm} disabled={busy}><CheckCircle2 size={15}/>{t('confirmFinding')}</button>}</>}
   </div></div>
   <section className="detail-hero"><div><div className="eyebrow"><StatusBadge tone={severityTone(f.severity)}>{severityLabel(t,f.severity)}</StatusBadge><StatusBadge tone={statusTone(f.status)}>{findingStatus(t,f.status)}</StatusBadge>{f.kev&&<StatusBadge tone="critical">CISA KEV</StatusBadge>}</div><h1>{f.cveId}</h1><h2>{pick(f)}</h2></div><div className="score-box"><b>{f.riskScore}</b><span>{t('riskScore')}</span></div></section>
   <div className="detail-grid"><section className="panel"><div className="kv-grid"><div><span>{t('asset')}</span><b>{localize(f.assetName)}</b></div><div><span>{t('assetCode')}</span><b>{f.assetCode}</b></div><div><span>{t('environment')}</span><b>{envLabel(t,f.environment)}</b></div><div><span>{t('businessService')}</span><b>{localize(f.businessService)}</b></div><div><span>{t('owner')}</span><b>{localize(f.ownerName)||'—'}</b></div><div><span>{t('scanSource')}</span><b>{f.scanJobNo||'—'}</b></div><div><span>{t('criticality')}</span><b>{f.assetCriticality}</b></div><div><span>{t('internetExposure')}</span><b>{f.internetExposed?t('yes'):t('no')}</b></div><div><span>{t('firstSeen')}</span><b>{fmtDate(f.firstSeenAt,lang)}</b></div><div><span>{t('lastSeen')}</span><b>{fmtDate(f.lastSeenAt,lang)}</b></div>{f.status==='EXEMPTED'&&<><div><span>{t('exemptionExpires')}</span><b>{fmtDate(f.exemptionExpiresAt,lang)}</b></div><div><span>{t('exemptionReason')}</span><b>{localize(f.exemptionReason)||'—'}</b></div><div><span>{t('compensatingControl')}</span><b>{localize(f.compensatingControl)||'—'}</b></div><div><span>{t('residualRisk')}</span><b>{localize(f.residualRisk)||'—'}</b></div><div><span>{t('exemptionApprover')}</span><b>{localize(f.exemptionApprovedBy)||'—'}</b></div><div><span>{t('approvedAt')}</span><b>{fmtDate(f.exemptionApprovedAt,lang)}</b></div></>}</div></section>

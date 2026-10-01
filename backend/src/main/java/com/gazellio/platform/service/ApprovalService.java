@@ -95,7 +95,8 @@ public class ApprovalService {
                 .filter(candidate->!Objects.equals(candidate.getId(),requesterId)&&!routed.contains(candidate.getId()))
                 .filter(candidate->accessControl.permissions(candidate).contains("APPROVAL_ACT")).toList();
         if(preferredRoleId!=null){
-            UserAccount preferred=candidates.stream().filter(candidate->Objects.equals(candidate.getAccessRoleId(),preferredRoleId)).findFirst().orElse(null);
+            UserAccount preferred=candidates.stream().filter(candidate->accessControl.assignedRoles(candidate).stream()
+                    .anyMatch(role->Objects.equals(role.getId(),preferredRoleId))).findFirst().orElse(null);
             if(preferred!=null)return preferred;
         }
         if(!candidates.isEmpty())return candidates.getFirst();

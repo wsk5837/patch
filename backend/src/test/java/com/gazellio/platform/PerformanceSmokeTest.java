@@ -310,11 +310,25 @@ class PerformanceSmokeTest {
     void rbacUsersUseDatabaseRolesAndInitialPassword(){
         var role=accessControl.createRole(new RoleSaveRequest("AUDITOR_TEST","审计测试角色","Audit Test Role","只读审计角色","Read-only audit role","ALL",true,
                 List.of("AUDIT_VIEW","REPORT_VIEW")));
-        var user=accessControl.createUser(new UserSaveRequest("audit_tester","审计测试员","audit@example.test","审计部","EMP-TEST",null,"LOCAL",role.id(),true,null));
+        var user=accessControl.createUser(new UserSaveRequest("audit_tester","审计测试员","audit@example.test","审计部","EMP-TEST",null,"LOCAL",role.id(),List.of(role.id()),true,null));
         assertEquals(Set.of("AUDIT_VIEW","REPORT_VIEW"),Set.copyOf(user.permissions()));
         assertTrue(passwordEncoder.matches("Gazellio@123",userAccounts.findByUsername("audit_tester").orElseThrow().getPasswordHash()));
         accessControl.updateRole(role.id(),new RoleSaveRequest(role.code(),role.nameZh(),role.nameEn(),role.descriptionZh(),role.descriptionEn(),role.dataScope(),true,List.of("AUDIT_VIEW")));
         assertEquals(List.of("AUDIT_VIEW"),accessControl.users().stream().filter(x->x.id().equals(user.id())).findFirst().orElseThrow().permissions());
+    }
+
+    @Test
+    void multipleRolesGrantTheUnionOfPermissions(){
+        String suffix=UUID.randomUUID().toString().substring(0,8).toUpperCase();
+        var viewer=accessControl.createRole(new RoleSaveRequest("VIEW_"+suffix,"查看角色","Viewer Role",null,null,"ALL",true,
+                List.of("VULNERABILITY_VIEW","ASSET_VIEW")));
+        var operator=accessControl.createRole(new RoleSaveRequest("OPERATE_"+suffix,"操作角色","Operator Role",null,null,"ALL",true,
+                List.of("VULNERABILITY_CONFIRM","INCIDENT_CREATE")));
+        var user=accessControl.createUser(new UserSaveRequest("multi_"+suffix.toLowerCase(),"多角色测试员",null,"安全部",null,null,"LOCAL",
+                viewer.id(),List.of(viewer.id(),operator.id()),true,null));
+        assertEquals(Set.of(viewer.id(),operator.id()),Set.copyOf(user.roleIds()));
+        assertEquals(Set.of("VULNERABILITY_VIEW","ASSET_VIEW","VULNERABILITY_CONFIRM","INCIDENT_CREATE"),Set.copyOf(user.permissions()));
+        assertEquals(2,user.roles().size());
     }
 
     @Test

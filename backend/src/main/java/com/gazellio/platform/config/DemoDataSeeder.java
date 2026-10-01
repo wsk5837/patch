@@ -45,6 +45,7 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final SystemSettingRepository settings;
     private final AccessRoleRepository accessRoles;
     private final RolePermissionRepository rolePermissions;
+    private final UserRoleAssignmentRepository userRoleAssignments;
     private final PasswordEncoder encoder;
     private final CmdbProperties cmdbProperties;
 
@@ -128,7 +129,11 @@ public class DemoDataSeeder implements CommandLineRunner {
             Set<String> existingPermissions=rolePermissions.findByRoleId(role.getId()).stream().map(RolePermission::getPermissionCode).collect(java.util.stream.Collectors.toSet());
             for(String permission:PermissionCatalog.defaults(role.getCode()))if(!existingPermissions.contains(permission))rolePermissions.save(RolePermission.builder().roleId(role.getId()).permissionCode(permission).build());
             Map<String,String> usernames=Map.of("ADMIN","admin","SECURITY","security","OPS","ops","APP_OWNER","appowner","APPROVER","approver");
-            AccessRole assignedRole=role;users.findByUsername(usernames.get(role.getCode())).ifPresent(user->{user.setAccessRoleId(assignedRole.getId());users.save(user);});
+            AccessRole assignedRole=role;users.findByUsername(usernames.get(role.getCode())).ifPresent(user->{
+                user.setAccessRoleId(assignedRole.getId());users.save(user);
+                if(!userRoleAssignments.existsByUserIdAndRoleId(user.getId(),assignedRole.getId()))
+                    userRoleAssignments.save(UserRoleAssignment.builder().userId(user.getId()).roleId(assignedRole.getId()).build());
+            });
         }
     }
 

@@ -2,13 +2,14 @@ import React from 'react'
 import {RefreshCw,Download,Library,ShieldCheck,Ban,ClipboardList,Workflow,Gauge,ClockAlert,ShieldOff,Rocket} from 'lucide-react'
 import {useApiData} from '../utils/useApiData'
 import {useI18n} from '../contexts/I18nContext'
+import {useAuth} from '../contexts/AuthContext'
 import PageHeader from '../components/PageHeader'
 import {severityLabel,envLabel,deploymentStatus} from '../utils/format'
 
 const csv=value=>`"${String(value??'').replaceAll('"','""')}"`
 
 export default function ReportsPage(){
- const {t}=useI18n()
+ const {t}=useI18n();const {has}=useAuth()
  const {data:d,loading,reload}=useApiData('/api/dashboard/report')
  const deploymentDistribution=d?.deploymentStatusDistribution||{}
  if(loading&&!d)return <div className="loading">{t('loading')}</div>
@@ -21,7 +22,7 @@ export default function ReportsPage(){
  }
  const chart=(title,items,max,label)=><section className="panel"><div className="panel-head"><h2>{title}</h2></div><div className="bar-chart">{Object.entries(items).map(([k,v])=><div className="bar-line" key={k}><label>{label(k)}</label><div className="bar-track"><i style={{width:`${v/max*100}%`}}/></div><b>{v}</b></div>)}</div></section>
  return <>
-  <PageHeader title={t('reports')}><button className="btn" onClick={reload}><RefreshCw size={15}/>{t('refresh')}</button><button className="btn primary" onClick={exportReport}><Download size={15}/>{t('exportReport')}</button></PageHeader>
+  <PageHeader title={t('reports')}><button className="btn" onClick={reload}><RefreshCw size={15}/>{t('refresh')}</button>{has('REPORT_EXPORT')&&<button className="btn primary" onClick={exportReport}><Download size={15}/>{t('exportReport')}</button>}</PageHeader>
   <div className="metric-grid report-metrics">{metrics.map(([k,v,Icon])=><div className="metric-card static" key={k}><div className="metric-icon tone-purple"><Icon size={19}/></div><div><span>{t(k)}</span><b>{v}</b></div></div>)}</div>
   <div className="report-grid report-grid-four">
    {chart(t('severityDistribution'),d?.severityDistribution||{},maxSev,k=>severityLabel(t,k))}

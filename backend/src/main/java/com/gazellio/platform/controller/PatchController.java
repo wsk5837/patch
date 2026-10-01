@@ -30,11 +30,11 @@ public class PatchController {
     @PreAuthorize("hasAuthority('PATCH_SCHEDULE')")
     @DeleteMapping("/calendar/schedules/{id}") public void deleteSchedule(@PathVariable Long id){service.deleteSchedule(id);}
 
-    @PreAuthorize("hasAuthority('PATCH_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('PATCH_REGISTER','PATCH_MANAGE')")
     @PostMapping
     public PatchView register(@Valid @RequestBody PatchCreateRequest req){return service.register(req);}
 
-    @PreAuthorize("hasAuthority('PATCH_MANAGE')")
+    @PreAuthorize("hasAnyAuthority('PATCH_CATALOG_SYNC','PATCH_MANAGE')")
     @PostMapping("/sync")
     public MessageResponse sync(){return new MessageResponse("servers="+service.sync());}
 }

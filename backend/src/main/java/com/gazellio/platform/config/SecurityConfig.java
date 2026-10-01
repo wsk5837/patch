@@ -48,7 +48,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/api/auth/**", "/api/agent/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/access-control/**").hasAuthority("USER_MANAGE")
+                        .requestMatchers("/api/access-control/**").hasAnyAuthority("USER_MANAGE","ROLE_MANAGE","USER_CREDENTIAL_RESET","USER_ACCOUNT_STATUS")
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/report").hasAuthority("REPORT_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/**").hasAuthority("DASHBOARD_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/vulnerabilities/**").hasAuthority("VULNERABILITY_VIEW")

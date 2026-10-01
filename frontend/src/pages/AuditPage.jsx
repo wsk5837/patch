@@ -2,6 +2,7 @@ import React,{useMemo,useState} from 'react'
 import { Download,RefreshCw } from 'lucide-react'
 import { useApiData } from '../utils/useApiData'
 import { useI18n } from '../contexts/I18nContext'
+import { useAuth } from '../contexts/AuthContext'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import { fmtDate } from '../utils/format'
@@ -9,7 +10,7 @@ import { fmtDate } from '../utils/format'
 const csvCell=value=>`"${String(value??'').replaceAll('"','""')}"`
 
 export default function AuditPage(){
-  const {t,lang}=useI18n()
+  const {t,lang}=useI18n();const {has}=useAuth()
   const {data=[],loading,reload}=useApiData('/api/audit',{initial:[],poll:30000})
   const [filters,setFilters]=useState({actor:'',entityType:'ALL',action:'',from:'',to:''})
   const entityTypes=useMemo(()=>[...new Set(data.map(x=>x.entityType).filter(Boolean))].sort(),[data])
@@ -39,7 +40,7 @@ export default function AuditPage(){
   return <>
     <PageHeader title={t('audit')}>
       <button className="btn" onClick={reload}><RefreshCw size={15}/>{t('refresh')}</button>
-      <button className="btn primary" disabled={!rows.length} onClick={exportCsv}><Download size={15}/>{t('exportCsv')}</button>
+      {has('AUDIT_EXPORT')&&<button className="btn primary" disabled={!rows.length} onClick={exportCsv}><Download size={15}/>{t('exportCsv')}</button>}
     </PageHeader>
     <div className="toolbar audit-filters">
       <input value={filters.actor} onChange={e=>setFilters({...filters,actor:e.target.value})} placeholder={t('filterActor')}/>

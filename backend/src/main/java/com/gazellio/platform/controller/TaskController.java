@@ -12,8 +12,8 @@ public class TaskController {
  private final TaskService service;
  @GetMapping public List<TaskView> list(){return service.list();}
  @GetMapping("/{id}") public TaskView get(@PathVariable Long id){return service.get(id);}
- @PreAuthorize("hasAuthority('TASK_MANAGE')")
+ @PreAuthorize("hasAnyAuthority('TASK_EXECUTE','TASK_RETEST','TASK_MANAGE')")
  @PostMapping("/{id}/actions/{action}") public TaskView action(@PathVariable Long id,@PathVariable String action,@RequestBody(required=false) TaskActionRequest req){return service.action(id,action,req);}
- @PreAuthorize("hasAuthority('TASK_MANAGE')")
+ @PreAuthorize("hasAnyAuthority('TASK_ASSIGN','TASK_MANAGE')")
  @PostMapping("/{id}/assign") public TaskView assign(@PathVariable Long id,@RequestBody TaskAssignRequest req){return service.assign(id,req);}
 }

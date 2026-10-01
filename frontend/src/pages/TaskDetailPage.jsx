@@ -5,6 +5,7 @@ import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
 import { useI18n } from '../contexts/I18nContext'
 import { useToast } from '../components/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/Modal'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {envLabel,taskStage,taskStatus,fmtDate} from '../utils/format'
@@ -14,6 +15,7 @@ export default function TaskDetailPage(){
  const nav=useNavigate()
  const {t,pick,lang,localize}=useI18n()
  const toast=useToast()
+ const {has}=useAuth()
  const {data:task,loading,reload}=useApiData(`/api/tasks/${id}`,{poll:8000})
  const {data:assignees=[]}=useApiData('/api/users/assignees',{initial:[]})
  const [verify,setVerify]=useState(null)
@@ -56,18 +58,18 @@ export default function TaskDetailPage(){
  const approvalIsNext=task.stage==='RELEASE_APPROVAL'&&!!task.approvalId
 
  const actions=[]
- if(task.stage!=='CLOSED')actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
+ if(task.stage!=='CLOSED'&&(has('TASK_ASSIGN')||has('TASK_MANAGE')))actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
  if(task.assetId)actions.push(<button key="asset" className="btn" onClick={()=>nav(`/assets/${task.assetId}`)}><ExternalLink size={15}/>{t('viewAsset')}</button>)
- if(task.stage==='ASSIGNED')actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>doAction('start-test')}><Play size={15}/>{t('startTestPatch')}</button>)
- if(task.stage==='APP_VERIFY')actions.push(<button key="vt" className="btn primary" onClick={()=>setVerify('TEST')}><CheckCircle2 size={15}/>{t('verifyTest')}</button>)
- if(task.stage==='PREPROD_VERIFY')actions.push(<button key="vp" className="btn primary" onClick={()=>setVerify('PREPROD')}><CheckCircle2 size={15}/>{t('verifyPreprod')}</button>)
- if(task.stage==='PROD_VERIFY')actions.push(<button key="vprod" className="btn primary" onClick={()=>setVerify('PROD')}><CheckCircle2 size={15}/>{t('verifyProd')}</button>)
- if(['TEST_RESCAN','PREPROD_RESCAN','PROD_RESCAN'].includes(task.stage)){
+ if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>doAction('start-test')}><Play size={15}/>{t('startTestPatch')}</button>)
+ if(task.stage==='APP_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vt" className="btn primary" onClick={()=>setVerify('TEST')}><CheckCircle2 size={15}/>{t('verifyTest')}</button>)
+ if(task.stage==='PREPROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vp" className="btn primary" onClick={()=>setVerify('PREPROD')}><CheckCircle2 size={15}/>{t('verifyPreprod')}</button>)
+ if(task.stage==='PROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vprod" className="btn primary" onClick={()=>setVerify('PROD')}><CheckCircle2 size={15}/>{t('verifyProd')}</button>)
+ if(['TEST_RESCAN','PREPROD_RESCAN','PROD_RESCAN'].includes(task.stage)&&(has('TASK_RETEST')||has('TASK_MANAGE'))){
   const running=task.lastRetestMode==='AUTO'&&task.lastRetestResult==='RUNNING'
   actions.push(<button key="auto-retest" className="btn primary" disabled={busy||running} onClick={()=>doAction('start-auto-retest',{retestMode:'AUTO'})}><ScanSearch size={15}/>{running?t('retestRunning'):t('automaticRetest')}</button>)
   actions.push(<button key="manual-retest" className="btn" disabled={busy||running} onClick={openManualRetest}><UserCheck size={15}/>{t('manualRetest')}</button>)
  }
- if(task.status==='BLOCKED'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage))actions.push(<button key="retry" className="btn primary" onClick={()=>doAction('retry')}><RefreshCw size={15}/>{t('retry')}</button>)
+ if(task.status==='BLOCKED'&&['TEST_PATCH','PREPROD_PATCH','PROD_PATCH'].includes(task.stage)&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="retry" className="btn primary" onClick={()=>doAction('retry')}><RefreshCw size={15}/>{t('retry')}</button>)
  if(task.securityIncidentId)actions.push(<button key="incident" className={task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'btn primary':'btn'} onClick={()=>nav(`/work-orders/incidents/${task.securityIncidentId}`)}><ExternalLink size={15}/>{t(task.stage==='RELEASE_APPROVAL'&&!task.changeOrderId?'createChange':'securityIncident')}</button>)
  if(task.changeOrderId)actions.push(<button key="change" className="btn" onClick={()=>nav(`/work-orders/changes/${task.changeOrderId}`)}><ExternalLink size={15}/>{t('changeOrder')}</button>)
  if(task.approvalId)actions.push(<button key="approval" className={approvalIsNext?'btn primary next-action':'btn'} onClick={()=>nav(`/approvals/${task.approvalId}`)}><ExternalLink size={15}/>{t('linkedApproval')}</button>)

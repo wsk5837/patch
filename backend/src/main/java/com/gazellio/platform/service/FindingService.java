@@ -158,6 +158,12 @@ public class FindingService {
         List<Long> ids=req.findingIds()==null?List.of():req.findingIds().stream().filter(Objects::nonNull).distinct().limit(200).toList();
         if(ids.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Select at least one finding");
         String action=req.action().trim().toUpperCase(Locale.ROOT);
+        switch(action){
+            case "CONFIRM" -> currentUser.requireAnyAuthority("VULNERABILITY_CONFIRM","VULNERABILITY_MANAGE");
+            case "FALSE_POSITIVE" -> currentUser.requireAnyAuthority("VULNERABILITY_FALSE_POSITIVE","VULNERABILITY_MANAGE");
+            case "EXEMPT" -> currentUser.requireAnyAuthority("VULNERABILITY_EXEMPT","VULNERABILITY_MANAGE");
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported bulk action");
+        }
         List<String> errors=new ArrayList<>();int succeeded=0;
         for(Long id:ids){
             try{

@@ -5,6 +5,7 @@ import {api} from '../api/client'
 import {useApiData} from '../utils/useApiData'
 import {useI18n} from '../contexts/I18nContext'
 import {useToast} from '../components/ToastContext'
+import {useAuth} from '../contexts/AuthContext'
 import PageHeader from '../components/PageHeader'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {envLabel} from '../utils/format'
@@ -14,7 +15,7 @@ const typeKeys={DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM
 const typeLabel=(t,value)=>t(typeKeys[value]||value)
 
 export default function BatchPatchPage(){
- const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate()
+ const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate();const {has}=useAuth();const canDeploy=has('PATCH_DEPLOY')||has('AUTOMATION_EXECUTE')
  const {data:patches=[],loading:patchLoading}=useApiData('/api/patches',{initial:[]})
  const {data:changes=[]}=useApiData('/api/work-orders/changes',{initial:[]})
  const {data:scopeOptions={networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}})
@@ -34,7 +35,7 @@ export default function BatchPatchPage(){
  const totalSelected=Math.max(0,(preview?.selectedCount||0)-excluded.size)
  const selectedPatch=patches.find(p=>String(p.id)===String(form.patchId))
  return <>
-  <PageHeader title={t('batchPatch')}><button className="btn" disabled={busy||productionScope&&!form.changeOrderId} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0||productionScope&&!form.changeOrderId} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></PageHeader>
+  <PageHeader title={t('batchPatch')}>{canDeploy&&<><button className="btn" disabled={busy||productionScope&&!form.changeOrderId} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0||productionScope&&!form.changeOrderId} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></>}</PageHeader>
   <div className="batch-layout">
    <section className="panel batch-scope-panel"><div className="panel-head"><h2><Network size={18}/>{t('assetScope')}</h2><StatusBadge tone="purple">CIDR</StatusBadge></div><div className="panel-body form-grid">
     <label className="form-field full"><span>{t('choosePatch')}</span><select value={form.patchId} onChange={e=>{setForm({...form,patchId:e.target.value});setPreview(null)}} disabled={patchLoading}>{patches.map(p=><option key={p.id} value={p.id}>{p.patchId} · {pick(p)}</option>)}</select></label>
@@ -45,7 +46,7 @@ export default function BatchPatchPage(){
     <label className="form-field"><span>{t('businessService')}</span><select value={form.businessService} onChange={e=>{setForm({...form,businessService:e.target.value});setPreview(null)}}><option value="">{t('all')}</option>{scopeOptions.businessServices?.map(value=><option key={value} value={value}>{localize(value)}</option>)}</select></label>
     {productionScope&&<label className="form-field full"><span>{t('approvedChange')} *</span><select value={form.changeOrderId} onChange={e=>{setForm({...form,changeOrderId:e.target.value});setPreview(null)}}><option value="">{t('productionChangeRequired')}</option>{eligibleChanges.map(c=><option key={c.id} value={c.id}>{c.changeNo} · {c.patchCode} · {localize(c.summary)}</option>)}</select></label>}
     <label className="check-field full"><input type="checkbox" checked={form.onlineOnly} onChange={e=>{setForm({...form,onlineOnly:e.target.checked});setPreview(null)}}/><span>{t('onlineOnly')}</span></label>
-    <button className="btn primary full" disabled={busy||!form.patchId||cidrs().length===0||productionScope&&!form.changeOrderId} onClick={previewScope}><ShieldCheck size={15}/>{t('matchAssets')}</button>
+    {canDeploy&&<button className="btn primary full" disabled={busy||!form.patchId||cidrs().length===0||productionScope&&!form.changeOrderId} onClick={previewScope}><ShieldCheck size={15}/>{t('matchAssets')}</button>}
    </div></section>
    <section className="panel batch-strategy-panel"><div className="panel-head"><h2><SquareStack size={18}/>{t('batchStrategy')}</h2></div><div className="panel-body form-grid">
     <label className="form-field full"><span>{t('planName')}</span><input value={form.planName} onChange={e=>setForm({...form,planName:e.target.value})} placeholder={t('planNamePlaceholder')}/></label>
