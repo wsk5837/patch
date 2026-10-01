@@ -64,10 +64,10 @@ public class ApprovalService {
         ApprovalStep next=all.stream().filter(s->s.getStepOrder()>current.getStepOrder()&&s.getStatus()==ApprovalStepStatus.WAITING).findFirst().orElse(null);
         if(next!=null){next.setStatus(ApprovalStepStatus.PENDING);steps.save(next);a.setCurrentStep(next.getStepOrder());approvals.save(a);}
         else{
-            a.setStatus(ApprovalStatus.APPROVED);a.setCompletedAt(Instant.now());approvals.save(a); RemediationTask task=tasks.findById(a.getTaskId()).orElseThrow(); task.setStage(TaskStage.PREPROD_PATCH);task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
+            a.setStatus(ApprovalStatus.APPROVED);a.setCompletedAt(Instant.now());approvals.save(a); RemediationTask task=tasks.findById(a.getTaskId()).orElseThrow(); task.setStage(TaskStage.PROD_PATCH);task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
             if(a.getChangeOrderId()!=null) changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.APPROVED);c.setUpdatedAt(Instant.now());changes.save(c);});
             // Starting automation is deliberately deferred until this approval transaction commits.
-            // Otherwise an expected orchestration failure (for example, no PREPROD target in CMDB)
+            // Otherwise an expected orchestration failure (for example, no production target in CMDB)
             // marks this transaction rollback-only and turns a valid approval into a 500 response.
             events.publishEvent(new ApprovalImplementationRequested(a.getId(),task.getId()));
         }

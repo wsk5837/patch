@@ -21,6 +21,7 @@ public class TaskService {
     private final SecurityIncidentRepository incidents;
     private final AssetRepository assets;
     private final PatchRepository patches;
+    private final ApprovalRequestRepository approvals;
     private final ViewService view;
     private final OrchestrationService orchestration;
     private final ScanService scanService;
@@ -115,10 +116,23 @@ public class TaskService {
         if(t.getStatus()!=TaskStatus.BLOCKED)
             throw new ResponseStatusException(HttpStatus.CONFLICT,"Only a blocked patch stage can be retried");
         if(t.getStage()==TaskStage.TEST_PATCH)orchestration.startPatchRun(t,"TEST","Ring 0 · Test");
+        else if(t.getStage()==TaskStage.PREPROD_PATCH&&approvedForProduction(t)){
+            // Compatibility repair for tasks approved by older releases. The product
+            // workflow is TEST -> release approval -> PROD; PREPROD was previously
+            // inserted here even when the CMDB had no matching pre-production asset.
+            t.setStage(TaskStage.PROD_PATCH);tasks.save(t);
+            orchestration.startPatchRun(t,"PROD","Ring 0 · 5% → Ring 1 · 20% → Ring 2 · 75%");
+        }
         else if(t.getStage()==TaskStage.PREPROD_PATCH)orchestration.startPatchRun(t,"PREPROD","Ring 0 · Pre-production");
-        else if(t.getStage()==TaskStage.PROD_PATCH)orchestration.startPatchRun(t,"PROD","Ring 0 · 5%");
+        else if(t.getStage()==TaskStage.PROD_PATCH)orchestration.startPatchRun(t,"PROD","Ring 0 · 5% → Ring 1 · 20% → Ring 2 · 75%");
         else throw new ResponseStatusException(HttpStatus.CONFLICT,"Task cannot retry at current stage");
         t.setStatus(TaskStatus.IN_PROGRESS);
+    }
+    private boolean approvedForProduction(RemediationTask task){
+        if(task.getApprovalId()==null)return false;
+        return approvals.findById(task.getApprovalId()).map(approval ->
+                approval.getStatus()==ApprovalStatus.APPROVED||approval.getStatus()==ApprovalStatus.IMPLEMENTING
+                        ||approval.getStatus()==ApprovalStatus.CLOSED).orElse(false);
     }
     private void ensure(RemediationTask t,TaskStage... allowed){if(Arrays.stream(allowed).noneMatch(x->x==t.getStage()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Action is not valid for current stage");}
     private RemediationTask require(Long id){return tasks.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));}

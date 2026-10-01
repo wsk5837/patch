@@ -169,7 +169,7 @@ class PerformanceSmokeTest {
     }
 
     @Test
-    void finalApprovalCommitsEvenWhenPreproductionAutomationCannotStart() {
+    void finalApprovalStartsProductionAndLegacyPreproductionRetrySelfHeals() {
         String suffix=UUID.randomUUID().toString().substring(0,8);
         var patch=patchRepository.findAll().stream().findFirst().orElseThrow();
         var operator=userAccounts.findByUsername("ops").orElseThrow();
@@ -205,9 +205,22 @@ class PerformanceSmokeTest {
             context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("approver",""));
             var result=approvals.approve(request.getId(),new ApprovalActionRequest("Release approved"));
             assertEquals("APPROVED",result.status());
-            assertEquals("APPROVED",approvals.get(request.getId()).status());
-            assertEquals(com.gazellio.platform.model.Enums.TaskStatus.BLOCKED,
-                    taskRepository.findById(task.getId()).orElseThrow().getStatus());
+            assertEquals("IMPLEMENTING",approvals.get(request.getId()).status());
+            var implementing=taskRepository.findById(task.getId()).orElseThrow();
+            assertEquals(com.gazellio.platform.model.Enums.TaskStage.PROD_PATCH,implementing.getStage());
+            assertEquals(com.gazellio.platform.model.Enums.TaskStatus.IN_PROGRESS,implementing.getStatus());
+            assertNotNull(implementing.getLatestRunId());
+
+            // Existing deployments may already contain tasks put into PREPROD_PATCH by
+            // an older build. Retrying such an approved task must resume production,
+            // not search for a non-existent PREPROD copy of the CMDB asset.
+            implementing.setStage(com.gazellio.platform.model.Enums.TaskStage.PREPROD_PATCH);
+            implementing.setStatus(com.gazellio.platform.model.Enums.TaskStatus.BLOCKED);
+            taskRepository.save(implementing);
+            var retried=tasks.action(implementing.getId(),"retry",
+                    new TaskActionRequest(null,null,null,null,null,null));
+            assertEquals("PROD_PATCH",retried.stage());
+            assertEquals("IN_PROGRESS",retried.status());
         } finally {
             context.setAuthentication(previousAuthentication);
         }
