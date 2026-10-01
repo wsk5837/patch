@@ -5,6 +5,7 @@ import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,12 +23,12 @@ public class ApprovalService {
     private final ViewService view;
     private final CurrentUserService currentUser;
     private final AuditService audit;
-    private final OrchestrationService orchestration;
     private final ChangeWorkOrderRepository changes;
     private final SecurityIncidentRepository incidents;
     private final UserAccountRepository users;
     private final AccessRoleRepository accessRoles;
     private final AccessControlService accessControl;
+    private final ApplicationEventPublisher events;
 
     public List<ApprovalView> list(){return view.approvalViews(approvals.findActive(PageRequest.of(0,200)));}
     public ApprovalView get(Long id){return view.approval(require(id));}
@@ -63,10 +64,12 @@ public class ApprovalService {
         ApprovalStep next=all.stream().filter(s->s.getStepOrder()>current.getStepOrder()&&s.getStatus()==ApprovalStepStatus.WAITING).findFirst().orElse(null);
         if(next!=null){next.setStatus(ApprovalStepStatus.PENDING);steps.save(next);a.setCurrentStep(next.getStepOrder());approvals.save(a);}
         else{
-            a.setStatus(ApprovalStatus.APPROVED);approvals.save(a); RemediationTask task=tasks.findById(a.getTaskId()).orElseThrow(); task.setStage(TaskStage.PREPROD_PATCH);task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
+            a.setStatus(ApprovalStatus.APPROVED);a.setCompletedAt(Instant.now());approvals.save(a); RemediationTask task=tasks.findById(a.getTaskId()).orElseThrow(); task.setStage(TaskStage.PREPROD_PATCH);task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
             if(a.getChangeOrderId()!=null) changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.APPROVED);c.setUpdatedAt(Instant.now());changes.save(c);});
-            try{orchestration.startPatchRun(task,"PREPROD","Ring 0 · Pre-production");a.setStatus(ApprovalStatus.IMPLEMENTING);approvals.save(a);if(a.getChangeOrderId()!=null)changes.findById(a.getChangeOrderId()).ifPresent(c->{c.setStatus(ChangeStatus.IMPLEMENTING);c.setUpdatedAt(Instant.now());changes.save(c);});if(task.getSecurityIncidentId()!=null)incidents.findById(task.getSecurityIncidentId()).ifPresent(i->{i.setStatus(IncidentStatus.IMPLEMENTING);i.setUpdatedAt(Instant.now());incidents.save(i);});}
-            catch(Exception ex){task.setStatus(TaskStatus.BLOCKED);tasks.save(task);audit.log("TASK",task.getId(),"BLOCKED","审批通过，但未找到预生产资产映射","Approval passed, but no pre-production asset mapping was found","Gazellio");}
+            // Starting automation is deliberately deferred until this approval transaction commits.
+            // Otherwise an expected orchestration failure (for example, no PREPROD target in CMDB)
+            // marks this transaction rollback-only and turns a valid approval into a 500 response.
+            events.publishEvent(new ApprovalImplementationRequested(a.getId(),task.getId()));
         }
         audit.log("APPROVAL",id,"APPROVE","审批节点已通过，意见："+req.comment().trim(),"Approval step approved. Comment: "+req.comment().trim(),currentUser.name()); return view.approval(a);
     }

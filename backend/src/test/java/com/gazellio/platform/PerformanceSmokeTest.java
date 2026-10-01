@@ -12,7 +12,16 @@ import com.gazellio.platform.dto.ApiDtos.TemplateSaveRequest;
 import com.gazellio.platform.dto.ApiDtos.TemplateStepSaveRequest;
 import com.gazellio.platform.dto.ApiDtos.UserSaveRequest;
 import com.gazellio.platform.model.RemediationTask;
+import com.gazellio.platform.model.Asset;
+import com.gazellio.platform.model.Finding;
+import com.gazellio.platform.model.ApprovalRequest;
+import com.gazellio.platform.model.ApprovalStep;
 import com.gazellio.platform.repository.RemediationTaskRepository;
+import com.gazellio.platform.repository.AssetRepository;
+import com.gazellio.platform.repository.FindingRepository;
+import com.gazellio.platform.repository.PatchRepository;
+import com.gazellio.platform.repository.ApprovalRequestRepository;
+import com.gazellio.platform.repository.ApprovalStepRepository;
 import com.gazellio.platform.service.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +32,7 @@ import java.time.Duration;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.gazellio.platform.model.Enums.TaskStage.RELEASE_APPROVAL;
@@ -51,6 +61,11 @@ class PerformanceSmokeTest {
     @Autowired WorkOrderService workOrders;
     @Autowired BatchPatchService batchPatch;
     @Autowired RemediationTaskRepository taskRepository;
+    @Autowired AssetRepository assetRepository;
+    @Autowired FindingRepository findingRepository;
+    @Autowired PatchRepository patchRepository;
+    @Autowired ApprovalRequestRepository approvalRequestRepository;
+    @Autowired ApprovalStepRepository approvalStepRepository;
     @Autowired AccessControlService accessControl;
     @Autowired com.gazellio.platform.repository.UserAccountRepository userAccounts;
     @Autowired PasswordEncoder passwordEncoder;
@@ -151,6 +166,51 @@ class PerformanceSmokeTest {
                 "已验证快照回退", windowStart.toString(), windowEnd.toString()));
         assertEquals("PENDING_APPROVAL", resubmitted.status());
         assertNotEquals(change.approvalId(), resubmitted.approvalId());
+    }
+
+    @Test
+    void finalApprovalCommitsEvenWhenPreproductionAutomationCannotStart() {
+        String suffix=UUID.randomUUID().toString().substring(0,8);
+        var patch=patchRepository.findAll().stream().findFirst().orElseThrow();
+        var operator=userAccounts.findByUsername("ops").orElseThrow();
+        var approver=userAccounts.findByUsername("approver").orElseThrow();
+        var requester=userAccounts.findByUsername("admin").orElseThrow();
+        Asset asset=assetRepository.save(Asset.builder().assetCode("APPROVAL-PROD-"+suffix)
+                .name("Open SSH").hostname("approval-"+suffix).ipAddress("198.51.100.10")
+                .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PROD)
+                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
+        Finding finding=findingRepository.save(Finding.builder().assetId(asset.getId()).cveId("CVE-2023-38545")
+                .riskScore(9.1).evidence("approval transaction regression fixture").build());
+        RemediationTask task=taskRepository.save(RemediationTask.builder().taskNo("RMD-APPROVAL-"+suffix)
+                .findingId(finding.getId()).assetId(asset.getId()).patchId(patch.getId()).priority("P1")
+                .stage(com.gazellio.platform.model.Enums.TaskStage.RELEASE_APPROVAL)
+                .status(com.gazellio.platform.model.Enums.TaskStatus.IN_PROGRESS).changeType(com.gazellio.platform.model.Enums.ChangeType.NORMAL).build());
+        ApprovalRequest request=approvalRequestRepository.save(ApprovalRequest.builder().approvalNo("APR-REGRESSION-"+suffix)
+                .taskId(task.getId()).changeType(com.gazellio.platform.model.Enums.ChangeType.NORMAL)
+                .requestedById(requester.getId()).requestedByName(requester.getDisplayName()).reason("Regression")
+                .rollbackPlan("Restore snapshot").build());
+        approvalStepRepository.save(ApprovalStep.builder().approvalId(request.getId()).stepOrder(1)
+                .roleNameZh("运维负责人").roleNameEn("Operations Lead").approverId(operator.getId())
+                .approverName(operator.getDisplayName()).status(com.gazellio.platform.model.Enums.ApprovalStepStatus.PENDING).build());
+        approvalStepRepository.save(ApprovalStep.builder().approvalId(request.getId()).stepOrder(2)
+                .roleNameZh("发布审批人").roleNameEn("Release Approver").approverId(approver.getId())
+                .approverName(approver.getDisplayName()).status(com.gazellio.platform.model.Enums.ApprovalStepStatus.WAITING).build());
+        task.setApprovalId(request.getId());taskRepository.save(task);
+
+        var context=org.springframework.security.core.context.SecurityContextHolder.getContext();
+        var previousAuthentication=context.getAuthentication();
+        try {
+            context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("ops",""));
+            approvals.approve(request.getId(),new ApprovalActionRequest("Operations approved"));
+            context.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("approver",""));
+            var result=approvals.approve(request.getId(),new ApprovalActionRequest("Release approved"));
+            assertEquals("APPROVED",result.status());
+            assertEquals("APPROVED",approvals.get(request.getId()).status());
+            assertEquals(com.gazellio.platform.model.Enums.TaskStatus.BLOCKED,
+                    taskRepository.findById(task.getId()).orElseThrow().getStatus());
+        } finally {
+            context.setAuthentication(previousAuthentication);
+        }
     }
 
     @Test
