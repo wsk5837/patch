@@ -63,6 +63,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         // asset inventory. Do not rewrite historical demo assets/findings during every
         // rolling deployment: the old instance may still be advancing scans at this point.
         if(cmdbProperties.isEnabled()){
+            deactivateLocalAssetsForCmdb();
             seedTemplatesAndRuns();
             seedPatchSchedules();
             seedSettings();
@@ -79,6 +80,18 @@ public class DemoDataSeeder implements CommandLineRunner {
         seedDeploymentTargets();
         seedPatchSchedules();
         seedSettings();
+    }
+
+    /**
+     * When the external inventory is enabled, local catalogue rows must never be shown as
+     * synchronized configuration items. Keep them for historical foreign-key references, but
+     * remove them from the active asset scope until an actual CMDB synchronization succeeds.
+     */
+    private void deactivateLocalAssetsForCmdb(){
+        List<Asset> changed=assets.findBySourceSystem("LOCAL").stream().filter(Asset::isActive).toList();
+        if(changed.isEmpty())return;
+        changed.forEach(asset->asset.setActive(false));
+        assets.saveAll(changed);
     }
 
     private void seedUsers() {

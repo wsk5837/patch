@@ -33,8 +33,12 @@ public class CmdbSyncService {
         if(snapshot!=null)return new CmdbSyncView(properties.configured(),syncLock.isLocked(),snapshot.lastStatus(),
                 snapshot.lastStartedAt(),snapshot.lastCompletedAt(),snapshot.imported(),snapshot.updated(),
                 snapshot.deactivated(),snapshot.remoteTotal(),snapshot.message(),snapshot.classes());
-        String message=properties.configured()?"Ready":"CMDB environment variables are not configured";
-        return new CmdbSyncView(properties.configured(),false,"NOT_RUN",null,null,0,0,0,0,message,List.of());
+        List<Asset> mirrored=assets.findBySourceSystem("CMDB");
+        Optional<Instant> latest=mirrored.stream().map(Asset::getCmdbSyncedAt).filter(Objects::nonNull).max(Comparator.naturalOrder());
+        long active=mirrored.stream().filter(Asset::isActive).count();
+        String state=active>0?"SUCCESS":"NOT_RUN";
+        String message=!properties.configured()?"Asset source connection is not configured":active>0?"Asset inventory is available":"Asset inventory has not been synchronized";
+        return new CmdbSyncView(properties.configured(),false,state,null,latest.map(Instant::toString).orElse(null),0,0,0,active,message,List.of());
     }
 
     public CmdbSyncView synchronize(){
