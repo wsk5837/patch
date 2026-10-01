@@ -15,10 +15,13 @@
 
 1. 保留电脑上原有的 Git 仓库文件夹，不要删除其中的 `.git` 目录。
 2. 解压新工程包。
-3. 进入解压得到的 `patch-main` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `patch-main` 这一层目录嵌套进仓库。
+3. 进入解压得到的 `patch-repo` 目录，全选其中内容，复制并覆盖到原仓库根目录。不要把 `patch-repo` 这一层目录嵌套进仓库。
+   macOS 询问文件冲突时必须选择“替换”，不要选择“保留两者”；“保留两者”会生成 `Foo 2.java`，导致 Java 重复类编译失败。
 4. 打开 GitHub Desktop，确认变更列表中没有 `node_modules`、`dist` 或 `target`。
 5. Summary 填写 `Integrate read-only company CMDB assets`，点击 **Commit to main**。
 6. 点击 **Push origin**。Git 只会上传真正变化的文件，即使你刚才覆盖了整个目录。
+
+如果 GitHub Desktop 的 Changes 中出现 `GazellioApplication 2.java`、`Asset 2.java` 等带空格和数字的文件，请不要提交；删除这些副本，仅保留没有数字后缀的原文件。本工程的 Git/Docker 忽略规则也会拦截常见的 ` 2`～` 5` 冲突副本。
 
 ## 三、如果只使用 GitHub 网页
 

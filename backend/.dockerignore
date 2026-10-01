@@ -2,3 +2,10 @@
 target
 *.log
 src/test
+
+# Ignore Finder conflict copies. A file such as "Asset 2.java" declares the
+# same public class as Asset.java and otherwise breaks Maven compilation.
+**/* 2.*
+**/* 3.*
+**/* 4.*
+**/* 5.*
