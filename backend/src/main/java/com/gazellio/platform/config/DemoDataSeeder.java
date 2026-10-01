@@ -62,7 +62,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         // A CMDB-enabled deployment uses company configuration items as the operational
         // asset inventory. Do not rewrite historical demo assets/findings during every
         // rolling deployment: the old instance may still be advancing scans at this point.
-        if(cmdbProperties.isEnabled()){
+        if(cmdbProperties.externalInventory()){
             deactivateLocalAssetsForCmdb();
             seedTemplatesAndRuns();
             seedPatchSchedules();

@@ -4,12 +4,12 @@ export function fmtDate(v, lang='zh'){
   return new Intl.DateTimeFormat(lang==='zh'?'zh-CN':'en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(d)
 }
 export function envLabel(t,v){ return ({PROD:t('production'),TEST:t('test'),PREPROD:t('preprod'),DEV:t('development'),MIXED:t('mixed')})[v]||v||'—' }
-export function assetTypeLabel(t,v){const key=({DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM:'applicationPlatform',APPLICATION_RUNTIME:'applicationRuntime',SECURITY_COMPONENT:'securityComponent',OBSERVABILITY:'observability',COLLABORATION:'collaboration',FILE_SERVICE:'fileService',SEARCH_PLATFORM:'searchPlatform',UNCLASSIFIED:'unclassified',VIRTUAL_MACHINE:'virtualMachine',PHYSICAL_SERVER:'physicalServer',NETWORK_DEVICE:'networkDevice'})[v];return key?t(key):(v||'—')}
+export function assetTypeLabel(t,v){const key=({DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM:'applicationPlatform',APPLICATION_RUNTIME:'applicationRuntime',BUSINESS_PRODUCT:'businessProduct',CONTAINER:'containerAsset',FACILITY:'facilityAsset',SECURITY_COMPONENT:'securityComponent',OBSERVABILITY:'observability',COLLABORATION:'collaboration',FILE_SERVICE:'fileService',SEARCH_PLATFORM:'searchPlatform',UNCLASSIFIED:'unclassified',VIRTUAL_MACHINE:'virtualMachine',PHYSICAL_SERVER:'physicalServer',NETWORK_DEVICE:'networkDevice'})[v];return key?t(key):(v||'—')}
 export function cmdbClassLabel(t,key,fallback){
-  const labels={virtual_host:'virtualMachine',physics_machine:'physicalServer',firewall:'firewall',swtich:'switch',switch:'switch',router:'router',load_balance:'loadBalancer',nas:'nasDevice',application:'applicationPlatform',service:'applicationRuntime'}
+  const labels={virtual_host:'virtualMachine',physics_machine:'physicalServer',firewall:'firewall',swtich:'switch',switch:'switch',router:'router',load_balance:'loadBalancer',nas:'nasDevice',k8s_pod:'k8sPod',idcrack:'idcRack',idc:'dataCenter',logic_subsystem:'logicalSubsystem',physical_subsystem:'physicalSubsystem',deployment_unit:'deploymentUnit',business:'businessProduct',application:'applicationPlatform',service:'applicationRuntime'}
   const translated=labels[String(key||'')]
   if(translated){const value=t(translated);if(value!==translated)return value}
-  return ({mysql:'MySQL',oracle:'Oracle',redis:'Redis',postgresql:'PostgreSQL',mongodb:'MongoDB',tomcat:'Apache Tomcat',nginx:'Nginx',KingBase:'KingBase'})[key]||fallback||key||'—'
+  return ({mysql:'MySQL',oracle:'Oracle',redis:'Redis',postgresql:'PostgreSQL',mongodb:'MongoDB',elasticsearch:'Elasticsearch',tomcat:'Apache Tomcat',nginx:'Nginx',KingBase:'KingBase'})[key]||fallback||key||'—'
 }
 export function severityLabel(t,v){return ({CRITICAL:t('critical'),HIGH:t('high'),MEDIUM:t('medium'),LOW:t('low'),UNKNOWN:t('unknown')})[v]||v||'—'}
 export function findingStatus(t,v){return t(`finding_${v}`)}

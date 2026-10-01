@@ -72,4 +72,4 @@ app:
     sync-on-startup: ${CMDB_SYNC_ON_STARTUP:true}
     sync-cron: ${CMDB_SYNC_CRON:0 0/30 * * * *}
     replace-local-assets: ${CMDB_REPLACE_LOCAL_ASSETS:true}
-    class-keys: ${CMDB_CLASS_KEYS:virtual_host,physics_machine,mysql,oracle,redis,postgresql,mongodb,tomcat,nginx,firewall,swtich,router,load_balance,nas,KingBase}
+    class-keys: ${CMDB_CLASS_KEYS:virtual_host,physics_machine,mysql,oracle,redis,postgresql,mongodb,elasticsearch,tomcat,nginx,firewall,swtich,router,load_balance,nas,k8s_pod,idcrack,idc,logic_subsystem,physical_subsystem,deployment_unit,business,application,service,KingBase}

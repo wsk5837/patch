@@ -16,10 +16,14 @@ public class CmdbAssetMapper {
     private static final Map<String,String> CLASS_NAMES=Map.ofEntries(
             Map.entry("virtual_host","虚拟机"),Map.entry("physics_machine","物理机"),Map.entry("mysql","MySQL"),
             Map.entry("oracle","Oracle"),Map.entry("redis","Redis"),Map.entry("postgresql","PostgreSQL"),
-            Map.entry("mongodb","MongoDB"),Map.entry("tomcat","Apache Tomcat"),Map.entry("nginx","Nginx"),
+            Map.entry("mongodb","MongoDB"),Map.entry("elasticsearch","Elasticsearch"),
+            Map.entry("tomcat","Apache Tomcat"),Map.entry("nginx","Nginx"),
             Map.entry("firewall","防火墙"),Map.entry("swtich","交换机"),Map.entry("router","路由器"),
             Map.entry("load_balance","负载均衡"),Map.entry("nas","NAS"),Map.entry("KingBase","人大金仓"),
-            Map.entry("application","应用模块"),Map.entry("service","服务"));
+            Map.entry("k8s_pod","K8S Pod"),Map.entry("idcrack","机柜"),Map.entry("idc","机房"),
+            Map.entry("logic_subsystem","逻辑子系统"),Map.entry("physical_subsystem","物理子系统"),
+            Map.entry("deployment_unit","部署单元"),Map.entry("business","产品"),
+            Map.entry("application","应用"),Map.entry("service","服务"));
 
     public Asset apply(Asset asset,JsonNode row,String classKey,String className,Instant syncedAt){
         String itemId=text(row,"id");
@@ -58,13 +62,27 @@ public class CmdbAssetMapper {
 
     public String proposedCode(JsonNode row,String classKey){
         String explicit=first(text(row,"ci_number"),text(row,"fa_cmdb_no"),text(row,"serial_number"));
-        String base=explicit==null?classKey+"-"+shortId(text(row,"id")):classKey+"-"+explicit;
+        // Preserve the authoritative configuration number exactly as supplied by the source.
+        String base=explicit==null?classKey+"-"+shortId(text(row,"id")):explicit;
         return limit(base.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]+","-"),120);
     }
     public String className(String classKey){return CLASS_NAMES.getOrDefault(classKey,classKey);}
 
     private String productName(String key,String fallback){return switch(key){case "tomcat"->"Apache Tomcat";case "mysql"->"Oracle MySQL";case "postgresql"->"PostgreSQL";case "mongodb"->"MongoDB";case "KingBase"->"人大金仓";default->fallback;};}
-    private String assetType(String key){return switch(key){case "virtual_host"->"VIRTUAL_MACHINE";case "physics_machine"->"PHYSICAL_SERVER";case "mysql","oracle","redis","postgresql","mongodb","KingBase"->"DATABASE";case "tomcat","nginx"->"MIDDLEWARE";case "application"->"APPLICATION_PLATFORM";case "service"->"APPLICATION_RUNTIME";case "firewall","swtich","router","load_balance"->"NETWORK_DEVICE";case "nas"->"FILE_SERVICE";default->"UNCLASSIFIED";};}
+    private String assetType(String key){return switch(key){
+        case "virtual_host"->"VIRTUAL_MACHINE";
+        case "physics_machine"->"PHYSICAL_SERVER";
+        case "mysql","oracle","redis","postgresql","mongodb","elasticsearch","KingBase"->"DATABASE";
+        case "tomcat","nginx"->"MIDDLEWARE";
+        case "business"->"BUSINESS_PRODUCT";
+        case "application","logic_subsystem","physical_subsystem"->"APPLICATION_PLATFORM";
+        case "service","deployment_unit"->"APPLICATION_RUNTIME";
+        case "k8s_pod"->"CONTAINER";
+        case "firewall","swtich","router","load_balance"->"NETWORK_DEVICE";
+        case "nas"->"FILE_SERVICE";
+        case "idcrack","idc"->"FACILITY";
+        default->"UNCLASSIFIED";
+    };}
     private EnvironmentType environment(String value){String v=lower(value);if(containsAny(v,"prod","生产"))return EnvironmentType.PROD;if(containsAny(v,"preprod","uat","预生产"))return EnvironmentType.PREPROD;if(containsAny(v,"test","测试"))return EnvironmentType.TEST;if(containsAny(v,"dev","开发"))return EnvironmentType.DEV;return EnvironmentType.PROD;}
     private Integer criticality(JsonNode row){String raw=first(text(row,"device_level_#value"),text(row,"device_level"));try{int level=Integer.parseInt(raw);return Math.max(1,Math.min(5,6-level));}catch(Exception ignored){return 3;}}
     private String owner(JsonNode row){

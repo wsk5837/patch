@@ -52,6 +52,8 @@ services:
         value: "true"
       - key: CMDB_REPLACE_LOCAL_ASSETS
         value: "true"
+      - key: CMDB_CLASS_KEYS
+        value: virtual_host,physics_machine,mysql,oracle,redis,postgresql,mongodb,elasticsearch,tomcat,nginx,firewall,swtich,router,load_balance,nas,k8s_pod,idcrack,idc,logic_subsystem,physical_subsystem,deployment_unit,business,application,service,KingBase
       # The static site uses bearer-token authentication, not cookies. This
       # Render-only pattern avoids a circular Blueprint dependency while still
       # restricting browser origins to Render-hosted sites.

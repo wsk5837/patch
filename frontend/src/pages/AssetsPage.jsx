@@ -33,7 +33,7 @@ export default function AssetsPage(){
   {key:'cmdbState',label:t('assetStatus'),render:r=><StatusBadge tone={r.cmdbEnabled===false?'gray':'ok'}>{lang==='zh'&&r.cmdbState?r.cmdbState:(r.cmdbEnabled===false?t('disabled'):t('enabled'))}</StatusBadge>},
   {key:'agentStatus',label:t('agentStatus'),render:r=><StatusBadge tone={statusTone(r.agentStatus)}>{t(String(r.agentStatus).toLowerCase())}</StatusBadge>},
   {key:'openFindings',label:t('openVulnerabilities')},
-  {key:'cmdbSyncedAt',label:t('dataUpdatedAt'),render:r=>fmtDate(r.cmdbSyncedAt||r.lastSeenAt,lang)}
+  {key:'cmdbSyncedAt',label:t('dataUpdatedAt'),render:r=>fmtDate(r.cmdbSyncedAt,lang)}
  ]
  return <>
   <PageHeader title={t('assetManagement')}><button className="btn" onClick={()=>{reload();reloadCmdb()}}><RefreshCw size={15}/>{t('refresh')}</button>{has('ASSET_SYNC')&&<button className="btn primary" disabled={!cmdb.configured||syncing||cmdb.syncing} onClick={sync}><RotateCw className={syncing||cmdb.syncing?'spin':''} size={15}/>{syncing||cmdb.syncing?t('syncingAssets'):t('syncAssets')}</button>}</PageHeader>

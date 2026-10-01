@@ -20,9 +20,14 @@ public class CmdbProperties {
     private boolean replaceLocalAssets=true;
     private List<String> classKeys=new ArrayList<>(List.of(
             "virtual_host","physics_machine","mysql","oracle","redis","postgresql","mongodb",
-            "tomcat","nginx","firewall","swtich","router","load_balance","nas","KingBase"));
+            "elasticsearch","tomcat","nginx","firewall","swtich","router","load_balance","nas",
+            "k8s_pod","idcrack","idc","logic_subsystem","physical_subsystem","deployment_unit",
+            "business","application","service","KingBase"));
 
-    public boolean configured(){return enabled&&notBlank(baseUrl)&&notBlank(clientId)&&notBlank(clientSecret);}
+    /** Credentials make the integration usable even when an older Render service has not yet
+     * received the CMDB_ENABLED flag from a Blueprint sync. */
+    public boolean configured(){return notBlank(baseUrl)&&notBlank(clientId)&&notBlank(clientSecret);}
+    public boolean externalInventory(){return enabled||configured();}
     public String normalizedBaseUrl(){return baseUrl==null?"":baseUrl.trim().replaceAll("/+$","");}
     private boolean notBlank(String value){return value!=null&&!value.isBlank();}
 }
