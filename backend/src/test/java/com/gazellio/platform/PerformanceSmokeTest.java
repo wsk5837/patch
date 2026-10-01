@@ -169,7 +169,7 @@ class PerformanceSmokeTest {
     }
 
     @Test
-    void finalApprovalStartsProductionAndLegacyPreproductionRetrySelfHeals() {
+    void finalApprovalStartsPreproductionAndRetryStaysInPreproduction() {
         String suffix=UUID.randomUUID().toString().substring(0,8);
         var patch=patchRepository.findAll().stream().findFirst().orElseThrow();
         var operator=userAccounts.findByUsername("ops").orElseThrow();
@@ -178,6 +178,10 @@ class PerformanceSmokeTest {
         Asset asset=assetRepository.save(Asset.builder().assetCode("APPROVAL-PROD-"+suffix)
                 .name("Open SSH").hostname("approval-"+suffix).ipAddress("198.51.100.10")
                 .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PROD)
+                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
+        assetRepository.save(Asset.builder().assetCode("APPROVAL-PREPROD-"+suffix)
+                .name("Open SSH pre-production").hostname("approval-preprod-"+suffix).ipAddress("198.51.100.11")
+                .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PREPROD)
                 .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
         Finding finding=findingRepository.save(Finding.builder().assetId(asset.getId()).cveId("CVE-2023-38545")
                 .riskScore(9.1).evidence("approval transaction regression fixture").build());
@@ -207,19 +211,18 @@ class PerformanceSmokeTest {
             assertEquals("APPROVED",result.status());
             assertEquals("IMPLEMENTING",approvals.get(request.getId()).status());
             var implementing=taskRepository.findById(task.getId()).orElseThrow();
-            assertEquals(com.gazellio.platform.model.Enums.TaskStage.PROD_PATCH,implementing.getStage());
+            assertEquals(com.gazellio.platform.model.Enums.TaskStage.PREPROD_PATCH,implementing.getStage());
             assertEquals(com.gazellio.platform.model.Enums.TaskStatus.IN_PROGRESS,implementing.getStatus());
             assertNotNull(implementing.getLatestRunId());
 
-            // Existing deployments may already contain tasks put into PREPROD_PATCH by
-            // an older build. Retrying such an approved task must resume production,
-            // not search for a non-existent PREPROD copy of the CMDB asset.
+            // A failed pre-production run is retried in pre-production; it must never
+            // bypass the stage and patch production directly.
             implementing.setStage(com.gazellio.platform.model.Enums.TaskStage.PREPROD_PATCH);
             implementing.setStatus(com.gazellio.platform.model.Enums.TaskStatus.BLOCKED);
             taskRepository.save(implementing);
             var retried=tasks.action(implementing.getId(),"retry",
                     new TaskActionRequest(null,null,null,null,null,null));
-            assertEquals("PROD_PATCH",retried.stage());
+            assertEquals("PREPROD_PATCH",retried.stage());
             assertEquals("IN_PROGRESS",retried.status());
         } finally {
             context.setAuthentication(previousAuthentication);

@@ -213,6 +213,16 @@ public class ScanService {
                 :"Remote service fingerprint and vulnerability probe";
         String scanner=authenticated?"Gazellio Agent 1.6.0":"Gazellio Network Scanner 1.6.0";
         String transport=authenticated?"Authenticated "+value(scan.getCredentialType())+" channel":"Network probe";
+        String affected=firstEvidence(vulnerability==null?null:vulnerability.getAffectedVersionRangeEn(),
+                vulnerability==null?null:vulnerability.getAffectedVersionRangeZh(),"See detection rule");
+        String fixed=vulnerability==null?null:vulnerability.getFixedVersion();
+        String packageName=evidencePackage(product);
+        boolean windows=asset.getOsName()!=null&&asset.getOsName().toLowerCase(Locale.ROOT).contains("windows");
+        boolean debian=asset.getOsName()!=null&&(asset.getOsName().toLowerCase(Locale.ROOT).contains("ubuntu")||asset.getOsName().toLowerCase(Locale.ROOT).contains("debian"));
+        String sourcePath=windows?"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion":debian?"/var/lib/dpkg/status":"/var/lib/rpm";
+        String command=windows?"Get-Package -Name "+packageName+" | Select Name,Version":debian
+                ?"dpkg-query -W -f='${Package}|${Version}|${Status}\\n' "+packageName
+                :"rpm -q --qf '%{NAME}|%{VERSION}-%{RELEASE}|%{ARCH}\\n' "+packageName;
         String digest=UUID.nameUUIDFromBytes((cve+asset.getAssetCode()+scan.getJobNo()).getBytes(StandardCharsets.UTF_8))
                 .toString().replace("-","");
         return "SCAN EVIDENCE\n"
@@ -226,16 +236,40 @@ public class ScanService {
                 +("CMDB".equals(asset.getSourceSystem())?"cmdb_item_id: "+value(asset.getCmdbItemId())+"\ncmdb_class: "+value(asset.getCmdbClassKey())+"\n":"")
                 +"transport: "+transport+"\n"
                 +"detection_rule: GZ-"+cve+"\n"
+                +"evidence_type: PACKAGE_VERSION\n"
+                +"evidence_origin: DERIVED_FROM_RECORDED_SCAN\n"
+                +"source_path: "+sourcePath+"\n"
+                +"collection_command: "+command+"\n"
+                +"affected_condition: "+affected+"\n"
+                +"fixed_version: "+value(fixed)+"\n"
                 +"method: "+method+"\n"
                 +"component: "+product+"\n"
                 +"observed_version: "+observed+"\n"
                 +"installed_inventory: "+value(asset.getInstalledProducts())+"\n"
                 +"rule_result: observed version matched affected range\n"
+                +"highlight_line: 3\n"
+                +"raw_evidence_begin:\n"
+                +"1|component="+product+"\n"
+                +"2|package="+packageName+"\n"
+                +"3|installed_version="+observed+"\n"
+                +"4|affected_condition="+affected+"\n"
+                +"5|scanner_rule=GZ-"+cve+"\n"
+                +"6|decision=MATCH\n"
+                +"raw_evidence_end:\n"
                 +"service_state: running\n"
                 +"confidence: HIGH\n"
                 +"result: VULNERABLE\n"
                 +"collected_at: "+Instant.now()+"\n"
                 +"evidence_sha256: "+digest;
+    }
+
+    private String firstEvidence(String... values){for(String candidate:values)if(candidate!=null&&!candidate.isBlank())return candidate;return null;}
+    private String evidencePackage(String product){
+        String candidate=product==null?"component":product.toLowerCase(Locale.ROOT);
+        if(candidate.contains("openssh"))return "openssh-server";if(candidate.contains("openssl"))return "openssl";
+        if(candidate.contains("tomcat"))return "tomcat";if(candidate.contains("http server")||candidate.contains("httpd"))return "httpd";
+        if(candidate.contains("kernel"))return "kernel";if(candidate.contains("curl"))return "curl";
+        return candidate.replaceAll("[^a-z0-9._+-]+","-").replaceAll("^-|-$","");
     }
 
     private String value(String value){return value==null?"":value;}

@@ -160,7 +160,7 @@ public class ViewService {
                     f.getOwnerName(), a==null?null:a.getCriticality(), a!=null&&Boolean.TRUE.equals(a.getInternetExposed()), reasons,
                     s(f.getStatus()), f.getRiskScore(), f.getOccurrences(), f.getScanJobId(),
                     scan == null ? null : scan.getJobNo(), f.getRemediationTaskId(), task == null ? null : task.getTaskNo(), s(f.getFirstSeenAt()),
-                    s(f.getLastSeenAt()), f.getEvidence(), f.getFalsePositiveReason(), f.getExemptionReason(),
+                    s(f.getLastSeenAt()), f.getEvidence(), evidenceProof(f,a,v), f.getFalsePositiveReason(), f.getExemptionReason(),
                     s(f.getExemptionExpiresAt()), f.getCompensatingControl(), f.getResidualRisk(),
                     f.getExemptionApprovedBy(), s(f.getExemptionApprovedAt()),
                     f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
@@ -171,6 +171,82 @@ public class ViewService {
     }
 
     public FindingView finding(Finding row) { return findingViews(List.of(row)).getFirst(); }
+
+    private FindingEvidenceView evidenceProof(Finding finding,Asset asset,VulnerabilityDefinition vulnerability){
+        Map<String,String> fields=parseEvidence(finding.getEvidence());
+        String product=vulnerability==null?fields.get("component"):first(vulnerability.getProduct(),fields.get("component"));
+        String packageName=packageName(product);
+        String observed=first(fields.get("observed_version"),versionFromInventory(asset==null?null:asset.getInstalledProducts(),product),asset==null?null:asset.getOsVersion(),"unavailable");
+        String affectedZh=vulnerability==null?fields.get("affected_condition"):first(vulnerability.getAffectedVersionRangeZh(),fields.get("affected_condition"),"参见检测规则");
+        String affectedEn=vulnerability==null?fields.get("affected_condition"):first(vulnerability.getAffectedVersionRangeEn(),fields.get("affected_condition"),"See detection rule");
+        String fixed=vulnerability==null?fields.get("fixed_version"):first(vulnerability.getFixedVersion(),fields.get("fixed_version"));
+        String rule=vulnerability==null?fields.get("detection_rule"):first(vulnerability.getScannerRuleId(),fields.get("detection_rule"),"GZ-"+finding.getCveId());
+        String os=asset==null?"":first(asset.getOsName(),"").toLowerCase(Locale.ROOT);
+        String evidenceType=first(fields.get("evidence_type"),"PACKAGE_VERSION");
+        String defaultSource=os.contains("windows")?"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion":os.contains("ubuntu")||os.contains("debian")?"/var/lib/dpkg/status":"/var/lib/rpm";
+        String defaultCommand=os.contains("windows")?"Get-Package -Name "+packageName+" | Select Name,Version":os.contains("ubuntu")||os.contains("debian")?"dpkg-query -W -f='${Package}|${Version}|${Status}\\n' "+packageName:"rpm -q --qf '%{NAME}|%{VERSION}-%{RELEASE}|%{ARCH}\\n' "+packageName;
+        String sourcePath=first(fields.get("source_path"),defaultSource);
+        String command=first(fields.get("collection_command"),defaultCommand);
+        List<FindingEvidenceLineView> lines=rawEvidenceLines(finding.getEvidence(),fields);
+        String origin=first(fields.get("evidence_origin"),lines.isEmpty()?"DERIVED_FROM_RECORDED_SCAN":"SCANNER_RAW");
+        if(lines.isEmpty()){
+            lines=List.of(
+                    new FindingEvidenceLineView(1,"component="+first(product,"unknown"),false,null,null),
+                    new FindingEvidenceLineView(2,"package="+packageName,false,null,null),
+                    new FindingEvidenceLineView(3,"installed_version="+observed,true,"该行的实测版本命中受影响版本条件","The observed version on this line matches the affected-version condition"),
+                    new FindingEvidenceLineView(4,"affected_condition="+first(affectedEn,affectedZh,"unknown"),false,null,null),
+                    new FindingEvidenceLineView(5,"scanner_rule="+rule,false,null,null),
+                    new FindingEvidenceLineView(6,"decision="+first(fields.get("result"),"VULNERABLE"),false,null,null));
+        }
+        return new FindingEvidenceView(evidenceType,sourcePath,command,affectedZh,affectedEn,fixed,rule,
+                first(fields.get("result"),"VULNERABLE"),origin,lines);
+    }
+
+    private Map<String,String> parseEvidence(String evidence){
+        Map<String,String> fields=new LinkedHashMap<>();
+        if(evidence==null)return fields;
+        for(String line:evidence.split("\\R")){
+            int split=line.indexOf(':');
+            if(split>0)fields.putIfAbsent(line.substring(0,split).trim(),line.substring(split+1).trim());
+        }
+        return fields;
+    }
+
+    private List<FindingEvidenceLineView> rawEvidenceLines(String evidence,Map<String,String> fields){
+        if(evidence==null||!evidence.contains("raw_evidence_begin:"))return List.of();
+        int highlight=parseInt(fields.get("highlight_line"),-1);boolean inBlock=false;List<FindingEvidenceLineView> result=new ArrayList<>();
+        for(String value:evidence.split("\\R")){
+            if("raw_evidence_begin:".equals(value.trim())){inBlock=true;continue;}
+            if("raw_evidence_end:".equals(value.trim()))break;
+            if(!inBlock)continue;
+            int separator=value.indexOf('|');int line=separator>0?parseInt(value.substring(0,separator).trim(),result.size()+1):result.size()+1;
+            String content=separator>0?value.substring(separator+1):value;boolean marked=line==highlight;
+            result.add(new FindingEvidenceLineView(line,content,marked,marked?"该行的实测值命中漏洞判定条件":null,marked?"The observed value on this line matches the vulnerability condition":null));
+        }
+        return result;
+    }
+
+    private int parseInt(String value,int fallback){try{return Integer.parseInt(value);}catch(Exception ignored){return fallback;}}
+    private String packageName(String product){
+        String value=product==null?"component":product.toLowerCase(Locale.ROOT);
+        if(value.contains("openssh"))return "openssh-server";if(value.contains("openssl"))return "openssl";
+        if(value.contains("tomcat"))return "tomcat";if(value.contains("http server")||value.contains("httpd"))return "httpd";
+        if(value.contains("kernel"))return "kernel";if(value.contains("curl"))return "curl";
+        return value.replaceAll("[^a-z0-9._+-]+","-").replaceAll("^-|-$","");
+    }
+    private String versionFromInventory(String inventory,String product){
+        if(inventory==null||product==null)return null;
+        String needle=product.toLowerCase(Locale.ROOT).replace("apache ","").replace("oracle ","").trim();
+        for(String item:inventory.split(",")){
+            String candidate=item.trim();String lower=candidate.toLowerCase(Locale.ROOT);
+            if(lower.contains(needle)||needle.equals("http server")&&lower.contains("http")){
+                java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("(?i)\\b(?:v)?(\\d+(?:[._-]\\d+)+(?:[a-z0-9._-]*)?)").matcher(candidate);
+                if(matcher.find())return matcher.group(1);
+            }
+        }
+        return null;
+    }
+    private String first(String...values){for(String value:values)if(value!=null&&!value.isBlank())return value;return null;}
 
     public ScanJobView scan(ScanJob x) {
         return new ScanJobView(x.getId(), x.getJobNo(), x.getName(), x.getScanType(), x.getTargetType(),

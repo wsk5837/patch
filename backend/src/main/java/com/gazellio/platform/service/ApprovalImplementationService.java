@@ -36,11 +36,11 @@ public class ApprovalImplementationService {
         try {
             requiresNew().executeWithoutResult(status -> {
                 RemediationTask task = tasks.findById(event.taskId()).orElseThrow();
-                orchestration.startPatchRun(task,"PROD","Ring 0 · 5% → Ring 1 · 20% → Ring 2 · 75%");
+                orchestration.startPatchRun(task,"PREPROD","Ring 0 · Pre-production");
             });
             updateImplementationState(event,true,null);
         } catch (Exception error) {
-            log.warn("Approval {} committed but production automation could not start: {}",
+            log.warn("Approval {} committed but pre-production automation could not start: {}",
                     event.approvalId(),error.getMessage());
             updateImplementationState(event,false,error.getMessage());
         }
@@ -59,8 +59,8 @@ public class ApprovalImplementationService {
             }
             task.setStatus(TaskStatus.BLOCKED);task.setUpdatedAt(now);tasks.save(task);
             audit.log("TASK",task.getId(),"AUTOMATION_BLOCKED",
-                    "审批已通过，生产自动化启动失败",
-                    "Approval passed, but production automation could not start"+(reason==null?"":": "+reason),"Gazellio");
+                    "审批已通过，预生产自动化启动失败",
+                    "Approval passed, but pre-production automation could not start"+(reason==null?"":": "+reason),"Gazellio");
         });
     }
 

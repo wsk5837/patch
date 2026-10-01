@@ -93,6 +93,13 @@ public final class ApiDtos {
     public record PatchCandidateView(Long id, String patchId, String titleZh, String titleEn, String version,
                                      String signatureStatus, boolean rebootRequired, String status) {}
 
+    public record FindingEvidenceLineView(Integer lineNumber,String content,boolean highlighted,
+                                          String annotationZh,String annotationEn) {}
+    public record FindingEvidenceView(String evidenceType,String sourcePath,String collectionCommand,
+                                      String affectedConditionZh,String affectedConditionEn,String fixedVersion,
+                                      String scannerRuleId,String decision,String origin,
+                                      List<FindingEvidenceLineView> lines) {}
+
     public record VulnerabilityView(String cveId, String titleZh, String titleEn, String vendor, String product,
                                     String descriptionZh, String descriptionEn, Double cvss, String severity, boolean kev,
                                     boolean ransomwareKnown, boolean patchAvailable, String referenceUrl,
@@ -117,7 +124,8 @@ public final class ApiDtos {
                               String businessService, String ownerName, Integer assetCriticality, boolean internetExposed,
                               List<String> priorityReasons, String status, Double riskScore, Integer occurrences,
                               Long scanJobId, String scanJobNo, Long remediationTaskId, String remediationTaskNo, String firstSeenAt, String lastSeenAt,
-                              String evidence, String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
+                              String evidence, FindingEvidenceView evidenceProof,
+                              String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
                               String compensatingControl, String residualRisk, String exemptionApprovedBy,
                               String exemptionApprovedAt,
                               Long securityIncidentId, String slaDueAt, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
