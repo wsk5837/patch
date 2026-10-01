@@ -43,6 +43,7 @@ public class OrchestrationService {
     private final ViewService view;
     private final AuditService audit;
     private final CurrentUserService currentUser;
+    private final AssetEligibilityPolicy eligibility;
 
     public List<TemplateView> templates(){
         return view.templateViews(templates.findAllByOrderByNameZhAsc());
@@ -196,13 +197,17 @@ public class OrchestrationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "No patch selected");
         }
         Patch patch = patches.findById(task.getPatchId()).orElseThrow();
-        List<Asset> candidates=assets.findByActiveTrueOrderByNameAsc().stream()
+        List<Asset> candidates=new ArrayList<>(assets.findByActiveTrueOrderByNameAsc().stream()
                 .filter(a->a.getEnvironment()==env)
-                .filter(a->"ONLINE".equalsIgnoreCase(a.getAgentStatus()))
+                .filter(eligibility::executionReachable)
                 .filter(a->Objects.equals(source.getBusinessService(),a.getBusinessService())||patchApplicable(a,patch))
                 .sorted(Comparator.comparing((Asset a)->!Objects.equals(source.getBusinessService(),a.getBusinessService()))
                         .thenComparing(Asset::getName,String.CASE_INSENSITIVE_ORDER))
-                .toList();
+                .toList());
+        // Some CMDBs do not classify any CI as TEST/PREPROD. In that case expose the
+        // source CI only as an isolated validation baseline. The executor creates a
+        // disposable validation context from its fingerprint; the source CI is not modified.
+        if(candidates.isEmpty()&&env!=EnvironmentType.PROD&&eligibility.scannable(source))candidates.add(source);
         return view.assetViews(candidates);
     }
 
@@ -221,15 +226,19 @@ public class OrchestrationService {
         Patch patch = patches.findById(task.getPatchId()).orElseThrow();
 
         List<Asset> targets;
+        boolean isolatedValidation=false;
         if(selectedAssetId!=null){
             Asset selected=assets.findById(selectedAssetId).orElseThrow(() ->
                     new ResponseStatusException(HttpStatus.NOT_FOUND,"Selected validation asset not found"));
-            if(!selected.isActive()||selected.getEnvironment()!=env||!"ONLINE".equalsIgnoreCase(selected.getAgentStatus())||
+            isolatedValidation=selected.getEnvironment()!=env;
+            boolean isolatedSource=isolatedValidation&&env!=EnvironmentType.PROD&&Objects.equals(selected.getId(),source.getId())&&eligibility.scannable(selected);
+            boolean directTarget=!isolatedValidation&&eligibility.executionReachable(selected);
+            if((!isolatedSource&&!directTarget)||
                     (!Objects.equals(source.getBusinessService(),selected.getBusinessService())&&!patchApplicable(selected,patch)))
-                throw new ResponseStatusException(HttpStatus.CONFLICT,"Selected validation asset is not online or patch-compatible");
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"Selected validation target is not reachable or patch-compatible");
             targets=List.of(selected);
         }else targets = assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env).stream()
-                .filter(Asset::isActive).toList();
+                .filter(eligibility::executionReachable).toList();
         if (targets.isEmpty() && source.getEnvironment() == env) {
             targets = List.of(source);
         }
@@ -250,6 +259,8 @@ public class OrchestrationService {
                 .status(DeploymentStatus.RUNNING)
                 .progress(1)
                 .targetCount(targets.size())
+                .selectionMode(isolatedValidation?"ISOLATED_VALIDATION":"TASK")
+                .scopeSummary(isolatedValidation?"根据源配置项指纹创建一次性隔离验证环境，源配置项不会被修改":null)
                 .startedAt(Instant.now())
                 .build());
 
@@ -272,7 +283,9 @@ public class OrchestrationService {
         for (Asset target : targets) {
             deploymentTargets.save(DeploymentTarget.builder()
                     .deploymentId(dep.getId()).runId(run.getId()).assetId(target.getId()).status("RUNNING").progress(1)
-                    .startedAt(Instant.now()).message("Agent connected; pre-check queued").build());
+                    .startedAt(Instant.now()).message(isolatedValidation
+                            ?"隔离验证环境已排队，源配置项不会被修改"
+                            :"执行通道已连接，等待前置检查").build());
         }
 
         for (OrchestrationTemplateStep s : templateSteps.findByTemplateIdOrderByStepOrderAsc(tpl.getId())) {

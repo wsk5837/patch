@@ -20,12 +20,14 @@ public class AssetService {
     private final AssetRepository assets;
     private final ViewService view;
     private final CmdbProperties cmdbProperties;
+    private final AssetEligibilityPolicy eligibility;
 
     public List<AssetView> list(){return view.assetViews(managedAssets());}
+    public List<AssetView> scanTargets(){return view.assetViews(managedAssets().stream().filter(eligibility::scannable).toList());}
     public AssetView get(Long id){return view.asset(assets.findById(id).orElseThrow());}
 
     public AssetScopeOptions scopeOptions() {
-        List<Asset> rows = managedAssets();
+        List<Asset> rows = managedAssets().stream().filter(eligibility::scannable).toList();
         Map<String,List<Asset>> byClass=rows.stream().filter(a->a.getCmdbClassKey()!=null)
                 .collect(Collectors.groupingBy(Asset::getCmdbClassKey,LinkedHashMap::new,Collectors.toList()));
         List<CmdbClassOption> classes=byClass.entrySet().stream().map(entry->{Asset first=entry.getValue().getFirst();return new CmdbClassOption(entry.getKey(),first.getCmdbClassName(),entry.getValue().size());})

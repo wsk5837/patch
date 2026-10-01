@@ -38,6 +38,7 @@ public class ScanService {
     private final AuditService audit;
     private final ViewService view;
     private final SettingsService settings;
+    private final AssetEligibilityPolicy eligibility;
     private final Map<String,ZonedDateTime> scheduledSlots=new java.util.concurrent.ConcurrentHashMap<>();
 
     public List<ScanJobView> jobs(){ return scans.findTop100ByOrderByCreatedAtDesc().stream().map(view::scan).toList(); }
@@ -128,7 +129,9 @@ public class ScanService {
 
     private List<Asset> resolveTargets(ScanJob j){
         String type=j.getTargetType().toUpperCase(Locale.ROOT); String val=j.getTargetValue()==null?"":j.getTargetValue();
-        List<Asset> all=assets.findByActiveTrueOrderByNameAsc();
+        // The CMDB contains business, application, service and topology CIs as well as
+        // technical assets. Only addressable technical CIs are valid scanner targets.
+        List<Asset> all=assets.findByActiveTrueOrderByNameAsc().stream().filter(eligibility::scannable).toList();
         return switch(type){
             case "ALL" -> all;
             case "ASSET", "ASSET_IDS" -> {

@@ -81,7 +81,8 @@ class PerformanceSmokeTest {
         assertTrue(rows.stream().map(item -> item.assetType()).collect(Collectors.toSet()).size() >= 8);
         assertTrue(rows.stream().noneMatch(item -> "VIRTUAL_MACHINE".equals(item.assetType())));
         var options = assets.scopeOptions();
-        assertTrue(options.networkSegments().size() >= 10);
+        // Scan scopes deliberately exclude business/service/topology-only CIs.
+        assertTrue(options.networkSegments().size() >= 9);
         assertTrue(options.assetTypes().containsAll(Set.of("DATABASE", "MIDDLEWARE", "APPLICATION_RUNTIME")));
     }
 
@@ -178,11 +179,11 @@ class PerformanceSmokeTest {
         Asset asset=assetRepository.save(Asset.builder().assetCode("APPROVAL-PROD-"+suffix)
                 .name("Open SSH").hostname("approval-"+suffix).ipAddress("198.51.100.10")
                 .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PROD)
-                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
+                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").agentStatus("ONLINE").build());
         assetRepository.save(Asset.builder().assetCode("APPROVAL-PREPROD-"+suffix)
                 .name("Open SSH").hostname("approval-preprod-"+suffix).ipAddress("198.51.100.11")
                 .networkSegment("198.51.100.0/24").assetType("SERVER").environment(com.gazellio.platform.model.Enums.EnvironmentType.PREPROD)
-                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").build());
+                .businessService("approval-no-preprod-"+suffix).sourceSystem("LOCAL").agentStatus("ONLINE").build());
         Finding finding=findingRepository.save(Finding.builder().assetId(asset.getId()).cveId("CVE-2023-38545")
                 .riskScore(9.1).evidence("approval transaction regression fixture").build());
         RemediationTask task=taskRepository.save(RemediationTask.builder().taskNo("RMD-APPROVAL-"+suffix)

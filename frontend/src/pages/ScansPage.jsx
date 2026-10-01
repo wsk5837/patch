@@ -16,7 +16,7 @@ export default function ScansPage(){
  const {data:jobs=[],loading,reload}=useApiData('/api/scans',{initial:[],poll:8000})
  const {data:agents=[],reload:reloadAgents}=useApiData('/api/scans/agents',{initial:[],poll:30000})
  const {data:scopeOptions={networkSegments:[],businessServices:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],businessServices:[]}})
- const {data:assets=[]}=useApiData('/api/assets',{initial:[]})
+ const {data:assets=[]}=useApiData('/api/assets/scan-targets',{initial:[]})
  const [open,setOpen]=useState(false)
  const [form,setForm]=useState({name:'',scanType:'NETWORK',targetType:'ALL',targetValue:'ALL',credentialType:'NONE'})
  const targetOptions=useMemo(()=>form.targetType==='NETWORK_SEGMENT'?(scopeOptions.networkSegments||[]):form.targetType==='SERVICE'?(scopeOptions.businessServices||[]):form.targetType==='CMDB_CLASS'?(scopeOptions.cmdbClasses||[]):form.targetType==='ENVIRONMENT'?['DEV','TEST','PREPROD','PROD']:form.targetType==='ASSET_IDS'?assets:[],[form.targetType,scopeOptions,assets])

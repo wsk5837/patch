@@ -13,6 +13,7 @@ import java.util.List;
 public class AssetController {
     private final AssetService service;
     @GetMapping public List<AssetView> list(){return service.list();}
+    @GetMapping("/scan-targets") public List<AssetView> scanTargets(){return service.scanTargets();}
     @GetMapping("/scope-options") public AssetScopeOptions scopeOptions(){return service.scopeOptions();}
     @GetMapping("/{id}") public AssetView get(@PathVariable Long id){return service.get(id);}
 }
