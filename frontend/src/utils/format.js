@@ -5,6 +5,12 @@ export function fmtDate(v, lang='zh'){
 }
 export function envLabel(t,v){ return ({PROD:t('production'),TEST:t('test'),PREPROD:t('preprod'),DEV:t('development'),MIXED:t('mixed')})[v]||v||'—' }
 export function assetTypeLabel(t,v){const key=({DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM:'applicationPlatform',APPLICATION_RUNTIME:'applicationRuntime',SECURITY_COMPONENT:'securityComponent',OBSERVABILITY:'observability',COLLABORATION:'collaboration',FILE_SERVICE:'fileService',SEARCH_PLATFORM:'searchPlatform',UNCLASSIFIED:'unclassified',VIRTUAL_MACHINE:'virtualMachine',PHYSICAL_SERVER:'physicalServer',NETWORK_DEVICE:'networkDevice'})[v];return key?t(key):(v||'—')}
+export function cmdbClassLabel(t,key,fallback){
+  const labels={virtual_host:'virtualMachine',physics_machine:'physicalServer',firewall:'firewall',swtich:'switch',switch:'switch',router:'router',load_balance:'loadBalancer',nas:'nasDevice',application:'applicationPlatform',service:'applicationRuntime'}
+  const translated=labels[String(key||'')]
+  if(translated){const value=t(translated);if(value!==translated)return value}
+  return ({mysql:'MySQL',oracle:'Oracle',redis:'Redis',postgresql:'PostgreSQL',mongodb:'MongoDB',tomcat:'Apache Tomcat',nginx:'Nginx',KingBase:'KingBase'})[key]||fallback||key||'—'
+}
 export function severityLabel(t,v){return ({CRITICAL:t('critical'),HIGH:t('high'),MEDIUM:t('medium'),LOW:t('low'),UNKNOWN:t('unknown')})[v]||v||'—'}
 export function findingStatus(t,v){return t(`finding_${v}`)}
 export function taskStatus(t,v){return t(`task_${v}`)}
@@ -25,5 +31,6 @@ export function scanTargetLabel(t,r,localize=(value)=>value){
   if(!r) return '—'
   if(r.targetType==='ALL'||r.targetValue==='ALL') return t('allAssets')
   if(r.targetType==='ENVIRONMENT') return envLabel(t,r.targetValue)
+  if(r.targetType==='CMDB_CLASS') return r.targetValue||'—'
   return localize(r.targetValue)||'—'
 }

@@ -232,12 +232,12 @@ class PerformanceSmokeTest {
 
     @Test
     void rbacUsersUseDatabaseRolesAndInitialPassword(){
-        var role=accessControl.createRole(new RoleSaveRequest("AUDITOR_TEST","审计测试角色","Audit Test Role",true,
+        var role=accessControl.createRole(new RoleSaveRequest("AUDITOR_TEST","审计测试角色","Audit Test Role","只读审计角色","Read-only audit role","ALL",true,
                 List.of("AUDIT_VIEW","REPORT_VIEW")));
-        var user=accessControl.createUser(new UserSaveRequest("audit_tester","审计测试员","audit@example.test",role.id(),true,null));
+        var user=accessControl.createUser(new UserSaveRequest("audit_tester","审计测试员","audit@example.test","审计部","EMP-TEST",null,"LOCAL",role.id(),true,null));
         assertEquals(Set.of("AUDIT_VIEW","REPORT_VIEW"),Set.copyOf(user.permissions()));
         assertTrue(passwordEncoder.matches("Gazellio@123",userAccounts.findByUsername("audit_tester").orElseThrow().getPasswordHash()));
-        accessControl.updateRole(role.id(),new RoleSaveRequest(role.code(),role.nameZh(),role.nameEn(),true,List.of("AUDIT_VIEW")));
+        accessControl.updateRole(role.id(),new RoleSaveRequest(role.code(),role.nameZh(),role.nameEn(),role.descriptionZh(),role.descriptionEn(),role.dataScope(),true,List.of("AUDIT_VIEW")));
         assertEquals(List.of("AUDIT_VIEW"),accessControl.users().stream().filter(x->x.id().equals(user.id())).findFirst().orElseThrow().permissions());
     }
 

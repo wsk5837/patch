@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.gazellio.platform.SchemaCompatibilityMigrationTest
--------------------------------------------------------------------------------
-Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.576 s -- in com.gazellio.platform.SchemaCompatibilityMigrationTest

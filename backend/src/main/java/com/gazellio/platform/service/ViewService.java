@@ -63,7 +63,9 @@ public class ViewService {
                 a.getAssetType(), a.getZone(), Boolean.TRUE.equals(a.getInternetExposed()), a.getOsName(), a.getOsVersion(),
                 s(a.getEnvironment()), a.getBusinessService(), a.getOwnerId(), a.getOwnerName(), a.getCriticality(),
                 a.getAgentStatus(), a.getPatchBaseline(), a.getInstalledProducts(), a.getMaintenanceWindow(),
-                a.getLastSeenAt(), openCounts.getOrDefault(a.getId(), 0L)
+                a.getLastSeenAt(), openCounts.getOrDefault(a.getId(), 0L),a.getSourceSystem(),a.getCmdbItemId(),
+                a.getCmdbClassKey(),a.getCmdbClassName(),a.getCmdbState(),a.getCmdbLocked(),a.getCmdbEnabled(),
+                a.getCmdbAutoDiscovery(),s(a.getCmdbUpdatedAt()),s(a.getCmdbSyncedAt())
         )).toList();
     }
 

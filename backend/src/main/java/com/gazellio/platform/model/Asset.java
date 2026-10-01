@@ -9,7 +9,8 @@ import static com.gazellio.platform.model.Enums.EnvironmentType;
         @Index(name="idx_asset_active_name", columnList="active,name"),
         @Index(name="idx_asset_service_env", columnList="business_service,environment"),
         @Index(name="idx_asset_ip", columnList="ip_address"),
-        @Index(name="idx_asset_segment_type", columnList="network_segment,asset_type")
+        @Index(name="idx_asset_segment_type", columnList="network_segment,asset_type"),
+        @Index(name="idx_asset_cmdb_source", columnList="source_system,cmdb_class_key")
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Asset {
@@ -37,4 +38,17 @@ public class Asset {
     @Column(length=120) private String maintenanceWindow;
     private Instant lastSeenAt;
     @Column(nullable=false) @Builder.Default private boolean active = true;
+    // Kept nullable at ORM bootstrap so an existing populated PostgreSQL table can be
+    // upgraded without a failing ADD COLUMN ... NOT NULL statement. The compatibility
+    // migration backfills and restores the constraint before data synchronization starts.
+    @Column(nullable=true,length=30) @Builder.Default private String sourceSystem = "LOCAL";
+    @Column(unique=true,length=80) private String cmdbItemId;
+    @Column(length=80) private String cmdbClassKey;
+    @Column(length=120) private String cmdbClassName;
+    @Column(length=120) private String cmdbState;
+    private Boolean cmdbLocked;
+    private Boolean cmdbEnabled;
+    private Boolean cmdbAutoDiscovery;
+    private Instant cmdbUpdatedAt;
+    private Instant cmdbSyncedAt;
 }

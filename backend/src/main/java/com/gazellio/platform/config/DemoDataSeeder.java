@@ -73,31 +73,38 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedUsers() {
-        upsertDemoUser("admin", "Gazellio Admin", "admin@gazellio.local", UserRole.ADMIN);
-        upsertDemoUser("security", "王卫嘉", "security@gazellio.local", UserRole.SECURITY);
-        upsertDemoUser("ops", "曾卫平", "ops@gazellio.local", UserRole.OPS);
-        upsertDemoUser("appowner", "陈佳宁", "appowner@gazellio.local", UserRole.APP_OWNER);
-        upsertDemoUser("approver", "李明远", "approver@gazellio.local", UserRole.APPROVER);
+        upsertDemoUser("admin", "Gazellio Admin", "admin@gazellio.local", "平台管理部", "SYS-0001", UserRole.ADMIN);
+        upsertDemoUser("security", "王卫嘉", "security@gazellio.local", "信息安全部", "SEC-0001", UserRole.SECURITY);
+        upsertDemoUser("ops", "曾卫平", "ops@gazellio.local", "基础设施运维部", "OPS-0001", UserRole.OPS);
+        upsertDemoUser("appowner", "陈佳宁", "appowner@gazellio.local", "应用管理部", "APP-0001", UserRole.APP_OWNER);
+        upsertDemoUser("approver", "李明远", "approver@gazellio.local", "变更管理委员会", "CAB-0001", UserRole.APPROVER);
     }
 
-    private void upsertDemoUser(String username,String name,String email,UserRole role){
+    private void upsertDemoUser(String username,String name,String email,String department,String employeeNo,UserRole role){
         UserAccount user=users.findByUsername(username).orElse(null);
         boolean initializePassword=user==null||user.getAccessRoleId()==null;
         if(user==null)user=UserAccount.builder().username(username).createdAt(Instant.now()).build();
-        user.setDisplayName(name);user.setEmail(email);user.setRole(role);user.setEnabled(true);
-        if(initializePassword||user.getPasswordHash()==null||user.getPasswordHash().isBlank())user.setPasswordHash(encoder.encode(AccessControlService.INITIAL_PASSWORD));
+        user.setDisplayName(name);user.setEmail(email);user.setDepartment(department);user.setEmployeeNo(employeeNo);user.setRole(role);user.setEnabled(true);
+        if(user.getFailedLoginAttempts()==null)user.setFailedLoginAttempts(0);if(user.getAccountType()==null)user.setAccountType("LOCAL");user.setUpdatedAt(Instant.now());
+        if(initializePassword||user.getPasswordHash()==null||user.getPasswordHash().isBlank()){user.setPasswordHash(encoder.encode(AccessControlService.INITIAL_PASSWORD));user.setPasswordChangedAt(Instant.now());}
         users.save(user);
     }
 
     private void seedAccessControl(){
         Map<String,String[]> names=Map.of(
-                "ADMIN",new String[]{"系统管理员","Administrator"},"SECURITY",new String[]{"安全管理员","Security Administrator"},
-                "OPS",new String[]{"运维人员","Operations"},"APP_OWNER",new String[]{"应用负责人","Application Owner"},
-                "APPROVER",new String[]{"发布审批人","Release Approver"});
+                "ADMIN",new String[]{"系统管理员","Administrator","管理系统配置、用户、角色与全部安全运营能力。","Manages system settings, users, roles and all security operations."},
+                "SECURITY",new String[]{"安全管理员","Security Administrator","负责漏洞库、扫描、风险研判、安全事件与处置闭环。","Owns vulnerability intelligence, scanning, triage, incidents and remediation oversight."},
+                "OPS",new String[]{"运维人员","Operations","负责补丁资产范围、自动化执行、回滚与生产复测。","Operates patch scopes, automated execution, rollback and production retesting."},
+                "APP_OWNER",new String[]{"应用负责人","Application Owner","负责所属应用的影响确认、测试验证与例外说明。","Validates application impact, test results and exception justification for owned services."},
+                "APPROVER",new String[]{"发布审批人","Release Approver","审核生产发布的风险、实施、回退与维护窗口。","Reviews production release risk, implementation, rollback and maintenance windows."});
         for(var entry:names.entrySet()){
             AccessRole role=accessRoles.findByCode(entry.getKey()).orElseGet(AccessRole::new);
-            role.setCode(entry.getKey());role.setNameZh(entry.getValue()[0]);role.setNameEn(entry.getValue()[1]);role.setSystemRole(true);role.setEnabled(true);role.setUpdatedAt(Instant.now());role=accessRoles.save(role);
-            if(rolePermissions.findByRoleId(role.getId()).isEmpty())for(String permission:PermissionCatalog.defaults(role.getCode()))rolePermissions.save(RolePermission.builder().roleId(role.getId()).permissionCode(permission).build());
+            role.setCode(entry.getKey());role.setNameZh(entry.getValue()[0]);role.setNameEn(entry.getValue()[1]);
+            if(role.getDescriptionZh()==null||role.getDescriptionZh().isBlank())role.setDescriptionZh(entry.getValue()[2]);
+            if(role.getDescriptionEn()==null||role.getDescriptionEn().isBlank())role.setDescriptionEn(entry.getValue()[3]);
+            role.setSystemRole(true);role.setEnabled(true);if(role.getDataScope()==null)role.setDataScope("ALL");role.setUpdatedAt(Instant.now());role=accessRoles.save(role);
+            Set<String> existingPermissions=rolePermissions.findByRoleId(role.getId()).stream().map(RolePermission::getPermissionCode).collect(java.util.stream.Collectors.toSet());
+            for(String permission:PermissionCatalog.defaults(role.getCode()))if(!existingPermissions.contains(permission))rolePermissions.save(RolePermission.builder().roleId(role.getId()).permissionCode(permission).build());
             Map<String,String> usernames=Map.of("ADMIN","admin","SECURITY","security","OPS","ops","APP_OWNER","appowner","APPROVER","approver");
             AccessRole assignedRole=role;users.findByUsername(usernames.get(role.getCode())).ifPresent(user->{user.setAccessRoleId(assignedRole.getId());users.save(user);});
         }
@@ -858,10 +865,18 @@ public class DemoDataSeeder implements CommandLineRunner {
                 new String[]{"PROD_VERIFY","生产应用验证","Validate production application"},
                 new String[]{"PROD_RESCAN","生产环境漏洞复测","Rescan production"},
                 new String[]{"EVIDENCE_CLOSE","关闭发布并归档证据","Close release and archive evidence"},
-                new String[]{"CMDB_UPDATE","回写 CMDB 补丁状态","Write patch state back to CMDB"},
+                new String[]{"LOCAL_STATE","记录本地补丁验证状态","Record local patch verification state"},
                 new String[]{"VULN_CLOSE","关闭漏洞实例","Close vulnerability finding"}
             ));
         }
+        templates.findByCode("VULN-PATCH-CLOSED-LOOP").ifPresent(template->{
+            List<OrchestrationTemplateStep> steps=templateSteps.findByTemplateIdOrderByStepOrderAsc(template.getId());
+            boolean changed=false;
+            for(OrchestrationTemplateStep step:steps)if("CMDB_UPDATE".equals(step.getCode())){
+                step.setCode("LOCAL_STATE");step.setNameZh("记录本地补丁验证状态");step.setNameEn("Record local patch verification state");changed=true;
+            }
+            if(changed)templateSteps.saveAll(steps);
+        });
         ensureExecutionTemplate("PATCH-STANDARD","标准补丁安装编排","Standard Patch Installation","PATCH",4,List.of(
                 new String[]{"PRECHECK","执行前检查","Pre-check"},new String[]{"SNAPSHOT","快照与回退点","Snapshot & rollback point"},
                 new String[]{"DOWNLOAD","获取补丁包","Acquire package"},new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},

@@ -47,7 +47,7 @@ public class ScanService {
         String targetType=req.targetType().trim().toUpperCase(Locale.ROOT);
         if(!Set.of("AUTHENTICATED","NETWORK").contains(scanType))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan type");
-        if(!Set.of("ALL","NETWORK_SEGMENT","CIDR","ENVIRONMENT","SERVICE","ASSET","ASSET_IDS").contains(targetType))
+        if(!Set.of("ALL","NETWORK_SEGMENT","CIDR","ENVIRONMENT","SERVICE","ASSET","ASSET_IDS","CMDB_CLASS").contains(targetType))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan target type");
         if("AUTHENTICATED".equals(scanType)&&(req.credentialType()==null||"NONE".equalsIgnoreCase(req.credentialType())))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Authenticated scan requires an agent or credential");
@@ -85,9 +85,10 @@ public class ScanService {
 
     private int performScan(ScanJob j){
         List<Asset> targets=resolveTargets(j);
+        List<VulnerabilityDefinition> catalog=j.getTargetCve()==null||j.getTargetCve().isBlank()?vulns.findAll():List.of();
         int count=0;
         for(Asset a:targets){
-            for(String cve: (j.getTargetCve()!=null && !j.getTargetCve().isBlank()?List.of(j.getTargetCve()):candidateCves(a))){
+            for(String cve: (j.getTargetCve()!=null && !j.getTargetCve().isBlank()?List.of(j.getTargetCve()):candidateCves(a,catalog))){
                 if(isPatched(a.getId(),cve)) continue;
                 int gate=Math.abs(Objects.hash(a.getAssetCode(),cve,j.getId()))%100;
                 if(gate<42 && !j.getScanType().contains("TARGETED")) continue;
@@ -118,6 +119,7 @@ public class ScanService {
             }
             case "ENVIRONMENT" -> all.stream().filter(a->a.getEnvironment().name().equalsIgnoreCase(val)).toList();
             case "SERVICE" -> all.stream().filter(a->a.getBusinessService()!=null&&a.getBusinessService().equalsIgnoreCase(val)).toList();
+            case "CMDB_CLASS" -> all.stream().filter(a->a.getCmdbClassKey()!=null&&a.getCmdbClassKey().equalsIgnoreCase(val)).toList();
             case "SERVICE_ENV" -> { String[] parts=val.split("\\|",2); String svc=parts.length>0?parts[0]:""; String env=parts.length>1?parts[1]:""; yield all.stream().filter(a->a.getBusinessService()!=null&&a.getBusinessService().equalsIgnoreCase(svc)&&a.getEnvironment().name().equalsIgnoreCase(env)).toList(); }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unsupported scan target type");
         };
@@ -144,17 +146,29 @@ public class ScanService {
         }
     }
 
-    private List<String> candidateCves(Asset a){
-        String os=(a.getOsName()+" "+a.getName()+" "+a.getInstalledProducts()).toLowerCase(Locale.ROOT);
+    private List<String> candidateCves(Asset a,List<VulnerabilityDefinition> catalog){
+        String inventory=(value(a.getCmdbClassName())+" "+value(a.getOsName())+" "+value(a.getName())+" "+value(a.getInstalledProducts())).toLowerCase(Locale.ROOT);
         LinkedHashSet<String> out=new LinkedHashSet<>();
-        if(os.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2024-43451"); out.add("CVE-2024-49138"); }
-        if(os.contains("red hat")||os.contains("ubuntu")||os.contains("rocky")||os.contains("linux")){ out.add("CVE-2024-6387"); out.add("CVE-2024-6386"); out.add("CVE-2024-5535"); out.add("CVE-2023-38545"); out.add("CVE-2023-0465"); out.add("CVE-2022-0778"); out.add("CVE-2024-1086"); }
-        if(os.contains("jenkins")) out.add("CVE-2024-23897");
-        if(os.contains("tomcat")) out.add("CVE-2025-24813");
-        if(os.contains("teamcity")) out.add("CVE-2024-27198");
-        if(os.contains("fortios")) out.add("CVE-2024-21762");
-        if(os.contains("netscaler")) { out.add("CVE-2023-4966"); out.add("CVE-2023-3519"); }
+        catalog.stream().filter(v->productMatches(inventory,v.getProduct()))
+                .sorted(Comparator.comparing(VulnerabilityDefinition::isKev).reversed()
+                        .thenComparing(v->v.getCvss()==null?0d:v.getCvss(),Comparator.reverseOrder()))
+                .limit(12).map(VulnerabilityDefinition::getCveId).forEach(out::add);
+        if(inventory.contains("windows")){ out.add("CVE-2025-29824"); out.add("CVE-2025-33053"); out.add("CVE-2024-43451"); out.add("CVE-2024-49138"); }
+        if(inventory.contains("red hat")||inventory.contains("ubuntu")||inventory.contains("rocky")||inventory.contains("linux")){ out.add("CVE-2024-6387"); out.add("CVE-2024-6386"); out.add("CVE-2024-5535"); out.add("CVE-2023-38545"); out.add("CVE-2023-0465"); out.add("CVE-2022-0778"); out.add("CVE-2024-1086"); }
         return out.stream().filter(c->vulns.existsById(c)).toList();
+    }
+
+    private boolean productMatches(String inventory,String product){
+        if(product==null||product.isBlank())return false;
+        String normalized=product.toLowerCase(Locale.ROOT).replace("apache ","").replace("oracle ","").trim();
+        if(inventory.contains(normalized))return true;
+        return switch(normalized){
+            case "http server" -> inventory.contains("httpd")||inventory.contains("apache http");
+            case "kernel" -> inventory.contains("linux")||inventory.contains("red hat")||inventory.contains("ubuntu")||inventory.contains("rocky");
+            case "spring framework" -> inventory.contains("spring boot")||inventory.contains("spring framework");
+            case "php cgi" -> inventory.contains("php");
+            default -> false;
+        };
     }
 
     private boolean isPatched(Long assetId,String cve){
@@ -191,24 +205,31 @@ public class ScanService {
         String cve=vulnerability==null?"UNKNOWN":vulnerability.getCveId();
         String product=vulnerability==null||vulnerability.getProduct()==null?"Unknown component":vulnerability.getProduct();
         String observed=observedVersion(product,asset);
-        String method=asset.getOsName()!=null&&asset.getOsName().toLowerCase(Locale.ROOT).contains("windows")
-                ?"Registry + signed package inventory + service fingerprint"
-                :"Authenticated package inventory + process fingerprint + version rule";
+        boolean authenticated="AUTHENTICATED".equalsIgnoreCase(scan.getScanType());
+        String method=authenticated
+                ?(asset.getOsName()!=null&&asset.getOsName().toLowerCase(Locale.ROOT).contains("windows")
+                    ?"Registry, signed package inventory and service fingerprint"
+                    :"Package inventory, process fingerprint and version rule")
+                :"Remote service fingerprint and vulnerability probe";
+        String scanner=authenticated?"Gazellio Agent 1.6.0":"Gazellio Network Scanner 1.6.0";
+        String transport=authenticated?"Authenticated "+value(scan.getCredentialType())+" channel":"Network probe";
         String digest=UUID.nameUUIDFromBytes((cve+asset.getAssetCode()+scan.getJobNo()).getBytes(StandardCharsets.UTF_8))
                 .toString().replace("-","");
-        return "SCAN EVIDENCE / 扫描证据\n"
+        return "SCAN EVIDENCE\n"
                 +"evidence_id: EV-"+cve+"-"+asset.getAssetCode()+"\n"
                 +"scan_job: "+scan.getJobNo()+"\n"
-                +"scanner: Gazellio Agent 1.6.0\n"
-                +"policy: Authenticated Vulnerability Baseline v2026.09\n"
+                +"scanner: "+scanner+"\n"
+                +"policy: Vulnerability Baseline v2026.09\n"
                 +"target: "+asset.getHostname()+" ("+asset.getIpAddress()+")\n"
                 +"asset_ci: "+asset.getAssetCode()+"\n"
-                +"transport: mTLS agent channel\n"
+                +"inventory_source: "+("CMDB".equals(asset.getSourceSystem())?"CMDB read-only mirror":"Gazellio asset inventory")+"\n"
+                +("CMDB".equals(asset.getSourceSystem())?"cmdb_item_id: "+value(asset.getCmdbItemId())+"\ncmdb_class: "+value(asset.getCmdbClassKey())+"\n":"")
+                +"transport: "+transport+"\n"
                 +"detection_rule: GZ-"+cve+"\n"
                 +"method: "+method+"\n"
                 +"component: "+product+"\n"
                 +"observed_version: "+observed+"\n"
-                +"installed_inventory: "+asset.getInstalledProducts()+"\n"
+                +"installed_inventory: "+value(asset.getInstalledProducts())+"\n"
                 +"rule_result: observed version matched affected range\n"
                 +"service_state: running\n"
                 +"confidence: HIGH\n"
@@ -216,6 +237,8 @@ public class ScanService {
                 +"collected_at: "+Instant.now()+"\n"
                 +"evidence_sha256: "+digest;
     }
+
+    private String value(String value){return value==null?"":value;}
 
     private String observedVersion(String product,Asset asset){
         String value=product.toLowerCase(Locale.ROOT);
@@ -295,7 +318,7 @@ public class ScanService {
         for(Asset a:targetAssets){
             assetPatchStates.findByAssetIdAndPatchId(a.getId(),task.getPatchId()).ifPresent(st->{st.setVerified(true);st.setVerifiedAt(Instant.now());assetPatchStates.save(st);});
         }
-        audit.log("CMDB",task.getId(),"PATCH_VERIFIED","复测通过，已回写 "+envName+" 环境补丁验证状态","Rescan passed; patch verification state written back for "+envName,actor);
+        audit.log("ASSET_PATCH_STATE",task.getId(),"PATCH_VERIFIED","复测通过，已记录 "+envName+" 环境本地补丁验证状态，未回写 CMDB","Rescan passed; local patch verification recorded for "+envName+" without modifying CMDB",actor);
     }
 
     private Optional<SecurityIncident> incidentFor(RemediationTask task){

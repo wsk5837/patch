@@ -24,6 +24,12 @@ services:
       DB_PASSWORD: gazellio
       JWT_SECRET: local-development-secret-change-me-123456789
       SEED_DEMO_DATA: "true"
+      CMDB_ENABLED: ${CMDB_ENABLED:-false}
+      CMDB_BASE_URL: ${CMDB_BASE_URL:-https://zypoc.gazellio.com/backend-server}
+      CMDB_CLIENT_ID: ${CMDB_CLIENT_ID:-}
+      CMDB_CLIENT_SECRET: ${CMDB_CLIENT_SECRET:-}
+      CMDB_SYNC_ON_STARTUP: ${CMDB_SYNC_ON_STARTUP:-true}
+      CMDB_REPLACE_LOCAL_ASSETS: ${CMDB_REPLACE_LOCAL_ASSETS:-true}
     depends_on:
       db:
         condition: service_healthy

@@ -60,3 +60,13 @@ app:
   agent-registration-token: ${AGENT_REGISTRATION_TOKEN:local-agent-registration-token}
   cisa-kev-sync-cron: ${CISA_KEV_SYNC_CRON:0 15 3 * * *}
   cors-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
+  cmdb:
+    enabled: ${CMDB_ENABLED:false}
+    base-url: ${CMDB_BASE_URL:https://zypoc.gazellio.com/backend-server}
+    client-id: ${CMDB_CLIENT_ID:}
+    client-secret: ${CMDB_CLIENT_SECRET:}
+    page-size: ${CMDB_PAGE_SIZE:100}
+    sync-on-startup: ${CMDB_SYNC_ON_STARTUP:true}
+    sync-cron: ${CMDB_SYNC_CRON:0 0/30 * * * *}
+    replace-local-assets: ${CMDB_REPLACE_LOCAL_ASSETS:true}
+    class-keys: ${CMDB_CLASS_KEYS:virtual_host,physics_machine,mysql,oracle,redis,postgresql,mongodb,tomcat,nginx,firewall,swtich,router,load_balance,nas,KingBase}

@@ -10,9 +10,11 @@ public final class ApiDtos {
     private ApiDtos() {}
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
-    public record UserView(Long id, String username, String displayName, String email, String role,
-                           Long roleId, String roleNameZh, String roleNameEn, boolean enabled,
-                           List<String> permissions) {}
+    public record UserView(Long id, String username, String displayName, String email, String department,
+                           String employeeNo, String phone, String accountType, String role,
+                           Long roleId, String roleNameZh, String roleNameEn, boolean enabled, boolean locked,
+                           Integer failedLoginAttempts, String lastLoginAt, String passwordChangedAt,
+                           String createdAt, List<String> permissions) {}
     public record LoginResponse(String token, UserView user) {}
     public record MessageResponse(String message) {}
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
@@ -42,20 +44,37 @@ public final class ApiDtos {
     public record ApprovalActionRequest(String comment) {}
     public record SettingsUpdateRequest(Map<String,String> values) {}
     public record UserSaveRequest(@NotBlank String username,@NotBlank String displayName,String email,
+                                  String department,String employeeNo,String phone,String accountType,
                                   @NotNull Long roleId,Boolean enabled,String password) {}
     public record RoleSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
+                                  String descriptionZh,String descriptionEn,String dataScope,
                                   Boolean enabled,@NotNull List<String> permissions) {}
-    public record RoleView(Long id,String code,String nameZh,String nameEn,boolean systemRole,boolean enabled,
-                           long userCount,List<String> permissions) {}
+    public record RoleView(Long id,String code,String nameZh,String nameEn,String descriptionZh,
+                           String descriptionEn,String dataScope,boolean systemRole,boolean enabled,
+                           long userCount,String updatedAt,List<String> permissions) {}
 
+    public record CmdbClassOption(String key,String name,long assetCount) {}
     public record AssetView(Long id, String assetCode, String name, String hostname, String ipAddress, String networkSegment,
                             String assetType, String zone, boolean internetExposed, String osName, String osVersion,
                             String environment, String businessService, Long ownerId, String ownerName, Integer criticality,
                             String agentStatus, String patchBaseline, String installedProducts, String maintenanceWindow,
-                            Instant lastSeenAt, long openFindings) {}
+                            Instant lastSeenAt, long openFindings, String sourceSystem, String cmdbItemId,
+                            String cmdbClassKey, String cmdbClassName, String cmdbState, Boolean cmdbLocked,
+                            Boolean cmdbEnabled, Boolean cmdbAutoDiscovery, String cmdbUpdatedAt, String cmdbSyncedAt) {}
 
     public record AssetScopeOptions(List<String> networkSegments, List<String> assetTypes,
-                                    List<String> businessServices, List<String> osNames) {}
+                                    List<String> businessServices, List<String> osNames,
+                                    List<CmdbClassOption> cmdbClasses) {}
+    public record CmdbClassSyncView(String key,String name,long remoteTotal,int imported,int updated,String status,String error) {}
+    public record CmdbSyncView(boolean configured,boolean syncing,String lastStatus,String lastStartedAt,
+                               String lastCompletedAt,int imported,int updated,int deactivated,long remoteTotal,
+                               String message,List<CmdbClassSyncView> classes) {}
+    public record CmdbPropertyView(String key,String label,String value) {}
+    public record CmdbTopologyNodeView(String id,String label,String classKey,String className,Long localAssetId) {}
+    public record CmdbTopologyEdgeView(String id,String source,String target,String label,String category) {}
+    public record CmdbAssetDetailView(String itemId,String classKey,String className,String fetchedAt,
+                                      List<CmdbPropertyView> properties,List<CmdbTopologyNodeView> nodes,
+                                      List<CmdbTopologyEdgeView> edges) {}
 
     public record BatchScopeRequest(@NotNull Long patchId, @NotNull List<String> cidrs,
                                     List<String> environments, List<String> assetTypes, String osName,

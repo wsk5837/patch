@@ -40,6 +40,18 @@ services:
         value: "true"
       - key: DB_POOL_SIZE
         value: "6"
+      - key: CMDB_ENABLED
+        value: "true"
+      - key: CMDB_BASE_URL
+        value: https://zypoc.gazellio.com/backend-server
+      - key: CMDB_CLIENT_ID
+        sync: false
+      - key: CMDB_CLIENT_SECRET
+        sync: false
+      - key: CMDB_SYNC_ON_STARTUP
+        value: "true"
+      - key: CMDB_REPLACE_LOCAL_ASSETS
+        value: "true"
       # The static site uses bearer-token authentication, not cookies. This
       # Render-only pattern avoids a circular Blueprint dependency while still
       # restricting browser origins to Render-hosted sites.

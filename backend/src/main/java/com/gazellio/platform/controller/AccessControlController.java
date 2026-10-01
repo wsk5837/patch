@@ -15,6 +15,7 @@ public class AccessControlController {
  @PostMapping("/users") public UserView createUser(@Valid @RequestBody UserSaveRequest req){return service.createUser(req);}
  @PutMapping("/users/{id}") public UserView updateUser(@PathVariable Long id,@Valid @RequestBody UserSaveRequest req){return service.updateUser(id,req);}
  @PostMapping("/users/{id}/reset-password") public UserView reset(@PathVariable Long id){return service.resetPassword(id);}
+ @PostMapping("/users/{id}/unlock") public UserView unlock(@PathVariable Long id){return service.unlockUser(id);}
  @DeleteMapping("/users/{id}") public void deleteUser(@PathVariable Long id){service.deleteUser(id);}
  @GetMapping("/roles") public List<RoleView> roles(){return service.roles();}
  @GetMapping("/permissions") public List<String> permissions(){return service.permissionCatalog();}

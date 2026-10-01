@@ -1,6 +1,7 @@
 package com.gazellio.platform.service;
 import com.gazellio.platform.dto.ApiDtos.AssetScopeOptions;
 import com.gazellio.platform.dto.ApiDtos.AssetView;
+import com.gazellio.platform.dto.ApiDtos.CmdbClassOption;
 import com.gazellio.platform.model.Asset;
 import com.gazellio.platform.repository.AssetRepository;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +9,9 @@ import org.springframework.stereotype.Service;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -20,8 +24,12 @@ public class AssetService {
 
     public AssetScopeOptions scopeOptions() {
         List<Asset> rows = assets.findByActiveTrueOrderByNameAsc();
+        Map<String,List<Asset>> byClass=rows.stream().filter(a->a.getCmdbClassKey()!=null)
+                .collect(Collectors.groupingBy(Asset::getCmdbClassKey,LinkedHashMap::new,Collectors.toList()));
+        List<CmdbClassOption> classes=byClass.entrySet().stream().map(entry->{Asset first=entry.getValue().getFirst();return new CmdbClassOption(entry.getKey(),first.getCmdbClassName(),entry.getValue().size());})
+                .sorted(Comparator.comparing(CmdbClassOption::name,Comparator.nullsLast(Comparator.naturalOrder()))).toList();
         return new AssetScopeOptions(values(rows, Asset::getNetworkSegment), values(rows, Asset::getAssetType),
-                values(rows, Asset::getBusinessService), values(rows, Asset::getOsName));
+                values(rows, Asset::getBusinessService), values(rows, Asset::getOsName),classes);
     }
 
     private List<String> values(List<Asset> rows, java.util.function.Function<Asset,String> getter) {

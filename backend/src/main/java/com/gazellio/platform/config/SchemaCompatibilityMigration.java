@@ -33,7 +33,31 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("assets", "internet_exposed", "boolean default false");
         addColumn("assets", "installed_products", "text");
         addColumn("assets", "maintenance_window", "varchar(120)");
+        addColumn("assets", "source_system", "varchar(30) default 'LOCAL'");
+        addColumn("assets", "cmdb_item_id", "varchar(80)");
+        addColumn("assets", "cmdb_class_key", "varchar(80)");
+        addColumn("assets", "cmdb_class_name", "varchar(120)");
+        addColumn("assets", "cmdb_state", "varchar(120)");
+        addColumn("assets", "cmdb_locked", "boolean");
+        addColumn("assets", "cmdb_enabled", "boolean");
+        addColumn("assets", "cmdb_auto_discovery", "boolean");
+        addColumn("assets", "cmdb_updated_at", "timestamp with time zone");
+        addColumn("assets", "cmdb_synced_at", "timestamp with time zone");
         normalizeInternetExposure();
+        normalizeAssetSource();
+
+        addColumn("user_accounts", "department", "varchar(120)");
+        addColumn("user_accounts", "employee_no", "varchar(80)");
+        addColumn("user_accounts", "phone", "varchar(40)");
+        addColumn("user_accounts", "account_type", "varchar(30) default 'LOCAL'");
+        addColumn("user_accounts", "locked", "boolean default false");
+        addColumn("user_accounts", "failed_login_attempts", "integer default 0");
+        addColumn("user_accounts", "last_login_at", "timestamp with time zone");
+        addColumn("user_accounts", "password_changed_at", "timestamp with time zone");
+        addColumn("user_accounts", "updated_at", "timestamp with time zone default current_timestamp");
+        addColumn("access_roles", "description_zh", "text");
+        addColumn("access_roles", "description_en", "text");
+        addColumn("access_roles", "data_scope", "varchar(30) default 'ALL'");
 
         upgradeSeverityConstraint();
 
@@ -138,6 +162,16 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         jdbc.update("update assets set internet_exposed = false where internet_exposed is null");
         jdbc.execute("alter table assets alter column internet_exposed set default false");
         jdbc.execute("alter table assets alter column internet_exposed set not null");
+    }
+
+    private void normalizeAssetSource() {
+        if (!columnExists("assets", "source_system")) return;
+        jdbc.update("update assets set source_system = 'LOCAL' where source_system is null or trim(source_system) = ''");
+        jdbc.execute("alter table assets alter column source_system set default 'LOCAL'");
+        jdbc.execute("alter table assets alter column source_system set not null");
+        if (columnExists("assets", "cmdb_item_id")) {
+            jdbc.execute("create unique index if not exists uk_asset_cmdb_item on assets(cmdb_item_id)");
+        }
     }
 
     private void normalizeTaskNumbers() {

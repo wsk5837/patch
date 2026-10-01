@@ -25,6 +25,7 @@ public class DatabaseUserDetailsService implements UserDetailsService {
         authorities.add(new SimpleGrantedAuthority("ROLE_"+roleCode));
         java.util.Collection<String> values=u.getAccessRoleId()==null?PermissionCatalog.defaults(u.getRole().name()):permissions.findByRoleId(u.getAccessRoleId()).stream().map(RolePermission::getPermissionCode).toList();
         values.forEach(p->authorities.add(new SimpleGrantedAuthority(p)));
-        return User.withUsername(u.getUsername()).password(u.getPasswordHash()).authorities(authorities).disabled(!u.isEnabled()||(accessRole!=null&&!accessRole.isEnabled())).build();
+        return User.withUsername(u.getUsername()).password(u.getPasswordHash()).authorities(authorities)
+                .disabled(!u.isEnabled()||(accessRole!=null&&!accessRole.isEnabled())).accountLocked(u.isLocked()).build();
     }
 }
