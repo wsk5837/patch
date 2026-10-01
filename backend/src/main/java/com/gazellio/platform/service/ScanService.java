@@ -59,7 +59,7 @@ public class ScanService {
         return view.scan(j);
     }
 
-    @Scheduled(fixedDelay = 3500)
+    @Scheduled(fixedDelay = 3500, initialDelayString = "${app.scheduler.initial-delay-ms:60000}")
     @Transactional
     public void advanceQueuedAndRunningScans(){
         for(ScanJob j: scans.findByStatusIn(List.of(ScanStatus.QUEUED,ScanStatus.RUNNING))){

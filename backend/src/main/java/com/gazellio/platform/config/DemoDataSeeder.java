@@ -10,7 +10,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -47,19 +46,29 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final AccessRoleRepository accessRoles;
     private final RolePermissionRepository rolePermissions;
     private final PasswordEncoder encoder;
+    private final CmdbProperties cmdbProperties;
 
     @Value("${app.seed-demo-data:true}") private boolean seed;
 
-    @Override @Transactional
+    @Override
     public void run(String... args) throws Exception {
         if (!seed) return;
         seedUsers();
         seedAccessControl();
-        seedAssets();
         seedVulnerabilities();
         seedPatches();
         enrichVulnerabilityKnowledge();
         seedPatchServers();
+        // A CMDB-enabled deployment uses company configuration items as the operational
+        // asset inventory. Do not rewrite historical demo assets/findings during every
+        // rolling deployment: the old instance may still be advancing scans at this point.
+        if(cmdbProperties.isEnabled()){
+            seedTemplatesAndRuns();
+            seedPatchSchedules();
+            seedSettings();
+            return;
+        }
+        seedAssets();
         seedAgentsAndScans();
         seedFindingsTasksApprovals();
         seedLowerSeverityFindings();
@@ -608,10 +617,14 @@ public class DemoDataSeeder implements CommandLineRunner {
     private void upsertScan(String jobNo,String name,String scanType,String targetType,String targetValue,String credential,
                             ScanStatus status,int progress,int findingCount,int startedMinutes,Integer completedMinutes){
         ScanJob job=scans.findByJobNo(jobNo).orElseGet(ScanJob::new);
+        boolean created=job.getId()==null;
         job.setJobNo(jobNo);job.setName(name);job.setScanType(scanType);job.setTargetType(targetType);job.setTargetValue(targetValue);
-        job.setCredentialType(credential);job.setStatus(status);job.setProgress(progress);job.setFindingsCount(findingCount);job.setRequestedByName(users.findByUsername("security").map(UserAccount::getDisplayName).orElse("security"));
-        if(job.getStartedAt()==null)job.setStartedAt(Instant.now().minus(Duration.ofMinutes(startedMinutes)));
-        if(completedMinutes!=null&&job.getCompletedAt()==null)job.setCompletedAt(Instant.now().minus(Duration.ofMinutes(completedMinutes)));
+        job.setCredentialType(credential);job.setRequestedByName(users.findByUsername("security").map(UserAccount::getDisplayName).orElse("security"));
+        if(created){
+            job.setStatus(status);job.setProgress(progress);job.setFindingsCount(findingCount);
+            job.setStartedAt(Instant.now().minus(Duration.ofMinutes(startedMinutes)));
+            if(completedMinutes!=null)job.setCompletedAt(Instant.now().minus(Duration.ofMinutes(completedMinutes)));
+        }
         scans.save(job);
     }
 
@@ -699,6 +712,11 @@ public class DemoDataSeeder implements CommandLineRunner {
         Map<Long,ScanJob> scanById=new HashMap<>();scans.findAll().forEach(s->scanById.put(s.getId(),s));
         List<Finding> changed=new ArrayList<>();
         for(Finding finding:findings.findAll()){
+            String currentEvidence=finding.getEvidence();
+            boolean legacy=currentEvidence==null||currentEvidence.isBlank()
+                    ||currentEvidence.startsWith("agent-package-match:")
+                    ||currentEvidence.startsWith("authenticated-package-version:");
+            if(!legacy)continue;
             Asset asset=assetById.get(finding.getAssetId());VulnerabilityDefinition vulnerability=vulnById.get(finding.getCveId());
             ScanJob scan=finding.getScanJobId()==null?null:scanById.get(finding.getScanJobId());
             if(asset==null||vulnerability==null)continue;
@@ -913,7 +931,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         boolean replace=template.getId()==null||template.getVersion()==null||template.getVersion()<version;
         template.setCode(code);template.setNameZh(zh);template.setNameEn(en);template.setType(type);template.setEnabled(true);template.setVersion(version);template.setUpdatedAt(Instant.now());template=templates.save(template);
         if(replace){
-            if(template.getId()!=null){templateSteps.deleteByTemplateId(template.getId());templateSteps.flush();}
+            if(template.getId()!=null){templateSteps.deleteByTemplateId(template.getId());}
             addTemplateSteps(template,steps);
         }
     }

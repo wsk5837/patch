@@ -53,6 +53,9 @@ app:
   jwt-secret: ${JWT_SECRET:replace-this-secret-in-production-with-at-least-32-bytes}
   jwt-hours: ${JWT_HOURS:12}
   seed-demo-data: ${SEED_DEMO_DATA:true}
+  scheduler:
+    # Render briefly overlaps old and new instances during rolling deploys.
+    initial-delay-ms: ${SCHEDULER_INITIAL_DELAY_MS:60000}
   cisa-kev-url: ${CISA_KEV_URL:https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json}
   cisa-kev-fallback-url: ${CISA_KEV_FALLBACK_URL:https://raw.githubusercontent.com/cisagov/kev-data/develop/known_exploited_vulnerabilities.json}
   cisa-kev-sync-on-startup: ${CISA_KEV_SYNC_ON_STARTUP:false}

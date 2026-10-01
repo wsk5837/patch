@@ -236,7 +236,7 @@ public class OrchestrationService {
         return view.run(run);
     }
 
-    @Scheduled(fixedDelay = 4500)
+    @Scheduled(fixedDelay = 4500, initialDelayString = "${app.scheduler.initial-delay-ms:60000}")
     @Transactional
     public void advanceRuns(){
         for (OrchestrationRun run : runs.findByStatusIn(List.of(RunStatus.RUNNING))) {
