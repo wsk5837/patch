@@ -75,7 +75,7 @@ app:
     base-url: ${AI_BASE_URL:}
     agent-id: ${AI_AGENT_ID:}
     api-token: ${AI_API_TOKEN:}
-    chat-path: ${AI_CHAT_PATH:/api/agents/{agentId}/chat}
+    chat-path: ${AI_CHAT_PATH:/adk/run_stream}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
   mcp:

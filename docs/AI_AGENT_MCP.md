@@ -23,9 +23,31 @@ AI_MODE=live
 AI_BASE_URL=https://<company-agent-host>
 AI_AGENT_ID=<agent-id>
 AI_API_TOKEN=<server-side-token>
+AI_CHAT_PATH=/adk/run_stream
 AI_TIMEOUT_SECONDS=120
 MCP_API_TOKEN=<random-long-token>
 MCP_WRITE_ENABLED=false
+
+## 本次已创建的漏洞补丁智能体
+
+平台地址：`https://adk.gazellio.com`
+
+智能体 ID：`muyBxPTrK6OZH3Md`
+
+ANOWX Render 后端地址：`https://gazellio.onrender.com`
+
+对应生产配置：
+
+```env
+AI_MODE=live
+AI_BASE_URL=https://adk.gazellio.com
+AI_AGENT_ID=muyBxPTrK6OZH3Md
+AI_CHAT_PATH=/adk/run_stream
+AI_TIMEOUT_SECONDS=120
+PUBLIC_BASE_URL=https://gazellio.onrender.com
+```
+
+`AI_API_TOKEN` 只填写智能体平台重新生成的 Agent API Key，不写入仓库；`MCP_API_TOKEN` 只填写 ANOWX 服务端环境变量中的 MCP 令牌，不要与 Agent API Key 混用。
 MCP_SERVICE_USERNAME=ai-reader
 PUBLIC_BASE_URL=https://<anowx-host>
 ```

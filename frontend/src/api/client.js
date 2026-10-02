@@ -19,6 +19,7 @@ export function setToken(token){ token ? localStorage.setItem(TOKEN_KEY, token) 
 async function request(path, options = {}) {
   const { timeout = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options
   const headers = { ...(options.headers || {}) }
+  headers['Accept-Language'] = localStorage.getItem('gazellio_lang') === 'en' ? 'en-US' : 'zh-CN'
   if (options.body && !(options.body instanceof FormData)) headers['Content-Type'] = 'application/json'
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
