@@ -1,5 +1,5 @@
 import React,{useState} from 'react'
-import { RefreshCw, Package, Server, Rocket, Plus } from 'lucide-react'
+import { RefreshCw, Package, Server, Rocket, Plus, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
@@ -53,7 +53,8 @@ export default function PatchesPage(){
     {key:'cves',label:t('cve'),render:r=><div className="chip-list mini">{r.cves?.slice(0,3).map(x=><span className="chip" key={x}>{x}</span>)}</div>},
     {key:'affectedAssets',label:t('affectedAssets')},
     {key:'sizeMb',label:t('size'),render:r=>r.sizeMb?`${r.sizeMb} MB`:'—'},
-    {key:'rebootRequired',label:t('rebootRequired'),render:r=><StatusBadge tone={r.rebootRequired?'warn':'gray'}>{r.rebootRequired?t('yes'):t('no')}</StatusBadge>}
+    {key:'rebootRequired',label:t('rebootRequired'),render:r=><StatusBadge tone={r.rebootRequired?'warn':'gray'}>{r.rebootRequired?t('yes'):t('no')}</StatusBadge>},
+    {key:'download',label:t('action'),render:r=>r.downloadUrl?<button className="btn compact" title={t('officialPatchSource')} onClick={e=>{e.stopPropagation();window.open(r.downloadUrl,'_blank','noopener,noreferrer')}}><Download size={14}/>{t('downloadPackage')}</button>:<span className="muted">{t('packageSourceUnavailable')}</span>}
   ]
   const serverCols=[
     {key:'name',label:t('name'),render:r=><span className="mono">{r.name}</span>},

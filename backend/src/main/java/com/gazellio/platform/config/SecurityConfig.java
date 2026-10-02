@@ -15,6 +15,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.gazellio.platform.security.McpAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -39,6 +40,7 @@ public class SecurityConfig {
     SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwt,
+            McpAuthenticationFilter mcp,
             @Qualifier("corsConfigurationSource") CorsConfigurationSource cors
     ) throws Exception {
         return http
@@ -48,6 +50,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/api/auth/**", "/api/agent/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/mcp", "/mcp/**").authenticated()
                         .requestMatchers("/api/access-control/**").hasAnyAuthority("USER_MANAGE","ROLE_MANAGE","USER_CREDENTIAL_RESET","USER_ACCOUNT_STATUS")
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/report", "/api/dashboard/report/**").hasAuthority("REPORT_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/**").hasAuthority("DASHBOARD_VIEW")
@@ -71,6 +74,7 @@ public class SecurityConfig {
                                 "/settings/**", "/compliance/**"
                         ).permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(mcp, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -87,7 +91,7 @@ public class SecurityConfig {
             c.setAllowedOriginPatterns(allowedOrigins);
         }
         c.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        c.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Agent-Key", "X-Agent-Registration-Token"));
+        c.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Agent-Key", "X-Agent-Registration-Token", "X-ANOWX-User"));
         c.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", c);

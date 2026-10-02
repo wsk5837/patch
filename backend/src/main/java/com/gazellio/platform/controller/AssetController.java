@@ -15,7 +15,7 @@ public class AssetController {
     private final AssetService service;
     @GetMapping public List<AssetView> list(){return service.list();}
     @GetMapping("/page") public PagedView<AssetView> page(@RequestParam(required=false)String q,@RequestParam(required=false)String environment,@RequestParam(required=false)String ciClass,@RequestParam(defaultValue="0")int page,@RequestParam(defaultValue="30")int size){return service.page(q,environment,ciClass,page,size);}
-    @GetMapping("/scan-targets") public List<AssetView> scanTargets(){return service.scanTargets();}
+    @GetMapping("/scan-targets") public List<AssetView> scanTargets(@RequestParam(required=false)String q,@RequestParam(defaultValue="50")int limit){return service.scanTargets(q,limit);}
     @GetMapping("/scope-options") public AssetScopeOptions scopeOptions(){return service.scopeOptions();}
     @GetMapping("/{id}") public AssetView get(@PathVariable Long id){return service.get(id);}
 }

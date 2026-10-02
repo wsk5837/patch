@@ -14,6 +14,7 @@ public class ScanController {
  @GetMapping public List<ScanJobView> jobs(){return service.jobs();}
  @GetMapping("/{id}") public ScanJobView job(@PathVariable Long id){return service.job(id);}
  @GetMapping("/{id}/findings") public List<FindingView> findings(@PathVariable Long id){return service.jobFindings(id);}
+ @GetMapping("/scope-preview") public ScanScopePreview preview(@RequestParam String targetType,@RequestParam String targetValue){return service.preview(targetType,targetValue);}
  @PreAuthorize("hasAuthority('SCAN_EXECUTE')") @PostMapping public ScanJobView create(@Valid @RequestBody ScanCreateRequest req){return service.create(req);}
  @GetMapping("/agents") public List<AgentView> agents(){return service.agentList();}
 }

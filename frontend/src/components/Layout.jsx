@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShieldAlert, Library, ScanSearch, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown, TicketCheck, FileClock, CalendarDays, Network, Server, Users, ShieldCheck, Grid3X3 } from 'lucide-react'
+import { LayoutDashboard, ShieldAlert, Library, ScanSearch, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown, TicketCheck, FileClock, CalendarDays, Network, Server, Users, ShieldCheck, Grid3X3, Bot } from 'lucide-react'
 import { useI18n } from '../contexts/I18nContext'
 import { useAuth } from '../contexts/AuthContext'
 import {api} from '../api/client'
@@ -10,7 +10,7 @@ const groups=[
  {key:'assetManagement',items:[['/assets','cmdb',Server,'ASSET_VIEW']]},
  {key:'workOrderCenter',items:[['/work-orders/incidents','securityIncidents',TicketCheck,'INCIDENT_VIEW'],['/work-orders/changes','changeOrders',FileClock,'CHANGE_VIEW'],['/approvals','approvals',CheckSquare,'APPROVAL_VIEW']]},
  {key:'remediation',items:[['/tasks','tasks',ClipboardList,'TASK_VIEW'],['/patches','patchCenter',Package,'PATCH_VIEW'],['/patches/calendar','patchCalendar',CalendarDays,'PATCH_VIEW'],['/automation/batch','batchPatch',Network,['PATCH_DEPLOY','AUTOMATION_EXECUTE']],['/automation','automation',Workflow,'AUTOMATION_VIEW']]},
- {key:'riskGovernance',items:[['/sla-matrix','slaMatrixMenu',Grid3X3,'SETTINGS_VIEW'],['/reports','reports',BarChart3,'REPORT_VIEW'],['/compliance','complianceCenter',ShieldCheck,'COMPLIANCE_VIEW']]},
+ {key:'riskGovernance',items:[['/ai-assistant','aiDataAssistant',Bot,'REPORT_VIEW'],['/sla-matrix','slaMatrixMenu',Grid3X3,'SETTINGS_VIEW'],['/reports','reports',BarChart3,'REPORT_VIEW'],['/compliance','complianceCenter',ShieldCheck,'COMPLIANCE_VIEW']]},
  {key:'platformManagement',items:[['/audit','audit',ScrollText,'AUDIT_VIEW'],['/settings','settings',Settings,'SETTINGS_VIEW'],['/settings/access','accessControl',Users,['USER_MANAGE','ROLE_MANAGE','USER_CREDENTIAL_RESET','USER_ACCOUNT_STATUS']] ]}
 ]
 export default function Layout(){

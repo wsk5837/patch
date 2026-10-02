@@ -135,6 +135,24 @@ public class DemoDataSeeder implements CommandLineRunner {
                     userRoleAssignments.save(UserRoleAssignment.builder().userId(user.getId()).roleId(assignedRole.getId()).build());
             });
         }
+        AccessRole aiReader=accessRoles.findByCode("AI_READER").orElseGet(AccessRole::new);
+        aiReader.setCode("AI_READER");aiReader.setNameZh("公司智能体只读服务");aiReader.setNameEn("Company AI Read-only Service");
+        aiReader.setDescriptionZh("仅允许查询资产、漏洞、补丁、待办审批和报表数据，不包含任何写入或审批权限。");
+        aiReader.setDescriptionEn("Read-only access to assets, vulnerabilities, patches, pending approvals, and reports; no write or approval actions.");
+        aiReader.setDataScope("ALL");aiReader.setSystemRole(true);aiReader.setEnabled(true);aiReader.setUpdatedAt(Instant.now());aiReader=accessRoles.save(aiReader);
+        Set<String> aiPermissions=Set.of("DASHBOARD_VIEW","VULNERABILITY_VIEW","SCAN_VIEW","ASSET_VIEW","INCIDENT_VIEW","CHANGE_VIEW","TASK_VIEW","PATCH_VIEW","APPROVAL_VIEW","AUTOMATION_VIEW","REPORT_VIEW");
+        Set<String> existingAiPermissions=rolePermissions.findByRoleId(aiReader.getId()).stream().map(RolePermission::getPermissionCode).collect(java.util.stream.Collectors.toSet());
+        for(String permission:aiPermissions)if(!existingAiPermissions.contains(permission))rolePermissions.save(RolePermission.builder().roleId(aiReader.getId()).permissionCode(permission).build());
+        UserAccount aiUser=users.findByUsername("ai-reader").orElse(null);
+        if(aiUser==null){
+            aiUser=UserAccount.builder().username("ai-reader").displayName("公司智能体只读服务").email("ai-reader@localhost")
+                    .department("平台集成").employeeNo("SVC-AI-READ").accountType("SERVICE")
+                    .passwordHash(encoder.encode(UUID.randomUUID().toString()+UUID.randomUUID())).passwordChangedAt(Instant.now())
+                    .role(UserRole.APP_OWNER).enabled(true).locked(false).failedLoginAttempts(0).createdAt(Instant.now()).build();
+        }
+        aiUser.setAccessRoleId(aiReader.getId());aiUser.setUpdatedAt(Instant.now());aiUser=users.save(aiUser);
+        if(!userRoleAssignments.existsByUserIdAndRoleId(aiUser.getId(),aiReader.getId()))
+            userRoleAssignments.save(UserRoleAssignment.builder().userId(aiUser.getId()).roleId(aiReader.getId()).build());
     }
 
     private void seedAssets() {
@@ -287,15 +305,15 @@ public class DemoDataSeeder implements CommandLineRunner {
     private void seedPatches(){
         retireInvalidDemoPatches();
         addPatch("KB5072180","Microsoft","Windows Server","2026-09","Windows Server 2022 九月安全更新","Windows Server 2022 September security update",740.0,true,List.of("CVE-2025-29824","CVE-2025-33053"));
-        addPatch("RHEL-RHSA-2026:7211","Red Hat","OpenSSH","9.4p2","RHEL OpenSSH 安全更新","RHEL OpenSSH security update",18.5,false,List.of("CVE-2024-6387","CVE-2024-6386"));
+        addPatch("openssh-9.8p1","OpenSSH","OpenSSH","9.8p1","OpenSSH 9.8p1 安全更新","OpenSSH 9.8p1 security update",18.5,false,List.of("CVE-2024-6387","CVE-2024-6386"));
         addPatch("openssl-3.5.2","OpenSSL","OpenSSL","3.5.2","OpenSSL 3.5.2 安全更新","OpenSSL 3.5.2 security update",9.2,false,List.of("CVE-2024-5535","CVE-2023-0465","CVE-2022-0778"));
-        addPatch("apache-tomcat-11.0.12","Apache","Tomcat","11.0.12","Apache Tomcat 安全版本更新","Apache Tomcat security release",14.7,true,List.of("CVE-2025-24813"));
-        addPatch("jenkins-2.479.3","Jenkins","Jenkins","2.479.3","Jenkins LTS 安全更新","Jenkins LTS security update",92.0,true,List.of("CVE-2024-23897"));
+        addPatch("apache-tomcat-11.0.3","Apache","Tomcat","11.0.3","Apache Tomcat 11.0.3 安全更新","Apache Tomcat 11.0.3 security release",14.7,true,List.of("CVE-2025-24813"));
+        addPatch("jenkins-2.442","Jenkins","Jenkins","2.442","Jenkins 2.442 安全更新","Jenkins 2.442 security update",92.0,true,List.of("CVE-2024-23897"));
         addPatch("fortios-7.4.8","Fortinet","FortiOS","7.4.8","FortiOS 安全固件更新","FortiOS security firmware update",640.0,true,List.of("CVE-2024-21762","CVE-2023-27997"));
         addPatch("netscaler-14.1-29.72","Citrix","NetScaler ADC","14.1-29.72","NetScaler ADC 安全构建","NetScaler ADC security build",512.0,true,List.of("CVE-2023-4966","CVE-2023-3519"));
         addPatch("php-8.3.8","PHP","PHP CGI","8.3.8","PHP 8.3.8 安全更新","PHP 8.3.8 security update",31.0,false,List.of("CVE-2024-4577"));
         addPatch("spring-6.1.14","VMware","Spring Framework","6.1.14","Spring Framework 安全更新","Spring Framework security update",7.5,false,List.of("CVE-2024-38812","CVE-2022-22965"));
-        addPatch("curl-8.10.1","cURL","curl","8.10.1","curl 安全更新","curl security update",4.8,false,List.of("CVE-2023-38545"));
+        addPatch("curl-8.4.0","cURL","curl","8.4.0","curl 8.4.0 安全更新","curl 8.4.0 security update",4.8,false,List.of("CVE-2023-38545"));
         addPatch("confluence-8.5.15","Atlassian","Confluence","8.5.15","Confluence LTS 安全更新","Confluence LTS security update",980.0,true,List.of("CVE-2023-22518","CVE-2022-26134"));
         addPatch("linux-kernel-6.8.0-52","Linux Kernel","Kernel","6.8.0-52","Linux Kernel 安全更新","Linux Kernel security update",136.0,true,List.of("CVE-2024-1086"));
         addPatch("KB5074122","Microsoft","Windows Server","2026-10","Windows TCP/IP 与 LDAP 累积安全更新","Windows TCP/IP and LDAP cumulative security update",812.0,true,List.of("CVE-2024-49112","CVE-2024-38063","CVE-2024-49138","CVE-2024-43451"));
@@ -316,6 +334,58 @@ public class DemoDataSeeder implements CommandLineRunner {
         addPatch("vcenter-7.0u3p","VMware","vCenter Server","7.0 U3p","VMware vCenter Server 安全更新","VMware vCenter Server security update",6800.0,true,List.of("CVE-2021-21972"));
         addPatch("bigip-17.1.1.3","F5","BIG-IP","17.1.1.3","F5 BIG-IP iControl REST 安全更新","F5 BIG-IP iControl REST security update",1450.0,true,List.of("CVE-2022-1388"));
         addPatch("confluence-8.5.15-hf","Atlassian","Confluence","8.5.15 HF","Confluence 权限提升安全热修复","Confluence privilege escalation security hotfix",990.0,true,List.of("CVE-2023-22515"));
+        // Additional supported branches keep the catalog useful for heterogeneous estates.
+        // Every row remains linked to a known CVE and an official vendor download channel.
+        addPatch("KB5072181","Microsoft","Windows Server 2019","2026-09","Windows Server 2019 九月安全更新","Windows Server 2019 September security update",682.0,true,List.of("CVE-2025-29824","CVE-2025-33053"));
+        addPatch("KB5072182","Microsoft","Windows 11","24H2","Windows 11 24H2 累积安全更新","Windows 11 24H2 cumulative security update",645.0,true,List.of("CVE-2024-49112","CVE-2024-38063"));
+        addPatch("ubuntu-usn-openssh-9.6p1","Canonical","OpenSSH","9.6p1","Ubuntu OpenSSH 安全更新","Ubuntu OpenSSH security update",16.8,false,List.of("CVE-2024-6387","CVE-2024-6386"));
+        addPatch("debian-dsa-openssh-9.2p1-2","Debian","OpenSSH","9.2p1-2","Debian OpenSSH 安全更新","Debian OpenSSH security update",15.9,false,List.of("CVE-2024-6387"));
+        addPatch("openssl-3.0.16","OpenSSL","OpenSSL","3.0.16","OpenSSL 3.0 LTS 安全更新","OpenSSL 3.0 LTS security update",8.9,false,List.of("CVE-2024-5535","CVE-2023-0465"));
+        addPatch("openssl-1.1.1zb-enterprise","OpenSSL","OpenSSL","1.1.1zb","OpenSSL 1.1.1 企业维护更新","OpenSSL 1.1.1 enterprise maintenance update",7.6,false,List.of("CVE-2022-0778"));
+        addPatch("apache-tomcat-10.1.35","Apache","Tomcat","10.1.35","Apache Tomcat 10.1.35 安全更新","Apache Tomcat 10.1.35 security update",13.9,true,List.of("CVE-2025-24813"));
+        addPatch("apache-tomcat-9.0.99","Apache","Tomcat","9.0.99","Apache Tomcat 9.0.99 安全更新","Apache Tomcat 9.0.99 security update",12.6,true,List.of("CVE-2025-24813"));
+        addPatch("httpd-2.4.62-rhel9","Red Hat","HTTP Server","2.4.62 RHEL9","RHEL 9 Apache HTTP Server 安全更新","RHEL 9 Apache HTTP Server security update",11.7,true,List.of("CVE-2021-41773","CVE-2021-42013"));
+        addPatch("httpd-2.4.62-ubuntu","Canonical","HTTP Server","2.4.62 Ubuntu","Ubuntu Apache HTTP Server 安全更新","Ubuntu Apache HTTP Server security update",11.4,true,List.of("CVE-2021-41773","CVE-2021-42013"));
+        addPatch("log4j-core-2.17.2-lts","Apache","Log4j","2.17.2 LTS","Log4j 2.17 LTS 安全维护更新","Log4j 2.17 LTS security maintenance update",2.9,false,List.of("CVE-2021-44228"));
+        addPatch("spring-5.3.39-enterprise","VMware","Spring Framework","5.3.39","Spring Framework 5.3 企业安全更新","Spring Framework 5.3 enterprise security update",7.2,false,List.of("CVE-2022-22965","CVE-2024-38812"));
+        addPatch("curl-8.11.0-rhel","Red Hat","curl","8.11.0","RHEL curl 安全更新","RHEL curl security update",5.1,false,List.of("CVE-2023-38545"));
+        addPatch("curl-8.11.0-ubuntu","Canonical","curl","8.11.0","Ubuntu curl 安全更新","Ubuntu curl security update",5.0,false,List.of("CVE-2023-38545"));
+        addPatch("jenkins-2.462.3-lts","Jenkins","Jenkins","2.462.3 LTS","Jenkins 2.462 LTS 安全更新","Jenkins 2.462 LTS security update",88.0,true,List.of("CVE-2024-23897"));
+        addPatch("fortios-7.2.10","Fortinet","FortiOS","7.2.10","FortiOS 7.2 安全固件更新","FortiOS 7.2 security firmware update",615.0,true,List.of("CVE-2024-21762","CVE-2023-27997"));
+        addPatch("panos-10.2.9-h1","Palo Alto Networks","PAN-OS","10.2.9-h1","PAN-OS 10.2 GlobalProtect 热修复","PAN-OS 10.2 GlobalProtect hotfix",910.0,true,List.of("CVE-2024-3400"));
+        addPatch("netscaler-13.1-53.17","Citrix","NetScaler ADC","13.1-53.17","NetScaler ADC 13.1 安全构建","NetScaler ADC 13.1 security build",486.0,true,List.of("CVE-2023-4966","CVE-2023-3519"));
+        addPatch("confluence-7.19.26-lts","Atlassian","Confluence","7.19.26 LTS","Confluence 7.19 LTS 安全更新","Confluence 7.19 LTS security update",905.0,true,List.of("CVE-2023-22518","CVE-2023-22515","CVE-2022-26134"));
+        addPatch("exchange-se-2019-cu14","Microsoft","Exchange Server","2019 CU14","Exchange Server 2019 CU14 安全更新","Exchange Server 2019 CU14 security update",1540.0,true,List.of("CVE-2021-26855","CVE-2022-41040","CVE-2022-41082"));
+        addPatch("vcenter-8.0u2d","VMware","vCenter Server","8.0 U2d","VMware vCenter Server 8 安全更新","VMware vCenter Server 8 security update",7200.0,true,List.of("CVE-2021-21972"));
+        addPatch("bigip-16.1.5.2","F5","BIG-IP","16.1.5.2","F5 BIG-IP 16.1 安全更新","F5 BIG-IP 16.1 security update",1390.0,true,List.of("CVE-2022-1388"));
+        addPatch("cisco-iosxe-17.12.3","Cisco","IOS XE","17.12.3","Cisco IOS XE 17.12 安全更新","Cisco IOS XE 17.12 security update",655.0,true,List.of("CVE-2023-20198","CVE-2023-20273"));
+        addPatch("ivanti-connect-secure-22.7R2.6","Ivanti","Connect Secure","22.7R2.6","Ivanti Connect Secure 维护更新","Ivanti Connect Secure maintenance update",882.0,true,List.of("CVE-2023-46805","CVE-2024-21887","CVE-2024-21893"));
+        addPatch("linux-kernel-5.15.0-125","Canonical","Kernel","5.15.0-125","Ubuntu 22.04 Linux Kernel 安全更新","Ubuntu 22.04 Linux Kernel security update",128.0,true,List.of("CVE-2024-1086"));
+        // Additional fixed branches from official vendor security advisories.
+        addPatch("openssl-3.3.2","OpenSSL","OpenSSL","3.3.2","OpenSSL 3.3.2 安全更新","OpenSSL 3.3.2 security update",9.1,false,List.of("CVE-2024-5535"));
+        addPatch("openssl-3.2.3","OpenSSL","OpenSSL","3.2.3","OpenSSL 3.2.3 安全更新","OpenSSL 3.2.3 security update",8.8,false,List.of("CVE-2024-5535"));
+        addPatch("openssl-3.1.7","OpenSSL","OpenSSL","3.1.7","OpenSSL 3.1.7 安全更新","OpenSSL 3.1.7 security update",8.5,false,List.of("CVE-2024-5535"));
+        addPatch("openssl-3.0.15","OpenSSL","OpenSSL","3.0.15","OpenSSL 3.0.15 LTS 安全更新","OpenSSL 3.0.15 LTS security update",8.3,false,List.of("CVE-2024-5535"));
+        addPatch("jenkins-2.426.3-lts","Jenkins","Jenkins","2.426.3 LTS","Jenkins 2.426.3 LTS 安全更新","Jenkins 2.426.3 LTS security update",89.0,true,List.of("CVE-2024-23897"));
+        addPatch("fortios-7.4.3","Fortinet","FortiOS","7.4.3","FortiOS 7.4.3 安全固件","FortiOS 7.4.3 security firmware",608.0,true,List.of("CVE-2024-21762"));
+        addPatch("fortios-7.2.7","Fortinet","FortiOS","7.2.7","FortiOS 7.2.7 安全固件","FortiOS 7.2.7 security firmware",604.0,true,List.of("CVE-2024-21762"));
+        addPatch("fortios-7.0.14","Fortinet","FortiOS","7.0.14","FortiOS 7.0.14 安全固件","FortiOS 7.0.14 security firmware",596.0,true,List.of("CVE-2024-21762"));
+        addPatch("fortios-6.4.15","Fortinet","FortiOS","6.4.15","FortiOS 6.4.15 安全固件","FortiOS 6.4.15 security firmware",574.0,true,List.of("CVE-2024-21762"));
+        addPatch("panos-11.0.4-h1","Palo Alto Networks","PAN-OS","11.0.4-h1","PAN-OS 11.0.4-h1 热修复","PAN-OS 11.0.4-h1 hotfix",920.0,true,List.of("CVE-2024-3400"));
+        addPatch("panos-10.1.14-h4","Palo Alto Networks","PAN-OS","10.1.14-h4","PAN-OS 10.1.14-h4 热修复","PAN-OS 10.1.14-h4 hotfix",886.0,true,List.of("CVE-2024-3400"));
+        addPatch("netscaler-14.1-8.50","Citrix","NetScaler ADC","14.1-8.50","NetScaler ADC 14.1 安全构建","NetScaler ADC 14.1 security build",504.0,true,List.of("CVE-2023-4966"));
+        addPatch("netscaler-13.1-49.15","Citrix","NetScaler ADC","13.1-49.15","NetScaler ADC 13.1 安全构建","NetScaler ADC 13.1 security build",482.0,true,List.of("CVE-2023-4966"));
+        addPatch("netscaler-13.0-92.19","Citrix","NetScaler ADC","13.0-92.19","NetScaler ADC 13.0 安全构建","NetScaler ADC 13.0 security build",474.0,true,List.of("CVE-2023-4966"));
+        addPatch("spring-5.3.18","VMware","Spring Framework","5.3.18","Spring Framework 5.3.18 安全更新","Spring Framework 5.3.18 security update",7.0,false,List.of("CVE-2022-22965"));
+        addPatch("spring-5.2.20","VMware","Spring Framework","5.2.20","Spring Framework 5.2.20 安全更新","Spring Framework 5.2.20 security update",6.8,false,List.of("CVE-2022-22965"));
+        addPatch("log4j-core-2.17.1","Apache","Log4j","2.17.1","Log4j Core 2.17.1 安全更新","Log4j Core 2.17.1 security update",2.9,false,List.of("CVE-2021-44228"));
+        addPatch("log4j-core-2.12.4","Apache","Log4j","2.12.4","Log4j Core 2.12.4 兼容分支更新","Log4j Core 2.12.4 compatible branch update",2.7,false,List.of("CVE-2021-44228"));
+        addPatch("log4j-core-2.3.2","Apache","Log4j","2.3.2","Log4j Core 2.3.2 Java 6 分支更新","Log4j Core 2.3.2 Java 6 branch update",2.5,false,List.of("CVE-2021-44228"));
+        addPatch("confluence-8.5.3","Atlassian","Confluence","8.5.3","Confluence 8.5.3 安全更新","Confluence 8.5.3 security update",960.0,true,List.of("CVE-2023-22518"));
+        addPatch("confluence-8.4.4","Atlassian","Confluence","8.4.4","Confluence 8.4.4 安全更新","Confluence 8.4.4 security update",952.0,true,List.of("CVE-2023-22518"));
+        addPatch("confluence-8.3.4","Atlassian","Confluence","8.3.4","Confluence 8.3.4 安全更新","Confluence 8.3.4 security update",946.0,true,List.of("CVE-2023-22518"));
+        addPatch("httpd-2.4.51","Apache","HTTP Server","2.4.51","Apache HTTP Server 2.4.51 安全更新","Apache HTTP Server 2.4.51 security update",11.9,true,List.of("CVE-2021-42013","CVE-2021-41773"));
+        addPatch("httpd-2.4.50","Apache","HTTP Server","2.4.50","Apache HTTP Server 2.4.50 安全更新","Apache HTTP Server 2.4.50 security update",11.8,true,List.of("CVE-2021-41773"));
         // Keep imported catalog rows accurate without issuing one relation query per vulnerability.
         Set<String> supportedCves=new HashSet<>();
         patchCves.findAll().forEach(link->supportedCves.add(link.getCveId()));
@@ -331,7 +401,7 @@ public class DemoDataSeeder implements CommandLineRunner {
 
     private void retireInvalidDemoPatches(){
         List<Patch> changed=patches.findAll().stream()
-                .filter(p->Set.of("1213","1231").contains(text(p.getPatchId()))
+                .filter(p->Set.of("1213","1231","RHEL-RHSA-2026:7211","apache-tomcat-11.0.12","apache-tomcat-10.1.34","apache-tomcat-9.0.98","jenkins-2.479.3","curl-8.10.1").contains(text(p.getPatchId()))
                         || (text(p.getTitleZh()).equals("1231")&&text(p.getVendor()).equals("123")))
                 .peek(p->p.setStatus("RETIRED")).toList();
         if(!changed.isEmpty())patches.saveAll(changed);
@@ -578,7 +648,7 @@ public class DemoDataSeeder implements CommandLineRunner {
         p.setSignatureStatus("VERIFIED");
         p.setApplicabilityRule(product+" "+version+"；安装前校验操作系统、产品版本、架构与现有补丁替代关系。");
         p.setApplicabilityRuleEn(product+" "+version+"; validate the operating system, product version, architecture and supersedence before installation.");
-        p.setDownloadUrl(null);
+        p.setDownloadUrl(vendorDownload(vendor,code,cves.getFirst()));
         String cveList=String.join("、",cves);
         p.setReleaseNotesZh("本补丁用于将 "+product+" 更新至已验证修复版本 "+version+"，覆盖 "+cveList+"。"
                 +"入库时已完成补丁标识、SHA-256 摘要和签名信息登记，并建立漏洞、产品版本与补丁之间的修复映射。"
@@ -611,7 +681,29 @@ public class DemoDataSeeder implements CommandLineRunner {
         if("Microsoft".equalsIgnoreCase(vendor))return "https://msrc.microsoft.com/update-guide/vulnerability/"+encoded;
         if("Red Hat".equalsIgnoreCase(vendor))return "https://access.redhat.com/security/cve/"+encoded;
         if("Apache".equalsIgnoreCase(vendor))return "https://security.apache.org/";
+        if("OpenSSH".equalsIgnoreCase(vendor))return "https://www.openssh.com/security.html";
+        if("OpenSSL".equalsIgnoreCase(vendor))return "https://www.openssl.org/news/vulnerabilities.html";
+        if("Jenkins".equalsIgnoreCase(vendor))return "https://www.jenkins.io/security/advisories/";
+        if("Fortinet".equalsIgnoreCase(vendor))return "https://www.fortiguard.com/psirt/"+cve;
+        if("Palo Alto Networks".equalsIgnoreCase(vendor))return "https://security.paloaltonetworks.com/"+cve;
+        if("VMware".equalsIgnoreCase(vendor))return "https://spring.io/security/"+cve.toLowerCase(Locale.ROOT);
+        if("Atlassian".equalsIgnoreCase(vendor))return "https://www.atlassian.com/trust/security/advisories";
+        if("cURL".equalsIgnoreCase(vendor))return "https://curl.se/docs/"+cve.toLowerCase(Locale.ROOT)+".html";
         return "https://nvd.nist.gov/vuln/detail/"+encoded;
+    }
+
+    private String vendorDownload(String vendor,String patchCode,String cve){
+        String query=java.net.URLEncoder.encode(patchCode,StandardCharsets.UTF_8);
+        if("Microsoft".equalsIgnoreCase(vendor))return "https://www.catalog.update.microsoft.com/Search.aspx?q="+query;
+        if("Red Hat".equalsIgnoreCase(vendor))return "https://access.redhat.com/security/cve/"+cve;
+        if("Canonical".equalsIgnoreCase(vendor))return "https://ubuntu.com/security/"+cve;
+        if("Debian".equalsIgnoreCase(vendor))return "https://security-tracker.debian.org/tracker/"+cve;
+        if("Apache".equalsIgnoreCase(vendor))return "https://downloads.apache.org/";
+        if("OpenSSL".equalsIgnoreCase(vendor))return "https://www.openssl.org/source/";
+        if("OpenSSH".equalsIgnoreCase(vendor))return "https://www.openssh.com/portable.html";
+        if("Jenkins".equalsIgnoreCase(vendor))return "https://updates.jenkins.io/download/war/";
+        if("cURL".equalsIgnoreCase(vendor))return "https://curl.se/download.html";
+        return vendorAdvisory(vendor,cve);
     }
 
     private void seedPatchServers(){
@@ -674,9 +766,9 @@ public class DemoDataSeeder implements CommandLineRunner {
             if(f.getStatus()==FindingStatus.EXEMPTED){f.setExemptionReason("测试环境设备将在下一个维护周期统一升级，当前风险已批准临时接受。");f.setExemptedAt(Instant.now().minus(Duration.ofDays(2)));f.setExemptionExpiresAt(Instant.now().plus(Duration.ofDays(28)));}
             findings.save(f); n++;
         }
-        createTask("OPENSSH-PROD","CVE-2024-6387","RHEL-RHSA-2026:7211",TaskStage.ASSIGNED,"P1",ChangeType.EMERGENCY);
+        createTask("OPENSSH-PROD","CVE-2024-6387","openssh-9.8p1",TaskStage.ASSIGNED,"P1",ChangeType.EMERGENCY);
         createTask("OPENSSL-TEST","CVE-2024-5535","openssl-3.5.2",TaskStage.APP_VERIFY,"P2",ChangeType.NORMAL);
-        createTask("TOMCAT-PROD","CVE-2025-24813","apache-tomcat-11.0.12",TaskStage.RELEASE_APPROVAL,"P1",ChangeType.MAJOR);
+        createTask("TOMCAT-PROD","CVE-2025-24813","apache-tomcat-11.0.3",TaskStage.RELEASE_APPROVAL,"P1",ChangeType.MAJOR);
         createTask("PHP-PROD","CVE-2024-4577","php-8.3.8",TaskStage.PROD_PATCH,"P1",ChangeType.EMERGENCY);
         createTask("SPRINGBOOT-PREPROD","CVE-2024-38812","spring-6.1.14",TaskStage.ASSIGNED,"P1",ChangeType.NORMAL);
         createTask("HTTPD-PROD","CVE-2021-41773","httpd-2.4.62",TaskStage.PREPROD_VERIFY,"P1",ChangeType.MAJOR);

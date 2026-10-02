@@ -60,10 +60,29 @@ app:
   cisa-kev-url: ${CISA_KEV_URL:https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json}
   cisa-kev-fallback-url: ${CISA_KEV_FALLBACK_URL:https://raw.githubusercontent.com/cisagov/kev-data/develop/known_exploited_vulnerabilities.json}
   cisa-kev-sync-on-startup: ${CISA_KEV_SYNC_ON_STARTUP:false}
+  nvd-url: ${NVD_URL:https://services.nvd.nist.gov/rest/json/cves/2.0}
   nvd-api-key: ${NVD_API_KEY:}
+  nvd-lookback-days: ${NVD_LOOKBACK_DAYS:120}
+  nvd-max-records: ${NVD_MAX_RECORDS:4000}
+  github-advisory-url: ${GITHUB_ADVISORY_URL:https://api.github.com/advisories}
+  github-api-token: ${GITHUB_API_TOKEN:}
+  github-advisory-pages: ${GITHUB_ADVISORY_PAGES:3}
   agent-registration-token: ${AGENT_REGISTRATION_TOKEN:local-agent-registration-token}
   cisa-kev-sync-cron: ${CISA_KEV_SYNC_CRON:0 15 3 * * *}
   cors-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
+  ai:
+    mode: ${AI_MODE:mock}
+    base-url: ${AI_BASE_URL:}
+    agent-id: ${AI_AGENT_ID:}
+    api-token: ${AI_API_TOKEN:}
+    chat-path: ${AI_CHAT_PATH:/api/agents/{agentId}/chat}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:120}
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  mcp:
+    api-token: ${MCP_API_TOKEN:}
+    write-enabled: ${MCP_WRITE_ENABLED:false}
+    service-username: ${MCP_SERVICE_USERNAME:ai-reader}
+    trusted-user-header: ${MCP_TRUSTED_USER_HEADER:false}
   cmdb:
     enabled: ${CMDB_ENABLED:false}
     base-url: ${CMDB_BASE_URL:https://zypoc.gazellio.com/backend-server}

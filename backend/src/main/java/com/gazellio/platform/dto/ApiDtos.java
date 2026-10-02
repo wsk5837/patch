@@ -29,9 +29,16 @@ public final class ApiDtos {
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
                                     int matchedByPatchLibrary, int created, int updated, int withoutPatchMapping,
                                     String syncedAt, String source) {}
+    public record ThreatIntelSourceSyncResult(String source, int received, int accepted, int created,
+                                              int updated, int skipped, String status, String message) {}
+    public record ThreatIntelSyncResult(List<ThreatIntelSourceSyncResult> sources, int received,
+                                        int accepted, int created, int updated, int skipped,
+                                        long libraryTotal, String syncedAt) {}
 
     public record ScanCreateRequest(@NotBlank String name, @NotBlank String scanType, @NotBlank String targetType,
                                     @NotBlank String targetValue, String credentialType) {}
+    public record ScanScopePreview(String targetType,String targetValue,long matchedCount,
+                                   List<AssetView> sampleAssets) {}
     public record AgentRegisterRequest(@NotBlank String agentKey, @NotBlank String hostname, String ipAddress,
                                        String osName, String version, Long assetId) {}
     public record AgentHeartbeatRequest(String ipAddress, String osName, String version) {}

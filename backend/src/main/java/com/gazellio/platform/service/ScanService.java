@@ -47,6 +47,10 @@ public class ScanService {
     public ScanJobView job(Long id){return view.scan(scans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND)));}
     public List<FindingView> jobFindings(Long id){scans.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));return view.findingViews(findings.findByScanJobId(id));}
     public List<AgentView> agentList(){ return agents.findAllByOrderByLastHeartbeatAtDesc().stream().map(view::agent).toList(); }
+    public ScanScopePreview preview(String targetType,String targetValue){
+        List<Asset> matched=resolveTargets(targetType,targetValue);
+        return new ScanScopePreview(targetType,targetValue,matched.size(),view.assetViews(matched.stream().limit(8).toList()));
+    }
 
     @Transactional
     public ScanJobView create(ScanCreateRequest req){
@@ -129,8 +133,10 @@ public class ScanService {
         return count;
     }
 
-    private List<Asset> resolveTargets(ScanJob j){
-        String type=j.getTargetType().toUpperCase(Locale.ROOT); String val=j.getTargetValue()==null?"":j.getTargetValue();
+    private List<Asset> resolveTargets(ScanJob j){return resolveTargets(j.getTargetType(),j.getTargetValue());}
+
+    private List<Asset> resolveTargets(String targetType,String targetValue){
+        String type=targetType==null?"":targetType.toUpperCase(Locale.ROOT); String val=targetValue==null?"":targetValue.trim();
         // The CMDB contains business, application, service and topology CIs as well as
         // technical assets. Only addressable technical CIs are valid scanner targets.
         List<Asset> all=assets.findByActiveTrueOrderByNameAsc().stream().filter(eligibility::scannable).toList();

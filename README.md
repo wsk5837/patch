@@ -1,5 +1,9 @@
 # ANOWX 漏洞与补丁管理平台
 
+ANOWX 支持 CMDB 资产、漏洞扫描、补丁验证、变更审批、审计证据和只读智能体报表。漏洞情报可同步 CISA KEV、NVD CVE API 2.0 和 GitHub Advisory Database；单一数据源失败不会回滚其他已成功数据源。
+
+公司智能体仅用于查询和生成可视化报表，配置方法见 [`docs/AI_AGENT_MCP.md`](docs/AI_AGENT_MCP.md)。
+
 ANOWX 已从单文件 HTML 原型调整为可部署的前后端分离工程：
 
 - `frontend/`：React + Vite，负责产品 UI、路由和中英文切换。

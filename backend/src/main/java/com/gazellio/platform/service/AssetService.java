@@ -37,7 +37,17 @@ public class AssetService {
         var result=assets.findAll(spec,PageRequest.of(safePage,safeSize,Sort.by(Sort.Order.asc("name"),Sort.Order.asc("id"))));
         return new PagedView<>(view.assetViews(result.getContent()),result.getTotalElements(),result.getNumber()+1,result.getSize(),Math.max(1,result.getTotalPages()));
     }
-    public List<AssetView> scanTargets(){return view.assetViews(managedAssets().stream().filter(eligibility::scannable).toList());}
+    public List<AssetView> scanTargets(){return scanTargets(null,50);}
+    public List<AssetView> scanTargets(String q,int limit){
+        String needle=q==null?"":q.trim().toLowerCase();
+        int safeLimit=Math.max(1,Math.min(100,limit));
+        return view.assetViews(managedAssets().stream().filter(eligibility::scannable)
+                .filter(a->needle.isBlank()||contains(a.getName(),needle)||contains(a.getAssetCode(),needle)
+                        ||contains(a.getIpAddress(),needle)||contains(a.getNetworkSegment(),needle)
+                        ||contains(a.getHostname(),needle)||contains(a.getBusinessService(),needle)
+                        ||contains(a.getCmdbClassName(),needle))
+                .limit(safeLimit).toList());
+    }
     public AssetView get(Long id){return view.asset(assets.findById(id).orElseThrow());}
 
     public AssetScopeOptions scopeOptions() {
@@ -62,4 +72,5 @@ public class AssetService {
         return rows.stream().map(getter).filter(Objects::nonNull).map(String::trim).filter(v -> !v.isBlank())
                 .distinct().sorted(Comparator.naturalOrder()).toList();
     }
+    private boolean contains(String value,String needle){return value!=null&&value.toLowerCase().contains(needle);}
 }

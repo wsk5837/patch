@@ -36,6 +36,7 @@ import SlaMatrixPage from './pages/SlaMatrixPage'
 import AuditPage from './pages/AuditPage'
 import AccessControlPage from './pages/AccessControlPage'
 import CompliancePage from './pages/CompliancePage'
+import AiAssistantPage from './pages/AiAssistantPage'
 import './styles.css'
 
 function Protected({children}){const {authenticated}=useAuth();return authenticated?children:<Navigate to="/login" replace/>}
@@ -62,6 +63,7 @@ function AppRoutes(){
    <Route path="/automation" element={gate('AUTOMATION_VIEW',<AutomationPage/>)}/><Route path="/automation/batch" element={gate('AUTOMATION_EXECUTE',<BatchPatchPage/>)}/><Route path="/automation/templates/:id" element={gate('AUTOMATION_VIEW',<AutomationTemplateDetailPage/>)}/><Route path="/automation/runs/:id" element={gate('AUTOMATION_VIEW',<AutomationRunDetailPage/>)}/>
    <Route path="/sla-matrix" element={gate('SETTINGS_VIEW',<SlaMatrixPage/>)}/>
    <Route path="/reports" element={gate('REPORT_VIEW',<ReportsPage/>)}/><Route path="/compliance" element={gate('COMPLIANCE_VIEW',<CompliancePage/>)}/><Route path="/audit" element={gate('AUDIT_VIEW',<AuditPage/>)}/><Route path="/settings" element={gate('SETTINGS_VIEW',<SettingsPage/>)}/><Route path="/settings/access" element={gate('USER_MANAGE',<AccessControlPage/>)}/>
+   <Route path="/ai-assistant" element={gate('REPORT_VIEW',<AiAssistantPage/>)}/>
   </Route>
   <Route path="*" element={<Navigate to="/" replace/>}/>
  </Routes>
