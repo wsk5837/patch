@@ -39,7 +39,8 @@ public class WorkOrderService {
         boolean changeStage = "CHANGE".equalsIgnoreCase(stage);
         List<Finding> eligible = candidates.stream().filter(f -> {
             if (!changeStage) return f.getSecurityIncidentId() == null
-                    && Set.of(FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(f.getStatus());
+                    && Set.of(FindingStatus.NEW, FindingStatus.REOPENED,
+                    FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(f.getStatus());
             if (f.getRemediationTaskId() == null || f.getSecurityIncidentId() == null) return false;
             RemediationTask task = tasks.findById(f.getRemediationTaskId()).orElse(null);
             return task != null && task.getStage() == TaskStage.RELEASE_APPROVAL && task.getChangeOrderId() == null;
@@ -140,11 +141,18 @@ public class WorkOrderService {
         List<Finding> selected = findings.findAllById(ids);
         if (selected.size() != ids.size()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "One or more findings were not found");
         for (Finding finding : selected) {
-            if (!Set.of(FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(finding.getStatus()))
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "All selected findings must be confirmed");
+            if (!Set.of(FindingStatus.NEW, FindingStatus.REOPENED,
+                    FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(finding.getStatus()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Selected finding cannot be converted to an incident");
             if (finding.getSecurityIncidentId() != null)
                 throw new ResponseStatusException(HttpStatus.CONFLICT, finding.getCveId() + " is already linked to an incident");
         }
+        selected.forEach(finding -> {
+            if (finding.getStatus() == FindingStatus.NEW || finding.getStatus() == FindingStatus.REOPENED) {
+                finding.setStatus(FindingStatus.CONFIRMED);
+                findings.save(finding);
+            }
+        });
         Finding primary = selected.stream().max(Comparator.comparingDouble(f -> f.getRiskScore() == null ? 0 : f.getRiskScore())).orElseThrow();
         SecurityIncident incident = ensureForFinding(primary);
         incident.setLinkedFindingIds(joinIds(ids));

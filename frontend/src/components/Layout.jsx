@@ -1,12 +1,12 @@
 import React,{useEffect,useRef,useState} from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ShieldAlert, Library, ScanSearch, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown, TicketCheck, FileClock, CalendarDays, Network, Server, Users, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, ShieldAlert, Library, ScanSearch, ClipboardList, Package, CheckSquare, Workflow, BarChart3, Settings, ScrollText, Search, Bell, LogOut, ChevronDown, TicketCheck, FileClock, CalendarDays, Network, Server, Users, ShieldCheck, Grid3X3 } from 'lucide-react'
 import { useI18n } from '../contexts/I18nContext'
 import { useAuth } from '../contexts/AuthContext'
 import {api} from '../api/client'
 
 const groups=[
- {key:'vulnerabilityManagement',items:[['/vulnerabilities/library','vulnerabilityLibrary',Library,'VULNERABILITY_VIEW'],['/vulnerabilities/findings','findings',ShieldAlert,'VULNERABILITY_VIEW'],['/scans','vulnerabilityScan',ScanSearch,'SCAN_VIEW']]},
+ {key:'vulnerabilityManagement',items:[['/vulnerabilities/library','vulnerabilityLibrary',Library,'VULNERABILITY_VIEW'],['/vulnerabilities/findings','findings',ShieldAlert,'VULNERABILITY_VIEW'],['/scans','vulnerabilityScan',ScanSearch,'SCAN_VIEW'],['/sla-matrix','slaMatrixMenu',Grid3X3,'SETTINGS_VIEW']]},
  {key:'assetManagement',items:[['/assets','cmdb',Server,'ASSET_VIEW']]},
  {key:'workOrderCenter',items:[['/work-orders/incidents','securityIncidents',TicketCheck,'INCIDENT_VIEW'],['/work-orders/changes','changeOrders',FileClock,'CHANGE_VIEW']]},
  {key:'remediation',items:[['/tasks','tasks',ClipboardList,'TASK_VIEW'],['/patches','patchCenter',Package,'PATCH_VIEW'],['/patches/calendar','patchCalendar',CalendarDays,'PATCH_VIEW'],['/automation/batch','batchPatch',Network,['PATCH_DEPLOY','AUTOMATION_EXECUTE']],['/approvals','approvals',CheckSquare,'APPROVAL_VIEW'],['/automation','automation',Workflow,'AUTOMATION_VIEW']]},
