@@ -134,3 +134,16 @@
 @media(max-width:1100px){.automatic-scan-layout,.sla-matrix-layout{grid-template-columns:1fr}.lifecycle-modal-head+div{overflow:auto}.sla-policy-toolbar{align-items:flex-start;flex-direction:column}.sla-days-editor{flex-wrap:wrap}}
 @media(max-width:680px){.detail-top .detail-actions{padding-left:16px}.detail-top .detail-actions::after{display:none}.sla-policy-matrix{grid-template-columns:100px repeat(3,minmax(90px,1fr));overflow:auto}.sla-days-editor{display:grid;grid-template-columns:1fr 1fr;width:100%}}
 .page-title p{margin:5px 0 0;color:var(--muted);font-size:9px}
+
+/* Calendar events are rendered as true spans so a three-day patch window occupies three date cells. */
+.calendar-grid{position:relative;grid-auto-rows:minmax(132px,auto)}
+.calendar-grid>.calendar-day{position:relative;z-index:1;min-height:132px}
+.calendar-grid>.calendar-event.calendar-span{z-index:3;align-self:start;width:auto;min-height:38px;margin:34px 5px 0;pointer-events:auto}
+.scan-record-toolbar{display:flex;align-items:center;gap:14px;margin-bottom:10px;padding:11px 14px}
+.scan-record-toolbar>div{display:flex;align-items:center;gap:9px;min-width:0;margin-right:auto;color:var(--purple)}
+.scan-record-toolbar>div>div{display:grid;gap:3px}
+.scan-record-toolbar b{font-size:10px;color:var(--text)}
+.scan-record-toolbar small{font-size:8px;color:var(--muted)}
+.scan-record-toolbar .search-input{width:min(300px,42vw);margin:0}
+.scan-record-toolbar .muted{font-size:9px;white-space:nowrap}
+@media(max-width:680px){.scan-record-toolbar{align-items:stretch;flex-wrap:wrap}.scan-record-toolbar>div{flex-basis:100%}.scan-record-toolbar .search-input{width:100%}.calendar-grid>.calendar-event.calendar-span{margin-left:3px;margin-right:3px}}

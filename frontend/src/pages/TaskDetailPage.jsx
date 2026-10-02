@@ -89,8 +89,8 @@ export default function TaskDetailPage(){
  if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>openDeployment('start-test','TEST')}><Play size={15}/>{t('startTestPatch')}</button>)
  if(['APP_VERIFY','PREPROD_VERIFY','PROD_VERIFY'].includes(task.stage)&&(has('TASK_RETEST')||has('TASK_MANAGE'))){
   const env=task.stage==='APP_VERIFY'?'TEST':task.stage==='PREPROD_VERIFY'?'PREPROD':'PROD'
-  actions.push(<button key="auto-app-test" className="btn primary" disabled={busy} onClick={startAutomaticApplicationTest}><Play size={15}/>{t('automaticApplicationTest')}</button>)
-  actions.push(<button key="manual-app-test" className="btn" disabled={busy} onClick={()=>setVerify(env)}><CheckCircle2 size={15}/>{t('manualApplicationTest')}</button>)
+  actions.push(<button key="manual-app-test" className="btn primary" disabled={busy} onClick={()=>setVerify(env)}><CheckCircle2 size={15}/>{t('manualApplicationTest')}</button>)
+  actions.push(<button key="auto-app-test" className="btn" disabled={busy} onClick={startAutomaticApplicationTest}><Play size={15}/>{t('automaticApplicationTest')}</button>)
  }
  if(['TEST_RESCAN','PREPROD_RESCAN','PROD_RESCAN'].includes(task.stage)&&(has('TASK_RETEST')||has('TASK_MANAGE'))){
   const running=task.lastRetestMode==='AUTO'&&task.lastRetestResult==='RUNNING'
