@@ -60,7 +60,7 @@ public class ApprovalImplementationService {
             task.setStatus(TaskStatus.BLOCKED);task.setUpdatedAt(now);tasks.save(task);
             audit.log("TASK",task.getId(),"AUTOMATION_BLOCKED",
                     "审批已通过，预生产自动化启动失败",
-                    "Approval passed, but pre-production automation could not start"+(reason==null?"":": "+reason),"Gazellio");
+                    "Approval passed, but pre-production automation could not start"+(reason==null?"":": "+reason),"ANOWX");
         });
     }
 

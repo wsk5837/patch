@@ -14,8 +14,8 @@ import {envLabel,findingStatus,severityLabel} from '../utils/format'
 
 export default function FindingsPage(){
   const {t,pick,localize}=useI18n(),toast=useToast(),nav=useNavigate(),loc=useLocation(),{has}=useAuth()
-  const initialQ=new URLSearchParams(loc.search).get('q')||'',initialSev=new URLSearchParams(loc.search).get('severity')||'ALL'
-  const [q,setQ]=useState(initialQ),[status,setStatus]=useState('ALL'),[sev,setSev]=useState(initialSev),[page,setPage]=useState(1)
+  const initialQ=new URLSearchParams(loc.search).get('q')||'',initialSev=new URLSearchParams(loc.search).get('severity')||'ALL',initialStatus=new URLSearchParams(loc.search).get('status')||'ALL'
+  const [q,setQ]=useState(initialQ),[status,setStatus]=useState(initialStatus),[sev,setSev]=useState(initialSev),[page,setPage]=useState(1)
   const query=new URLSearchParams({page:String(page-1),size:'30'});if(q.trim())query.set('q',q.trim());if(status!=='ALL')query.set('status',status);if(sev!=='ALL')query.set('severity',sev)
   const {data:pageData={items:[],totalElements:0,page:1,totalPages:1},loading,reload}=useApiData('/api/vulnerabilities/findings/page?'+query.toString(),{initial:{items:[],totalElements:0,page:1,totalPages:1},poll:30000})
   const [selected,setSelected]=useState(new Set()),[dialog,setDialog]=useState(null),[reason,setReason]=useState(''),[expiresAt,setExpiresAt]=useState(''),[compensatingControl,setCompensatingControl]=useState(''),[residualRisk,setResidualRisk]=useState(''),[busy,setBusy]=useState(false)

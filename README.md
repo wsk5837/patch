@@ -1,6 +1,6 @@
-# Gazellio 漏洞与补丁管理平台
+# ANOWX 漏洞与补丁管理平台
 
-Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程：
+ANOWX 已从单文件 HTML 原型调整为可部署的前后端分离工程：
 
 - `frontend/`：React + Vite，负责产品 UI、路由和中英文切换。
 - `backend/`：Java 21 + Spring Boot，负责认证、业务流程、扫描任务、漏洞、补丁、安全事件/变更工单、审批、自动化编排和审计。
@@ -17,7 +17,7 @@ Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程�
    - `gazellio-db`：PostgreSQL，原有同名数据库保留数据。
 4. 等待 `gazellio-web` 和 `gazellio` 部署完成，以后请打开 `gazellio-web` 的公开地址。
 
-首次同步 Blueprint 时，在 Render 为后端填写 Secret 环境变量 `CMDB_CLIENT_ID` 与 `CMDB_CLIENT_SECRET`。凭据只由 Java 后端读取，不要写入 Git、前端代码或浏览器本地存储。`CMDB_ENABLED=true` 时，后端启动后会通过只读 API 建立本地资产镜像；补丁执行状态和扫描结果仅保存在 Gazellio，不会回写公司 CMDB。
+首次同步 Blueprint 时，在 Render 为后端填写 Secret 环境变量 `CMDB_CLIENT_ID` 与 `CMDB_CLIENT_SECRET`。凭据只由 Java 后端读取，不要写入 Git、前端代码或浏览器本地存储。`CMDB_ENABLED=true` 时，后端启动后会通过只读 API 建立本地资产镜像；补丁执行状态和扫描结果仅保存在 ANOWX，不会回写公司 CMDB。
 
 MFA 采用标准 RFC 6238 TOTP。系统管理员可在“用户与角色”中为单个用户启用；用户下次登录时使用 Microsoft Authenticator、Google Authenticator 等应用完成绑定。Render Blueprint 会自动创建 `MFA_ENCRYPTION_KEY`，请不要在已有 MFA 绑定后删除或更换该值。
 

@@ -37,6 +37,7 @@ public class ViewService {
     private final OrchestrationRunStepRepository runSteps;
     private final DeploymentTargetRepository deploymentTargets;
     private final CurrentUserService currentUser;
+    private final SlaPolicyService slaPolicy;
 
     private static String s(Object value) { return value == null ? null : String.valueOf(value); }
 
@@ -51,6 +52,29 @@ public class ViewService {
     private static PatchCandidateView patchCandidate(Patch p) {
         return new PatchCandidateView(p.getId(), p.getPatchId(), p.getTitleZh(), p.getTitleEn(), p.getVersion(),
                 p.getSignatureStatus(), p.isRebootRequired(), p.getStatus());
+    }
+
+    private static List<Long> linkedIds(String csv, Long primary) {
+        LinkedHashSet<Long> ids = new LinkedHashSet<>();
+        if (primary != null) ids.add(primary);
+        if (csv != null) for (String value : csv.split(",")) try { ids.add(Long.parseLong(value.trim())); } catch (Exception ignored) {}
+        return new ArrayList<>(ids);
+    }
+
+    private List<WorkOrderVulnerabilityView> workOrderVulnerabilities(List<Long> ids) {
+        if (ids.isEmpty()) return List.of();
+        List<Finding> rows = findings.findAllById(ids);
+        Map<String,VulnerabilityDefinition> definitions = index(vulns.findAllById(rows.stream().map(Finding::getCveId).collect(Collectors.toSet())), VulnerabilityDefinition::getCveId);
+        Map<Long,Asset> linkedAssets = index(assets.findAllById(rows.stream().map(Finding::getAssetId).collect(Collectors.toSet())), Asset::getId);
+        return rows.stream().sorted(Comparator.comparingDouble((Finding f)->f.getRiskScore()==null?0:f.getRiskScore()).reversed()).map(f -> {
+            VulnerabilityDefinition v = definitions.get(f.getCveId()); Asset a = linkedAssets.get(f.getAssetId());
+            return new WorkOrderVulnerabilityView(f.getId(),f.getCveId(),v==null?f.getCveId():v.getTitleZh(),
+                    v==null?f.getCveId():v.getTitleEn(),v==null?null:v.getCvss(),v==null?null:s(v.getSeverity()),
+                    v!=null&&v.isKev(),s(f.getStatus()),f.getAssetId(),a==null?null:a.getAssetCode(),a==null?null:a.getName(),
+                    a==null?null:s(a.getEnvironment()),a!=null&&Boolean.TRUE.equals(a.getInternetExposed()),
+                    a==null?null:a.getCriticality(),v==null?null:v.getDescriptionZh(),v==null?null:v.getDescriptionEn(),
+                    v==null?null:v.getImpactZh(),v==null?null:v.getImpactEn());
+        }).toList();
     }
 
     public List<AssetView> assetViews(List<Asset> rows) {
@@ -145,6 +169,7 @@ public class ViewService {
             ScanJob scan = f.getScanJobId() == null ? null : scanById.get(f.getScanJobId());
             RemediationTask task = f.getRemediationTaskId() == null ? null : taskById.get(f.getRemediationTaskId());
             SecurityIncident incident=f.getSecurityIncidentId()==null?null:incidentById.get(f.getSecurityIncidentId());
+            SlaDecisionView sla=v==null||a==null?null:slaPolicy.decide(v,a);
             List<String> reasons=new ArrayList<>();
             if(v!=null&&v.isKev())reasons.add("KNOWN_EXPLOITED");
             if(v!=null&&v.getSeverity()==Enums.Severity.CRITICAL)reasons.add("CRITICAL_SEVERITY");
@@ -165,7 +190,7 @@ public class ViewService {
                     f.getExemptionApprovedBy(), s(f.getExemptionApprovedAt()),
                     f.getExemptionRequestId(), f.getExemptionStatus(), f.getBaseRiskScore(),
                     f.getRiskFormulaVersion(), f.getRiskFactors(),
-                    f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
+                    f.getSecurityIncidentId(), incident==null?(sla==null||f.getFirstSeenAt()==null?null:s(f.getFirstSeenAt().plus(Duration.ofDays(sla.slaDays())))):s(incident.getDueAt()),
                     patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
                     patchCandidatesByCve.getOrDefault(f.getCveId(), List.of())
             );
@@ -408,6 +433,8 @@ public class ViewService {
             RemediationTask task = i.getRemediationTaskId() == null ? null : taskById.get(i.getRemediationTaskId());
             ChangeWorkOrder change = i.getChangeOrderId() == null ? null : changeById.get(i.getChangeOrderId());
             String cve = finding == null ? null : finding.getCveId();
+            List<WorkOrderVulnerabilityView> linked = workOrderVulnerabilities(linkedIds(i.getLinkedFindingIds(),i.getFindingId()));
+            SlaDecisionView decision = vulnerability == null || asset == null ? null : slaPolicy.decide(vulnerability,asset);
             return new SecurityIncidentView(
                     i.getId(), i.getIncidentNo(), i.getFindingId(), cve,
                     vulnerability == null ? cve : vulnerability.getTitleZh(),
@@ -419,7 +446,7 @@ public class ViewService {
                     i.getPriority(), s(i.getStatus()), i.getOwnerId(), i.getOwnerName(), i.getRemediationTaskId(),
                     task == null ? null : task.getTaskNo(), i.getChangeOrderId(), change == null ? null : change.getChangeNo(),
                     s(i.getDueAt()), i.getSyncStatus(), i.getExternalTicketNo(), i.getDecisionReason(),
-                    s(i.getCreatedAt()), s(i.getUpdatedAt()), candidatesByCve.getOrDefault(cve, List.of())
+                    s(i.getCreatedAt()), s(i.getUpdatedAt()), candidatesByCve.getOrDefault(cve, List.of()),linked,decision
             );
         }).toList();
     }
@@ -447,6 +474,9 @@ public class ViewService {
             Finding finding = incident == null ? null : findingById.get(incident.getFindingId());
             Asset asset = incident == null ? null : assetById.get(incident.getAssetId());
             Patch patch = task == null || task.getPatchId() == null ? null : patchById.get(task.getPatchId());
+            List<WorkOrderVulnerabilityView> linked = workOrderVulnerabilities(linkedIds(c.getLinkedFindingIds(),finding==null?null:finding.getId()));
+            VulnerabilityDefinition vulnerability = finding == null ? null : vulns.findById(finding.getCveId()).orElse(null);
+            SlaDecisionView decision = vulnerability == null || asset == null ? null : slaPolicy.decide(vulnerability,asset);
             return new ChangeWorkOrderView(
                     c.getId(), c.getChangeNo(), c.getIncidentId(), incident == null ? null : incident.getIncidentNo(),
                     c.getRemediationTaskId(), task == null ? null : task.getTaskNo(), c.getApprovalId(),
@@ -456,7 +486,7 @@ public class ViewService {
                     patch == null ? null : patch.getPatchId(), task == null ? null : task.getLatestRunId(),
                     c.getRiskAssessment(), c.getImplementationPlan(), c.getRollbackPlan(),
                     s(c.getMaintenanceStart()), s(c.getMaintenanceEnd()), c.getSyncStatus(), c.getExternalChangeNo(),
-                    s(c.getCreatedAt()), s(c.getUpdatedAt()), s(c.getClosedAt())
+                    s(c.getCreatedAt()), s(c.getUpdatedAt()), s(c.getClosedAt()),linked,decision
             );
         }).toList();
     }

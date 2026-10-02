@@ -45,9 +45,14 @@ public final class ApiDtos {
                                            String residualRisk) {}
     public record BulkFindingActionResult(int requested, int succeeded, int failed, List<String> errors) {}
     public record IncidentActionRequest(Long ownerId, String ownerName, Long patchId, String reason) {}
+    public record AggregateIncidentCreateRequest(@NotNull List<Long> findingIds, Long ownerId, String ownerName) {}
     public record ChangeCreateRequest(@NotBlank String changeType, @NotBlank String summary,
                                       String riskAssessment, String implementationPlan, String rollbackPlan,
                                       String maintenanceStart, String maintenanceEnd) {}
+    public record AggregateChangeCreateRequest(@NotNull List<Long> findingIds, @NotBlank String changeType,
+                                               @NotBlank String summary, String riskAssessment,
+                                               String implementationPlan, String rollbackPlan,
+                                               String maintenanceStart, String maintenanceEnd) {}
     public record TaskActionRequest(String result, String comment, String retestMode, String changeType,
                                     String reason, String rollbackPlan, Long targetAssetId) {
         public TaskActionRequest(String result,String comment,String retestMode,String changeType,String reason,String rollbackPlan){
@@ -212,13 +217,22 @@ public final class ApiDtos {
     public record GlobalSearchResult(String type, String id, String titleZh, String titleEn,
                                      String subtitleZh, String subtitleEn, String path) {}
 
+    public record WorkOrderVulnerabilityView(Long findingId,String cveId,String titleZh,String titleEn,
+                                             Double cvss,String severity,boolean kev,String findingStatus,
+                                             Long assetId,String assetCode,String assetName,String environment,
+                                             boolean internetExposed,Integer assetCriticality,String descriptionZh,
+                                             String descriptionEn,String impactZh,String impactEn) {}
+    public record SlaDecisionView(String threatLevel,String assetLevel,String exposureLevel,String priority,
+                                  int slaDays,List<String> reasons) {}
+
     public record SecurityIncidentView(Long id, String incidentNo, Long findingId, String cveId, String titleZh,
                                        String titleEn, String severity, boolean kev, Long assetId, String assetCode,
                                        String assetName, String environment, String businessService, String priority,
                                        String status, Long ownerId, String ownerName, Long remediationTaskId,
                                        String remediationTaskNo, Long changeOrderId, String changeNo, String dueAt,
                                        String syncStatus, String externalTicketNo, String decisionReason,
-                                       String createdAt, String updatedAt, List<PatchCandidateView> patchCandidates) {}
+                                       String createdAt, String updatedAt, List<PatchCandidateView> patchCandidates,
+                                       List<WorkOrderVulnerabilityView> linkedVulnerabilities,SlaDecisionView slaDecision) {}
 
     public record ChangeWorkOrderView(Long id, String changeNo, Long incidentId, String incidentNo,
                                       Long remediationTaskId, String remediationTaskNo, Long approvalId,
@@ -227,7 +241,8 @@ public final class ApiDtos {
                                       String patchCode, Long latestRunId, String riskAssessment,
                                       String implementationPlan, String rollbackPlan, String maintenanceStart,
                                       String maintenanceEnd, String syncStatus, String externalChangeNo,
-                                      String createdAt, String updatedAt, String closedAt) {}
+                                      String createdAt, String updatedAt, String closedAt,
+                                      List<WorkOrderVulnerabilityView> linkedVulnerabilities,SlaDecisionView slaDecision) {}
 
     public record TemplateStepView(Long id, Integer stepOrder, String code, String nameZh, String nameEn,
                                    String stepType, boolean rollbackPoint) {}

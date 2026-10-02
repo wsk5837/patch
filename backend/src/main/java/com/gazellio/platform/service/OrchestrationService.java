@@ -566,7 +566,7 @@ public class OrchestrationService {
 
         if(failures>0){
             audit.log("RUN",run.getId(),"TARGET_FAILED","目标执行失败，流程已阻断",
-                    "Target execution failed; workflow blocked","Gazellio Automation");
+                    "Target execution failed; workflow blocked","ANOWX Automation");
             return;
         }
 
@@ -584,7 +584,7 @@ public class OrchestrationService {
                 });
                 task.setStatus(TaskStatus.OPEN);task.setUpdatedAt(Instant.now());tasks.save(task);
                 audit.log("TASK",task.getId(),"APPLICATION_TEST_PASSED",run.getEnvironment()+"环境自动应用测试通过，可发起漏洞复测",
-                        "Automated application testing passed in "+run.getEnvironment()+"; vulnerability retest is now available","Gazellio Automation");
+                        "Automated application testing passed in "+run.getEnvironment()+"; vulnerability retest is now available","ANOWX Automation");
             }
             return;
         }
@@ -595,7 +595,7 @@ public class OrchestrationService {
                 target.setMessage("补丁安装状态、版本标识与应用健康验证完成，等待定向漏洞扫描");deploymentTargets.save(target);
             }
             audit.log("RUN",run.getId(),"RETEST_VALIDATION_READY","补丁安装状态与效果校验完成，等待定向漏洞扫描结果",
-                    "Patch state and effect validation completed; waiting for the targeted vulnerability scan","Gazellio Scanner");
+                    "Patch state and effect validation completed; waiting for the targeted vulnerability scan","ANOWX Scanner");
             return;
         }
 
@@ -627,7 +627,7 @@ public class OrchestrationService {
             audit.log("TASK", task.getId(), "PATCH_SUCCEEDED",
                     env.name() + " 环境补丁执行完成，进入应用验证",
                     "Patch execution completed in " + env.name() + "; application verification required",
-                    "Gazellio Automation");
+                    "ANOWX Automation");
         }
     }
 

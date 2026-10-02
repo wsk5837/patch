@@ -19,6 +19,15 @@ public class WorkOrderController {
     @GetMapping("/incidents/{id}") public SecurityIncidentView incident(@PathVariable Long id){ return service.incident(id); }
     @GetMapping("/changes") public List<ChangeWorkOrderView> changes(){ return service.changes(); }
     @GetMapping("/changes/{id}") public ChangeWorkOrderView change(@PathVariable Long id){ return service.change(id); }
+    @GetMapping("/finding-options") public List<FindingView> findingOptions(@RequestParam(defaultValue="INCIDENT") String stage){ return service.findingOptions(stage); }
+
+    @PreAuthorize("hasAnyAuthority('INCIDENT_CREATE','INCIDENT_MANAGE')")
+    @PostMapping("/incidents")
+    public SecurityIncidentView createIncident(@Valid @RequestBody AggregateIncidentCreateRequest req){ return service.createIncident(req); }
+
+    @PreAuthorize("hasAnyAuthority('CHANGE_CREATE','CHANGE_MANAGE')")
+    @PostMapping("/changes")
+    public ChangeWorkOrderView createChange(@Valid @RequestBody AggregateChangeCreateRequest req){ return service.createChange(req); }
 
     @PreAuthorize("hasAnyAuthority('INCIDENT_CREATE','INCIDENT_MANAGE')")
     @PostMapping("/findings/{findingId}/incident")

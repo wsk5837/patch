@@ -33,7 +33,7 @@ public class MfaService {
     public String newEncryptedSecret(){return encrypt(newSecret());}
     public String displaySecret(String encrypted){return decrypt(encrypted);}
     public String setupUri(String username,String encrypted){
-        String account=url("Gazellio:"+username),issuer=url("Gazellio");
+        String account=url("ANOWX:"+username),issuer=url("ANOWX");
         return "otpauth://totp/"+account+"?secret="+displaySecret(encrypted)+"&issuer="+issuer+"&algorithm=SHA1&digits=6&period=30";
     }
     public boolean verify(String encrypted,String code){

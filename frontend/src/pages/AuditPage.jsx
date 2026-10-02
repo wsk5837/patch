@@ -25,7 +25,7 @@ export default function AuditPage(){
     const headers=[t('time'),t('entity'),'ID',t('operation'),t('message'),t('actor'),t('sourceIp'),t('userAgent')]
     const lines=[headers,...rows.map(r=>[r.createdAt,r.entityType,r.entityId,r.action,lang==='zh'?(r.messageZh||r.messageEn):(r.messageEn||r.messageZh),r.actor,r.sourceIp,r.userAgent])]
     const blob=new Blob(['\ufeff'+lines.map(line=>line.map(csvCell).join(',')).join('\n')],{type:'text/csv;charset=utf-8'})
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`gazellio-audit-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url)
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`anowx-audit-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url)
   }
   const cols=[
     {key:'createdAt',label:t('time'),render:r=>fmtDate(r.createdAt,lang)},

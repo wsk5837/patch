@@ -16,6 +16,8 @@ public class SecurityIncident {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(unique = true, nullable = false, length = 80) private String incidentNo;
     @Column(unique = true, nullable = false) private Long findingId;
+    /** Comma-separated finding ids linked to this aggregate incident; findingId remains the primary finding. */
+    @Column(columnDefinition = "TEXT") private String linkedFindingIds;
     @Column(nullable = false) private Long assetId;
     @Column(nullable = false, length = 20) private String priority;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) @Builder.Default private IncidentStatus status = IncidentStatus.OPEN;

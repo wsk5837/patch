@@ -17,6 +17,8 @@ public class ChangeWorkOrder {
     @Column(unique = true, nullable = false, length = 80) private String changeNo;
     @Column(nullable = false) private Long incidentId;
     @Column(nullable = false) private Long remediationTaskId;
+    /** Comma-separated finding ids covered by this change; the primary task remains the execution anchor. */
+    @Column(columnDefinition = "TEXT") private String linkedFindingIds;
     private Long approvalId;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) private ChangeType changeType;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) @Builder.Default private ChangeStatus status = ChangeStatus.DRAFT;

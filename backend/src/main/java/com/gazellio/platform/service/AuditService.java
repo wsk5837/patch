@@ -24,7 +24,7 @@ public class AuditService {
   AuditEvent event=AuditEvent.builder().entityType(type).entityId(String.valueOf(id)).action(action)
           .messageZh(zh).messageEn(en).actor(actor)
           .sourceIp(request==null?"SYSTEM":sourceIp(request))
-          .userAgent(request==null?"Gazellio background service":request.getHeader("User-Agent"))
+          .userAgent(request==null?"ANOWX background service":request.getHeader("User-Agent"))
           .previousHash(previous).hashVersion(HASH_VERSION).createdAt(created).build();
   event.setEventHash(hash(event));repo.save(event);
  }

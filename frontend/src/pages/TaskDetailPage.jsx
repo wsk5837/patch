@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react'
-import { ArrowLeft, Play, CheckCircle2, RefreshCw, ExternalLink, UserRoundCog, ScanSearch, UserCheck } from 'lucide-react'
+import { ArrowLeft, Play, CheckCircle2, RefreshCw, ExternalLink, UserRoundCog, ScanSearch, UserCheck, Route } from 'lucide-react'
 import { useNavigate,useParams } from 'react-router-dom'
 import { useApiData } from '../utils/useApiData'
 import { api } from '../api/client'
@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/Modal'
 import StatusBadge,{statusTone} from '../components/StatusBadge'
 import {envLabel,taskStage,taskStatus,fmtDate} from '../utils/format'
+import LifecycleMap from '../components/LifecycleMap'
 
 export default function TaskDetailPage(){
  const {id}=useParams()
@@ -27,6 +28,7 @@ export default function TaskDetailPage(){
  const [ownerSelection,setOwnerSelection]=useState('')
  const [targetPicker,setTargetPicker]=useState(null)
  const [targetAssetId,setTargetAssetId]=useState('')
+ const [lifecycleOpen,setLifecycleOpen]=useState(false)
 
  useEffect(()=>{if(task?.ownerId)setOwnerSelection(String(task.ownerId))},[task?.ownerId])
  if(loading&&!task)return <div className="loading">{t('loading')}</div>
@@ -81,6 +83,7 @@ export default function TaskDetailPage(){
  const approvalIsNext=task.stage==='RELEASE_APPROVAL'&&!!task.approvalId
 
  const actions=[]
+ actions.push(<button key="lifecycle" className="btn" onClick={()=>setLifecycleOpen(true)}><Route size={15}/>{t('lifecycleOverview')}</button>)
  if(task.stage!=='CLOSED'&&(has('TASK_ASSIGN')||has('TASK_MANAGE')))actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
  if(task.assetId)actions.push(<button key="asset" className="btn" onClick={()=>nav(`/assets/${task.assetId}`)}><ExternalLink size={15}/>{t('viewAsset')}</button>)
  if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>openDeployment('start-test','TEST')}><Play size={15}/>{t('startTestPatch')}</button>)
@@ -101,7 +104,7 @@ export default function TaskDetailPage(){
  if(task.latestRunId)actions.push(<button key="run" className={runIsNext?'btn primary next-action':'btn'} onClick={()=>nav(`/automation/runs/${task.latestRunId}`)}><ExternalLink size={15}/>{t('linkedRun')}</button>)
 
  return <>
-  <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions">{actions}</div></div>
+  <div className="detail-top"><button className="back-button" onClick={()=>nav(-1)}><ArrowLeft size={16}/>{t('back')}</button><div className="detail-actions" role="group" aria-label={t('operationArea')}>{actions}</div></div>
   <section className="detail-hero"><div><div className="eyebrow"><StatusBadge tone={task.priority==='P1'?'critical':task.priority==='P2'?'high':task.priority==='P3'?'medium':'low'}>{task.priority}</StatusBadge><StatusBadge tone="purple">{taskStage(t,task.stage)}</StatusBadge><StatusBadge tone={statusTone(task.status)}>{taskStatus(t,task.status)}</StatusBadge></div><h1>{task.taskNo}</h1><h2>{task.cveId} · {pick(task)}</h2></div></section>
   <div className="detail-grid"><section className="panel span-2"><div className="kv-grid three"><div><span>{t('asset')}</span><b>{localize(task.assetName)}</b></div><div><span>{t('assetCode')}</span><b>{task.assetCode}</b></div><div><span>{t('environment')}</span><b>{envLabel(t,task.environment)}</b></div><div><span>{t('businessService')}</span><b>{localize(task.businessService)}</b></div><div><span>{t('owner')}</span><b>{localize(task.ownerName)}</b></div><div><span>{t('patch')}</span><b>{task.patchCode||'—'}</b></div><div><span>{t('changeType')}</span><b>{task.changeType?t(task.changeType):'—'}</b></div><div><span>{t('due')}</span><b>{fmtDate(task.dueAt,lang)}</b></div><div><span>{t('updatedAt')}</span><b>{fmtDate(task.updatedAt,lang)}</b></div></div></section>{task.lastRetestMode&&<section className="panel span-2"><div className="panel-head"><h2>{t('retestRecord')}</h2></div><div className="kv-grid four"><div><span>{t('retestMode')}</span><b>{t(task.lastRetestMode==='AUTO'?'automaticRetest':'manualRetest')}</b></div><div><span>{t('retestResult')}</span><b>{task.lastRetestResult==='RUNNING'?t('retestRunning'):task.lastRetestResult==='PASSED'?t('retestPassed'):t('retestFailed')}</b></div><div><span>{t('retestedBy')}</span><b>{localize(task.lastRetestedBy)||'—'}</b></div><div><span>{t('retestedAt')}</span><b>{fmtDate(task.lastRetestedAt,lang)}</b></div>{task.lastRetestComment&&<div className="span-all"><span>{t('comment')}</span><b>{localize(task.lastRetestComment)}</b></div>}</div></section>}</div>
   <Modal open={!!verify} title={verify==='TEST'?t('verifyTest'):verify==='PREPROD'?t('verifyPreprod'):t('verifyProd')} onClose={()=>setVerify(null)} footer={<><button className="btn" onClick={()=>setVerify(null)}>{t('cancel')}</button><button className="btn primary" onClick={verifySubmit} disabled={busy||!comment.trim()}>{t('submit')}</button></>}><div className="form-grid"><label className="form-field"><span>{t('validationResult')}</span><select value={result} onChange={e=>setResult(e.target.value)}><option value="PASS">{t('pass')}</option><option value="FAIL">{t('fail')}</option></select></label><label className="form-field full"><span>{t('comment')} *</span><textarea rows={4} value={comment} onChange={e=>setComment(e.target.value)} placeholder={t('verificationBasis')}/></label></div></Modal>
@@ -110,5 +113,6 @@ export default function TaskDetailPage(){
   <Modal open={!!targetPicker} title={t('selectValidationAsset')} onClose={()=>setTargetPicker(null)} footer={<><button className="btn" onClick={()=>setTargetPicker(null)}>{t('cancel')}</button><button className="btn primary" disabled={!targetAssetId||busy} onClick={startDeployment}>{t('confirmAndExecute')}</button></>}>
    <div className="validation-targets">{targetPicker&&!targetPicker.exact&&<div className="target-warning">{t('compatibleAssetFallback')}</div>}{targetPicker?.candidates.map(asset=>{const isolated=asset.environment!==targetPicker.environment;return <label className={`validation-target ${String(asset.id)===targetAssetId?'selected':''}`} key={asset.id}><input type="radio" name="validationTarget" value={asset.id} checked={String(asset.id)===targetAssetId} onChange={e=>setTargetAssetId(e.target.value)}/><span><b>{localize(asset.name)}</b><small>{asset.assetCode} · {asset.ipAddress||'—'} · {isolated?t('isolatedValidationNote'):localize(asset.businessService)||'—'}</small></span><StatusBadge tone={isolated?'purple':asset.businessService===task.businessService?'ok':'purple'}>{isolated?t('isolatedValidationBaseline'):asset.businessService===task.businessService?t('sameBusinessService'):t('compatibleAsset')}</StatusBadge></label>})}</div>
   </Modal>
+  <Modal open={lifecycleOpen} title={t('lifecycleOverview')} size="xl" onClose={()=>setLifecycleOpen(false)}><div className="lifecycle-modal-head"><b>{task.taskNo}</b><span>{t('lifecycleClickHint')}</span></div><LifecycleMap task={task} onNavigate={path=>{setLifecycleOpen(false);nav(path)}}/></Modal>
  </>
 }

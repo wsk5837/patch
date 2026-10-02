@@ -102,7 +102,7 @@ public class ThreatIntelSyncService {
     private JsonNode fetch(String url){
         return rest.build().get().uri(url)
                 .header(HttpHeaders.ACCEPT,MediaType.APPLICATION_JSON_VALUE)
-                .header(HttpHeaders.USER_AGENT,"Gazellio/1.0 (+https://github.com/wsk5837/patch)")
+                .header(HttpHeaders.USER_AGENT,"ANOWX/1.0 (+https://github.com/wsk5837/patch)")
                 .retrieve().body(JsonNode.class);
     }
 

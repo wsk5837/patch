@@ -32,6 +32,20 @@ public class WorkOrderService {
     private final AuditService audit;
     private final CurrentUserService currentUser;
     private final SettingsService settings;
+    private final SlaPolicyService slaPolicy;
+
+    public List<FindingView> findingOptions(String stage) {
+        List<Finding> candidates = findings.findTop200ByOrderByRiskScoreDescLastSeenAtDesc();
+        boolean changeStage = "CHANGE".equalsIgnoreCase(stage);
+        List<Finding> eligible = candidates.stream().filter(f -> {
+            if (!changeStage) return f.getSecurityIncidentId() == null
+                    && Set.of(FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(f.getStatus());
+            if (f.getRemediationTaskId() == null || f.getSecurityIncidentId() == null) return false;
+            RemediationTask task = tasks.findById(f.getRemediationTaskId()).orElse(null);
+            return task != null && task.getStage() == TaskStage.RELEASE_APPROVAL && task.getChangeOrderId() == null;
+        }).toList();
+        return view.findingViews(eligible);
+    }
 
     public List<SecurityIncidentView> incidents() {
         List<SecurityIncident> rows = incidents.findActive(PageRequest.of(0,200));
@@ -75,7 +89,8 @@ public class WorkOrderService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Finding must be confirmed before a security incident can be created");
         }
-        SecurityIncident existing = incidents.findByFindingId(finding.getId()).orElse(null);
+        SecurityIncident existing = finding.getSecurityIncidentId() == null ? incidents.findByFindingId(finding.getId()).orElse(null)
+                : incidents.findById(finding.getSecurityIncidentId()).orElse(null);
         if (existing != null) {
             if (Set.of(IncidentStatus.CLOSED, IncidentStatus.RESOLVED, IncidentStatus.EXEMPTED,
                     IncidentStatus.FALSE_POSITIVE).contains(existing.getStatus())) {
@@ -94,14 +109,15 @@ public class WorkOrderService {
         }
         Asset asset = assets.findById(finding.getAssetId()).orElseThrow();
         VulnerabilityDefinition vulnerability = vulnerabilities.findById(finding.getCveId()).orElseThrow();
-        String priority = priority(vulnerability, asset);
-        int defaultDays = switch (priority) { case "P1" -> 3; case "P2" -> 7; case "P3" -> 30; default -> 90; };
-        long days = settings.intValue("sla"+priority+"Days",defaultDays,1,3650);
+        SlaDecisionView decision = slaPolicy.decide(vulnerability, asset);
+        String priority = decision.priority();
+        long days = decision.slaDays();
         long stamp = System.currentTimeMillis();
         SecurityIncident incident = incidents.save(SecurityIncident.builder()
                 .incidentNo("SEC-" + stamp)
                 .externalTicketNo("AITSM-SEC-" + stamp)
                 .findingId(finding.getId())
+                .linkedFindingIds(String.valueOf(finding.getId()))
                 .assetId(finding.getAssetId())
                 .priority(priority)
                 .status(asset.getOwnerId() == null ? IncidentStatus.OPEN : IncidentStatus.ASSIGNED)
@@ -115,6 +131,46 @@ public class WorkOrderService {
                 "漏洞确认后生成安全事件工单 " + incident.getIncidentNo(),
                 "Security incident created after finding confirmation " + incident.getIncidentNo(), actor());
         return incident;
+    }
+
+    @Transactional
+    public SecurityIncidentView createIncident(AggregateIncidentCreateRequest req) {
+        List<Long> ids = normalizedIds(req == null ? null : req.findingIds());
+        if (ids.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one finding");
+        List<Finding> selected = findings.findAllById(ids);
+        if (selected.size() != ids.size()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "One or more findings were not found");
+        for (Finding finding : selected) {
+            if (!Set.of(FindingStatus.CONFIRMED, FindingStatus.IN_REMEDIATION).contains(finding.getStatus()))
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "All selected findings must be confirmed");
+            if (finding.getSecurityIncidentId() != null)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, finding.getCveId() + " is already linked to an incident");
+        }
+        Finding primary = selected.stream().max(Comparator.comparingDouble(f -> f.getRiskScore() == null ? 0 : f.getRiskScore())).orElseThrow();
+        SecurityIncident incident = ensureForFinding(primary);
+        incident.setLinkedFindingIds(joinIds(ids));
+        if (req.ownerName() != null && !req.ownerName().isBlank()) {
+            incident.setOwnerId(req.ownerId()); incident.setOwnerName(req.ownerName().trim());
+            incident.setStatus(IncidentStatus.ASSIGNED);
+        }
+        String highest = incident.getPriority();
+        int shortestDays = Integer.MAX_VALUE;
+        for (Finding finding : selected) {
+            Asset asset = assets.findById(finding.getAssetId()).orElseThrow();
+            VulnerabilityDefinition vulnerability = vulnerabilities.findById(finding.getCveId()).orElseThrow();
+            SlaDecisionView decision = slaPolicy.decide(vulnerability, asset);
+            if (priorityRank(decision.priority()) < priorityRank(highest)) highest = decision.priority();
+            shortestDays = Math.min(shortestDays, decision.slaDays());
+            finding.setSecurityIncidentId(incident.getId());
+            if (req.ownerName() != null && !req.ownerName().isBlank()) { finding.setOwnerId(req.ownerId()); finding.setOwnerName(req.ownerName().trim()); }
+            findings.save(finding);
+        }
+        incident.setPriority(highest);
+        incident.setDueAt(Instant.now().plus(Duration.ofDays(shortestDays)));
+        incident.setUpdatedAt(Instant.now());
+        incidents.save(incident);
+        audit.log("SECURITY_INCIDENT", incident.getId(), "CREATE_AGGREGATE",
+                "新建聚合安全事件，关联 " + ids.size() + " 条漏洞", "Aggregate security incident created for " + ids.size() + " findings", actor());
+        return view.incident(incident);
     }
 
     @Transactional
@@ -242,6 +298,37 @@ public class WorkOrderService {
     }
 
     @Transactional
+    public ChangeWorkOrderView createChange(AggregateChangeCreateRequest req) {
+        List<Long> ids = normalizedIds(req == null ? null : req.findingIds());
+        if (ids.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one finding");
+        List<Finding> selected = findings.findAllById(ids);
+        if (selected.size() != ids.size()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "One or more findings were not found");
+        for (Finding finding : selected) {
+            if (finding.getSecurityIncidentId() == null || finding.getRemediationTaskId() == null)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Each finding must have an incident and remediation task");
+            RemediationTask task = tasks.findById(finding.getRemediationTaskId()).orElseThrow();
+            if (task.getStage() != TaskStage.RELEASE_APPROVAL || task.getChangeOrderId() != null)
+                throw new ResponseStatusException(HttpStatus.CONFLICT, finding.getCveId() + " has not reached the release approval gate");
+        }
+        Finding primary = selected.stream().max(Comparator.comparingDouble(f -> f.getRiskScore() == null ? 0 : f.getRiskScore())).orElseThrow();
+        ChangeCreateRequest base = new ChangeCreateRequest(req.changeType(), req.summary(), req.riskAssessment(),
+                req.implementationPlan(), req.rollbackPlan(), req.maintenanceStart(), req.maintenanceEnd());
+        ChangeWorkOrderView createdView = createChange(primary.getSecurityIncidentId(), base);
+        ChangeWorkOrder change = changes.findById(createdView.id()).orElseThrow();
+        change.setLinkedFindingIds(joinIds(ids));
+        changes.save(change);
+        for (Finding finding : selected) {
+            RemediationTask task = tasks.findById(finding.getRemediationTaskId()).orElseThrow();
+            SecurityIncident incident = incidents.findById(finding.getSecurityIncidentId()).orElseThrow();
+            task.setChangeOrderId(change.getId()); task.setApprovalId(change.getApprovalId()); task.setUpdatedAt(Instant.now()); tasks.save(task);
+            incident.setChangeOrderId(change.getId()); incident.setStatus(IncidentStatus.PENDING_CHANGE); incident.setUpdatedAt(Instant.now()); incidents.save(incident);
+        }
+        audit.log("CHANGE", change.getId(), "CREATE_AGGREGATE",
+                "新建聚合变更，关联 " + ids.size() + " 条漏洞", "Aggregate change created for " + ids.size() + " findings", actor());
+        return view.change(change);
+    }
+
+    @Transactional
     public ChangeWorkOrderView resubmitChange(Long changeId, ChangeCreateRequest req) {
         ChangeWorkOrder change = changes.findById(changeId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Change not found"));
@@ -296,13 +383,12 @@ public class WorkOrderService {
         return incidents.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
-    private String priority(VulnerabilityDefinition vulnerability, Asset asset) {
-        if (vulnerability.isKev() || vulnerability.getSeverity() == Severity.CRITICAL) return "P1";
-        if (Boolean.TRUE.equals(asset.getInternetExposed()) && vulnerability.getSeverity() == Severity.HIGH) return "P1";
-        if (vulnerability.getSeverity() == Severity.HIGH || asset.getCriticality() >= 5 || Boolean.TRUE.equals(asset.getInternetExposed())) return "P2";
-        if (vulnerability.getSeverity() == Severity.MEDIUM) return "P3";
-        return "P4";
+    private static List<Long> normalizedIds(List<Long> ids) {
+        if (ids == null) return List.of();
+        return ids.stream().filter(Objects::nonNull).distinct().toList();
     }
+    private static String joinIds(List<Long> ids) { return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")); }
+    private static int priorityRank(String value) { return switch (value) { case "P1" -> 1; case "P2" -> 2; case "P3" -> 3; default -> 4; }; }
 
     private static String blank(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
@@ -332,6 +418,6 @@ public class WorkOrderService {
     }
 
     private String actor() {
-        try { return currentUser.name(); } catch (Exception ignored) { return "Gazellio"; }
+        try { return currentUser.name(); } catch (Exception ignored) { return "ANOWX"; }
     }
 }

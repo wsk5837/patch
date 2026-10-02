@@ -1,4 +1,4 @@
-# Gazellio Architecture
+# ANOWX Architecture
 
 ## Runtime topology
 
@@ -30,7 +30,7 @@ Render sets `rootDir: frontend` and `rootDir: backend` for the two services. A c
 6. Patch execution follows environment gates: test -> application validation -> targeted rescan -> release approval -> pre-production -> validation -> rescan -> production -> validation -> rescan.
 7. Failed application validation or failed rescan returns the task to that environment's patch stage instead of silently advancing.
 8. Final approval starts implementation. The release/change remains implementing until production rescan succeeds, then it closes.
-9. CMDB is read-only. Successful patch runs store installed/verified patch state in Gazellio against the mirrored CMDB asset identifier; no CMDB API write is performed.
+9. CMDB is read-only. Successful patch runs store installed/verified patch state in ANOWX against the mirrored CMDB asset identifier; no CMDB API write is performed.
 10. A vulnerability finding closes only after production validation and targeted production rescan pass.
 11. Long-running patch executions are persistent orchestration runs; each node has its own database state and can be observed, paused, resumed or rolled back.
 12. The end-to-end business flow exists as an orchestration template. Normal product pages do not duplicate it as explanatory text.

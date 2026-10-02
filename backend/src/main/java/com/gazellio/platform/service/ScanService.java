@@ -83,7 +83,7 @@ public class ScanService {
             scheduledSlots.put(environment,slot);
             create(new ScanCreateRequest(name,"AUTHENTICATED","ENVIRONMENT",environment,"AGENT"));
         }catch(Exception ex){
-            audit.log("SCAN_SCHEDULE",environment,"SKIP","周期扫描未启动："+ex.getMessage(),"Scheduled scan was not started: "+ex.getMessage(),"Gazellio Scheduler");
+            audit.log("SCAN_SCHEDULE",environment,"SKIP","周期扫描未启动："+ex.getMessage(),"Scheduled scan was not started: "+ex.getMessage(),"ANOWX Scheduler");
         }
     }
 
@@ -104,7 +104,7 @@ public class ScanService {
                 int count=performScan(j);
                 j.setFindingsCount(count); j.setProgress(100); j.setStatus(ScanStatus.COMPLETED); j.setCompletedAt(Instant.now()); scans.save(j);
                 if(j.getRemediationTaskId()!=null) handleTaskRescan(j);
-                audit.log("SCAN",j.getId(),"COMPLETE","扫描完成，共发现/更新 "+count+" 条漏洞实例","Scan completed with "+count+" findings created or updated","Gazellio Scanner");
+                audit.log("SCAN",j.getId(),"COMPLETE","扫描完成，共发现/更新 "+count+" 条漏洞实例","Scan completed with "+count+" findings created or updated","ANOWX Scanner");
             } catch(Exception ex){
                 j.setStatus(ScanStatus.FAILED); j.setErrorMessage(ex.getMessage()); j.setCompletedAt(Instant.now()); scans.save(j);
             }
@@ -237,7 +237,7 @@ public class ScanService {
                     ?"Registry, signed package inventory and service fingerprint"
                     :"Package inventory, process fingerprint and version rule")
                 :"Remote service fingerprint and vulnerability probe";
-        String scanner=authenticated?"Gazellio Agent 1.6.0":"Gazellio Network Scanner 1.6.0";
+        String scanner=authenticated?"ANOWX Agent 1.6.0":"ANOWX Network Scanner 1.6.0";
         String transport=authenticated?"Authenticated "+value(scan.getCredentialType())+" channel":"Network probe";
         String affected=firstEvidence(vulnerability==null?null:vulnerability.getAffectedVersionRangeEn(),
                 vulnerability==null?null:vulnerability.getAffectedVersionRangeZh(),"See detection rule");
@@ -258,7 +258,7 @@ public class ScanService {
                 +"policy: Vulnerability Baseline v2026.09\n"
                 +"target: "+asset.getHostname()+" ("+asset.getIpAddress()+")\n"
                 +"asset_ci: "+asset.getAssetCode()+"\n"
-                +"inventory_source: "+("CMDB".equals(asset.getSourceSystem())?"CMDB read-only mirror":"Gazellio asset inventory")+"\n"
+                +"inventory_source: "+("CMDB".equals(asset.getSourceSystem())?"CMDB read-only mirror":"ANOWX asset inventory")+"\n"
                 +("CMDB".equals(asset.getSourceSystem())?"cmdb_item_id: "+value(asset.getCmdbItemId())+"\ncmdb_class: "+value(asset.getCmdbClassKey())+"\n":"")
                 +"transport: "+transport+"\n"
                 +"detection_rule: GZ-"+cve+"\n"
@@ -326,7 +326,7 @@ public class ScanService {
         RemediationTask task=tasks.findById(j.getRemediationTaskId()).orElse(null); if(task==null)return;
         boolean stillFound=findings.findByScanJobId(j.getId()).stream().anyMatch(f->Objects.equals(f.getCveId(),j.getTargetCve()));
         String env=j.getScanType().replace("TARGETED_RESCAN_","");
-        completeRetest(task,env,!stillFound,"Gazellio Scanner",stillFound?"Target vulnerability was still detected":"Target vulnerability was not detected");
+        completeRetest(task,env,!stillFound,"ANOWX Scanner",stillFound?"Target vulnerability was still detected":"Target vulnerability was not detected");
     }
 
     @Transactional

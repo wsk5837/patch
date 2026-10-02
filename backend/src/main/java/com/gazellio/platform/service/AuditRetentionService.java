@@ -22,6 +22,6 @@ public class AuditRetentionService {
         int months=settings.intValue("auditRetentionMonths",12,12,120);
         long removed=events.deleteByCreatedAtBefore(Instant.now().minus(months*30L,ChronoUnit.DAYS));
         if(removed>0)audit.log("AUDIT_RETENTION","system","PURGE","审计留存策略清理 "+removed+" 条到期记录",
-                "Audit retention removed "+removed+" expired records","Gazellio Scheduler");
+                "Audit retention removed "+removed+" expired records","ANOWX Scheduler");
     }
 }
