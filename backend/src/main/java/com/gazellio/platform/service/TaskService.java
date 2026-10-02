@@ -34,7 +34,7 @@ public class TaskService {
     public TaskView action(Long id,String action,TaskActionRequest req){
         RemediationTask t=require(id);
         String normalizedAction=action.toLowerCase(Locale.ROOT);
-        if(Set.of("verify-test","verify-preprod","verify-prod","start-auto-retest","submit-manual-retest").contains(normalizedAction))
+        if(Set.of("verify-test","verify-preprod","verify-prod","start-auto-app-test","start-auto-retest","submit-manual-retest").contains(normalizedAction))
             currentUser.requireAnyAuthority("TASK_RETEST","TASK_MANAGE");
         else currentUser.requireAnyAuthority("TASK_EXECUTE","TASK_MANAGE");
         switch(normalizedAction){
@@ -42,6 +42,7 @@ public class TaskService {
             case "verify-test" -> verifyApplication(t,TaskStage.APP_VERIFY,TaskStage.TEST_RESCAN,"TEST",req);
             case "verify-preprod" -> verifyApplication(t,TaskStage.PREPROD_VERIFY,TaskStage.PREPROD_RESCAN,"PREPROD",req);
             case "verify-prod" -> verifyApplication(t,TaskStage.PROD_VERIFY,TaskStage.PROD_RESCAN,"PROD",req);
+            case "start-auto-app-test" -> startAutomaticApplicationTest(t);
             case "start-auto-retest" -> startAutoRetest(t,req);
             case "submit-manual-retest" -> submitManualRetest(t,req);
             case "submit-approval" -> throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -82,6 +83,16 @@ public class TaskService {
         t.setLastRetestComment(null);t.setLastRetestedBy(null);t.setLastRetestedAt(null);tasks.save(t);
         audit.log("TASK",t.getId(),"APP_VALIDATED",env+" 环境应用验证通过，等待选择复测方式",
                 env+" application validation passed; retest method selection required",currentUser.name());
+    }
+
+    private void startAutomaticApplicationTest(RemediationTask t){
+        String env=switch(t.getStage()){
+            case APP_VERIFY -> "TEST";
+            case PREPROD_VERIFY -> "PREPROD";
+            case PROD_VERIFY -> "PROD";
+            default -> throw new ResponseStatusException(HttpStatus.CONFLICT,"Task is not waiting for application testing");
+        };
+        orchestration.startApplicationTestRun(t,env);
     }
 
     private void startAutoRetest(RemediationTask t,TaskActionRequest req){

@@ -46,6 +46,12 @@ export default function TaskDetailPage(){
   if(await doAction('submit-manual-retest',{result,comment,retestMode:'MANUAL'})){setManualRetest(false);setComment('')}
  }
  const openManualRetest=()=>{setResult('PASS');setComment('');setManualRetest(true)}
+ const startAutomaticApplicationTest=async()=>{
+  setBusy(true)
+  try{const updated=await api(`/api/tasks/${id}/actions/start-auto-app-test`,{method:'POST',body:{}});toast.push(t('applicationTestStarted'));if(updated.latestRunId)nav(`/automation/runs/${updated.latestRunId}`);else await reload()}
+  catch(e){toast.push(e.message||t('operationFailed'),'red')}
+  finally{setBusy(false)}
+ }
  const openDeployment=async(action,environment)=>{
   setBusy(true)
   try{
@@ -78,9 +84,11 @@ export default function TaskDetailPage(){
  if(task.stage!=='CLOSED'&&(has('TASK_ASSIGN')||has('TASK_MANAGE')))actions.push(<button key="assign" className="btn" onClick={()=>setAssignOpen(true)}><UserRoundCog size={15}/>{t('reassign')}</button>)
  if(task.assetId)actions.push(<button key="asset" className="btn" onClick={()=>nav(`/assets/${task.assetId}`)}><ExternalLink size={15}/>{t('viewAsset')}</button>)
  if(task.stage==='ASSIGNED'&&(has('TASK_EXECUTE')||has('TASK_MANAGE')))actions.push(<button key="start" className="btn primary" disabled={busy} onClick={()=>openDeployment('start-test','TEST')}><Play size={15}/>{t('startTestPatch')}</button>)
- if(task.stage==='APP_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vt" className="btn primary" onClick={()=>setVerify('TEST')}><CheckCircle2 size={15}/>{t('verifyTest')}</button>)
- if(task.stage==='PREPROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vp" className="btn primary" onClick={()=>setVerify('PREPROD')}><CheckCircle2 size={15}/>{t('verifyPreprod')}</button>)
- if(task.stage==='PROD_VERIFY'&&(has('TASK_RETEST')||has('TASK_MANAGE')))actions.push(<button key="vprod" className="btn primary" onClick={()=>setVerify('PROD')}><CheckCircle2 size={15}/>{t('verifyProd')}</button>)
+ if(['APP_VERIFY','PREPROD_VERIFY','PROD_VERIFY'].includes(task.stage)&&(has('TASK_RETEST')||has('TASK_MANAGE'))){
+  const env=task.stage==='APP_VERIFY'?'TEST':task.stage==='PREPROD_VERIFY'?'PREPROD':'PROD'
+  actions.push(<button key="auto-app-test" className="btn primary" disabled={busy} onClick={startAutomaticApplicationTest}><Play size={15}/>{t('automaticApplicationTest')}</button>)
+  actions.push(<button key="manual-app-test" className="btn" disabled={busy} onClick={()=>setVerify(env)}><CheckCircle2 size={15}/>{t('manualApplicationTest')}</button>)
+ }
  if(['TEST_RESCAN','PREPROD_RESCAN','PROD_RESCAN'].includes(task.stage)&&(has('TASK_RETEST')||has('TASK_MANAGE'))){
   const running=task.lastRetestMode==='AUTO'&&task.lastRetestResult==='RUNNING'
   actions.push(<button key="auto-retest" className="btn primary" disabled={busy||running} onClick={()=>doAction('start-auto-retest',{retestMode:'AUTO'})}><ScanSearch size={15}/>{running?t('retestRunning'):t('automaticRetest')}</button>)

@@ -929,6 +929,12 @@ public class DemoDataSeeder implements CommandLineRunner {
                 new String[]{"PRECHECK","紧急前置检查","Emergency pre-check"},new String[]{"PACKAGE_READY","确认已批准补丁已入库","Confirm approved package is available"},
                 new String[]{"VERIFY","校验签名与适用性","Verify signature & applicability"},new String[]{"INSTALL","安装补丁","Install patch"},
                 new String[]{"HEALTH","关键探针验证","Critical probe validation"},new String[]{"EVIDENCE","回写安装证据","Write installation evidence"}));
+        ensureExecutionTemplate("APP-VALIDATION","应用自动化测试","Automated Application Validation","APPLICATION_TEST",1,List.of(
+                new String[]{"HEALTH","应用健康检查","Application health check"},
+                new String[]{"SMOKE","核心功能冒烟测试","Core-function smoke test"},
+                new String[]{"TRANSACTION","关键业务交易验证","Critical business transaction validation"},
+                new String[]{"REGRESSION","关键回归用例执行","Critical regression tests"},
+                new String[]{"EVIDENCE","归档应用测试证据","Archive application-test evidence"}));
         ensureExecutionTemplate("PATCH-RETEST","补丁效果复测","Patch Effect Retest","RETEST",1,List.of(
                 new String[]{"CONNECT","连接目标与读取基线","Connect target and read baseline"},
                 new String[]{"INSTALL_STATE","校验补丁安装状态","Validate installed patch state"},

@@ -34,6 +34,7 @@ public class ScanService {
     private final SecurityIncidentRepository incidents;
     private final ChangeWorkOrderRepository changeOrders;
     private final OrchestrationRunRepository runs;
+    private final DeploymentTargetRepository deploymentTargets;
     private final CurrentUserService currentUser;
     private final AuditService audit;
     private final ViewService view;
@@ -372,10 +373,11 @@ public class ScanService {
         if(task.getPatchId()==null) return;
         Asset source=assets.findById(task.getAssetId()).orElse(null); if(source==null) return;
         EnvironmentType env; try{env=EnvironmentType.valueOf(envName);}catch(Exception e){return;}
-        List<Asset> targetAssets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env);
-        if(targetAssets.isEmpty()&&source.getEnvironment()==env) targetAssets=List.of(source);
-        for(Asset a:targetAssets){
-            assetPatchStates.findByAssetIdAndPatchId(a.getId(),task.getPatchId()).ifPresent(st->{st.setVerified(true);st.setVerifiedAt(Instant.now());assetPatchStates.save(st);});
+        List<Long> targetIds=task.getLatestRunId()==null?List.of():deploymentTargets.findByRunIdOrderByAssetIdAsc(task.getLatestRunId()).stream()
+                .map(DeploymentTarget::getAssetId).distinct().toList();
+        if(targetIds.isEmpty()&&source.getEnvironment()==env)targetIds=List.of(source.getId());
+        for(Long assetId:targetIds){
+            assetPatchStates.findByAssetIdAndPatchId(assetId,task.getPatchId()).ifPresent(st->{st.setVerified(true);st.setVerifiedAt(Instant.now());assetPatchStates.save(st);});
         }
         audit.log("ASSET_PATCH_STATE",task.getId(),"PATCH_VERIFIED","复测通过，已记录 "+envName+" 环境本地补丁验证状态，未回写 CMDB","Rescan passed; local patch verification recorded for "+envName+" without modifying CMDB",actor);
     }

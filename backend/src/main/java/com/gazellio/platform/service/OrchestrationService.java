@@ -21,10 +21,11 @@ public class OrchestrationService {
     private static final LinkedHashMap<String,String> BINDING_KEYS=new LinkedHashMap<>();
     private static final Map<String,String> FALLBACK_CODES=Map.of(
             "STANDARD_PATCH","PATCH-STANDARD","EMERGENCY_PATCH","PATCH-EMERGENCY",
-            "RETEST","PATCH-RETEST","BATCH_PATCH","PATCH-STANDARD");
+            "APPLICATION_TEST","APP-VALIDATION","RETEST","PATCH-RETEST","BATCH_PATCH","PATCH-STANDARD");
     static {
         BINDING_KEYS.put("STANDARD_PATCH","automation.template.standard");
         BINDING_KEYS.put("EMERGENCY_PATCH","automation.template.emergency");
+        BINDING_KEYS.put("APPLICATION_TEST","automation.template.application-test");
         BINDING_KEYS.put("RETEST","automation.template.retest");
         BINDING_KEYS.put("BATCH_PATCH","automation.template.batch");
     }
@@ -69,7 +70,7 @@ public class OrchestrationService {
             OrchestrationTemplate template=templates.findById(entry.getValue()).orElseThrow(() ->
                     new ResponseStatusException(HttpStatus.NOT_FOUND,"Automation template not found"));
             if(!template.isEnabled())throw new ResponseStatusException(HttpStatus.CONFLICT,"Disabled template cannot be activated");
-            String expected="RETEST".equals(scenario)?"RETEST":"PATCH";
+            String expected=expectedTemplateType(scenario);
             if(!expected.equalsIgnoreCase(template.getType()))throw new ResponseStatusException(HttpStatus.CONFLICT,
                     scenario+" requires a "+expected+" template");
             SystemSetting setting=settings.findById(settingKey).orElseGet(() -> SystemSetting.builder().settingKey(settingKey).build());
@@ -112,7 +113,7 @@ public class OrchestrationService {
         OrchestrationTemplate template=templates.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         List<String> boundScenarios=boundScenarios(id);
         if(!boundScenarios.isEmpty()&&!request.enabled())throw new ResponseStatusException(HttpStatus.CONFLICT,"Active runtime template cannot be disabled");
-        for(String scenario:boundScenarios){String expected="RETEST".equals(scenario)?"RETEST":"PATCH";if(!expected.equalsIgnoreCase(request.type()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Active "+scenario+" template must remain type "+expected);}
+        for(String scenario:boundScenarios){String expected=expectedTemplateType(scenario);if(!expected.equalsIgnoreCase(request.type()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Active "+scenario+" template must remain type "+expected);}
         String code=normalizeTemplateCode(request.code());
         templates.findByCode(code).filter(other->!other.getId().equals(id)).ifPresent(other->{throw new ResponseStatusException(HttpStatus.CONFLICT,"Template code already exists");});
         template.setCode(code);template.setNameZh(request.nameZh().trim());template.setNameEn(request.nameEn().trim());
@@ -142,6 +143,14 @@ public class OrchestrationService {
         return BINDING_KEYS.entrySet().stream().filter(entry->settings.findById(entry.getValue())
                 .map(SystemSetting::getSettingValue).filter(String.valueOf(templateId)::equals).isPresent())
                 .map(Map.Entry::getKey).toList();
+    }
+
+    private String expectedTemplateType(String scenario){
+        return switch(scenario){
+            case "RETEST" -> "RETEST";
+            case "APPLICATION_TEST" -> "APPLICATION_TEST";
+            default -> "PATCH";
+        };
     }
 
     private void replaceTemplateSteps(Long templateId,List<TemplateStepSaveRequest> steps){
@@ -197,12 +206,13 @@ public class OrchestrationService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "No patch selected");
         }
         Patch patch = patches.findById(task.getPatchId()).orElseThrow();
+        boolean sourceHasBusinessService=source.getBusinessService()!=null&&!source.getBusinessService().isBlank();
         List<Asset> candidates=new ArrayList<>(assets.findByActiveTrueOrderByNameAsc().stream()
                 .filter(a->a.getEnvironment()==env)
                 .filter(eligibility::executionReachable)
-                .filter(a->Objects.equals(source.getBusinessService(),a.getBusinessService())||patchApplicable(a,patch))
-                .sorted(Comparator.comparing((Asset a)->!Objects.equals(source.getBusinessService(),a.getBusinessService()))
-                        .thenComparing(Asset::getName,String.CASE_INSENSITIVE_ORDER))
+                .filter(a->sourceHasBusinessService&&Objects.equals(source.getBusinessService(),a.getBusinessService()))
+                .filter(a->patchApplicable(a,patch))
+                .sorted(Comparator.comparing(Asset::getName,String.CASE_INSENSITIVE_ORDER))
                 .toList());
         // Some CMDBs do not classify any CI as TEST/PREPROD. In that case expose the
         // source CI only as an isolated validation baseline. The executor creates a
@@ -237,11 +247,7 @@ public class OrchestrationService {
                     (!Objects.equals(source.getBusinessService(),selected.getBusinessService())&&!patchApplicable(selected,patch)))
                 throw new ResponseStatusException(HttpStatus.CONFLICT,"Selected validation target is not reachable or patch-compatible");
             targets=List.of(selected);
-        }else targets = assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env).stream()
-                .filter(eligibility::executionReachable).toList();
-        if (targets.isEmpty() && source.getEnvironment() == env) {
-            targets = List.of(source);
-        }
+        }else targets = List.of(resolveImplicitTaskTarget(source,patch,env));
         if (targets.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A compatible " + environment + " validation asset must be selected");
@@ -315,6 +321,23 @@ public class OrchestrationService {
         return view.run(run);
     }
 
+    private Asset resolveImplicitTaskTarget(Asset source,Patch patch,EnvironmentType env){
+        // A finding is an asset-specific vulnerability instance. Production execution must
+        // therefore stay on that source asset; widening the scope is reserved for CIDR batch runs.
+        if(source.getEnvironment()==env){
+            if(!eligibility.executionReachable(source))throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The finding asset is not reachable for "+env+" execution");
+            return source;
+        }
+        if(source.getBusinessService()==null||source.getBusinessService().isBlank())throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "A validation asset must be selected for "+env);
+        return assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env).stream()
+                .filter(eligibility::executionReachable)
+                .sorted(Comparator.comparing(Asset::getName,String.CASE_INSENSITIVE_ORDER))
+                .findFirst().orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A compatible "+env+" validation asset must be selected"));
+    }
+
     private boolean patchApplicable(Asset asset,Patch patch){
         String product=normalizeProduct(patch.getProduct());
         String inventory=(value(asset.getInstalledProducts())+" "+value(asset.getName())+" "+
@@ -331,14 +354,44 @@ public class OrchestrationService {
     private String value(String value){return value==null?"":value;}
 
     @Transactional
-    public RunView startRetestRun(RemediationTask task,String environment){
-        EnvironmentType env;
-        try{env=EnvironmentType.valueOf(environment.toUpperCase(Locale.ROOT));}
-        catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid environment");}
+    public RunView startApplicationTestRun(RemediationTask task,String environment){
+        EnvironmentType env=parseEnvironment(environment);
+        TaskStage expected=switch(env){
+            case TEST -> TaskStage.APP_VERIFY;
+            case PREPROD -> TaskStage.PREPROD_VERIFY;
+            case PROD -> TaskStage.PROD_VERIFY;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Application testing is not supported for "+env);
+        };
+        if(task.getStage()!=expected)throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Task is not waiting for "+env+" application testing");
+        Patch patch=task.getPatchId()==null?null:patches.findById(task.getPatchId()).orElse(null);
         Asset source=assets.findById(task.getAssetId()).orElseThrow();
-        List<Asset> targets=assets.findByBusinessServiceAndEnvironment(source.getBusinessService(),env);
-        if(targets.isEmpty()&&source.getEnvironment()==env)targets=List.of(source);
-        if(targets.isEmpty())throw new ResponseStatusException(HttpStatus.CONFLICT,"No mapped retest target");
+        Asset target=singlePriorOrImplicitTarget(task,source,patch,env);
+        OrchestrationTemplate template=resolveBoundTemplate("APPLICATION_TEST");
+        OrchestrationRun run=runs.save(OrchestrationRun.builder().runNo("APP-"+System.currentTimeMillis())
+                .templateId(template.getId()).taskId(task.getId()).environment(env.name())
+                .ring("Application validation").status(RunStatus.RUNNING).currentStep(1).progress(1).startedAt(Instant.now()).build());
+        deploymentTargets.save(DeploymentTarget.builder().runId(run.getId()).assetId(target.getId())
+                .status("RUNNING").progress(1).startedAt(Instant.now()).message("应用测试已启动").build());
+        for(OrchestrationTemplateStep step:templateSteps.findByTemplateIdOrderByStepOrderAsc(template.getId())){
+            boolean first=step.getStepOrder()==1;
+            runSteps.save(OrchestrationRunStep.builder().runId(run.getId()).stepOrder(step.getStepOrder()).code(step.getCode())
+                    .nameZh(step.getNameZh()).nameEn(step.getNameEn()).status(first?RunStepStatus.RUNNING:RunStepStatus.WAITING)
+                    .startedAt(first?Instant.now():null).messageZh(first?"正在执行应用测试":"等待应用测试")
+                    .messageEn(first?"Running application test":"Waiting for application test").build());
+        }
+        task.setLatestRunId(run.getId());task.setStatus(TaskStatus.IN_PROGRESS);task.setUpdatedAt(Instant.now());tasks.save(task);
+        audit.log("RUN",run.getId(),"APPLICATION_TEST_START",env.name()+"环境自动应用测试已启动",
+                "Automated application testing started in "+env,currentUser.name());
+        return view.run(run);
+    }
+
+    @Transactional
+    public RunView startRetestRun(RemediationTask task,String environment){
+        EnvironmentType env=parseEnvironment(environment);
+        Asset source=assets.findById(task.getAssetId()).orElseThrow();
+        Patch patch=task.getPatchId()==null?null:patches.findById(task.getPatchId()).orElse(null);
+        List<Asset> targets=List.of(singlePriorOrImplicitTarget(task,source,patch,env));
         OrchestrationTemplate template=resolveBoundTemplate("RETEST");
         OrchestrationRun run=runs.save(OrchestrationRun.builder().runNo("RET-"+System.currentTimeMillis())
                 .templateId(template.getId()).taskId(task.getId()).environment(env.name())
@@ -358,6 +411,23 @@ public class OrchestrationService {
         audit.log("RUN",run.getId(),"RETEST_START",env.name()+" 环境补丁效果复测已启动",
                 "Patch effect retest started for "+env.name(),currentUser.name());
         return view.run(run);
+    }
+
+    private EnvironmentType parseEnvironment(String environment){
+        try{return EnvironmentType.valueOf(environment.toUpperCase(Locale.ROOT));}
+        catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid environment");}
+    }
+
+    private Asset singlePriorOrImplicitTarget(RemediationTask task,Asset source,Patch patch,EnvironmentType env){
+        if(env==EnvironmentType.PROD)return resolveImplicitTaskTarget(source,patch,env);
+        if(task.getLatestRunId()!=null){
+            Optional<Asset> prior=deploymentTargets.findByRunIdOrderByAssetIdAsc(task.getLatestRunId()).stream()
+                    .map(DeploymentTarget::getAssetId).distinct().map(assets::findById).flatMap(Optional::stream)
+                    .filter(eligibility::executionReachable).filter(a->patch==null||patchApplicable(a,patch)).findFirst();
+            if(prior.isPresent())return prior.get();
+        }
+        if(patch==null)throw new ResponseStatusException(HttpStatus.CONFLICT,"No patch selected");
+        return resolveImplicitTaskTarget(source,patch,env);
     }
 
     @Scheduled(fixedDelay = 4500, initialDelayString = "${app.scheduler.initial-delay-ms:60000}")
@@ -453,6 +523,7 @@ public class OrchestrationService {
 
         OrchestrationTemplate template=templates.findById(run.getTemplateId()).orElse(null);
         boolean retest=template!=null&&"RETEST".equalsIgnoreCase(template.getType());
+        boolean applicationTest=template!=null&&"APPLICATION_TEST".equalsIgnoreCase(template.getType());
 
         PatchDeployment dep = run.getDeploymentId() == null
                 ? null
@@ -461,9 +532,14 @@ public class OrchestrationService {
                 ? null
                 : tasks.findById(run.getTaskId()).orElse(null);
 
+        List<DeploymentTarget> deploymentRows=targetsForRun(run);
+        long failures=deploymentRows.stream().filter(t->"FAILED".equals(t.getStatus())).count();
+        if(failures>0){
+            run.setStatus(RunStatus.FAILED);runs.save(run);
+            if(task!=null){task.setStatus(TaskStatus.BLOCKED);task.setUpdatedAt(Instant.now());tasks.save(task);}
+        }
+
         if (dep != null) {
-            List<DeploymentTarget> deploymentRows=targetsForRun(run);
-            long failures=deploymentRows.stream().filter(t->"FAILED".equals(t.getStatus())).count();
             if(failures>0){run.setStatus(RunStatus.FAILED);runs.save(run);}
             dep.setStatus(failures>0?DeploymentStatus.FAILED:DeploymentStatus.SUCCEEDED);
             dep.setProgress(100);
@@ -488,6 +564,31 @@ public class OrchestrationService {
             }
         }
 
+        if(failures>0){
+            audit.log("RUN",run.getId(),"TARGET_FAILED","目标执行失败，流程已阻断",
+                    "Target execution failed; workflow blocked","Gazellio Automation");
+            return;
+        }
+
+        if(applicationTest){
+            for(DeploymentTarget target:deploymentRows){
+                target.setStatus("SUCCEEDED");target.setProgress(100);target.setCompletedAt(Instant.now());
+                target.setMessage("应用健康、关键交易与回归用例验证通过");deploymentTargets.save(target);
+            }
+            if(task!=null){
+                task.setStage(switch(run.getEnvironment()){
+                    case "TEST" -> TaskStage.TEST_RESCAN;
+                    case "PREPROD" -> TaskStage.PREPROD_RESCAN;
+                    case "PROD" -> TaskStage.PROD_RESCAN;
+                    default -> task.getStage();
+                });
+                task.setStatus(TaskStatus.OPEN);task.setUpdatedAt(Instant.now());tasks.save(task);
+                audit.log("TASK",task.getId(),"APPLICATION_TEST_PASSED",run.getEnvironment()+"环境自动应用测试通过，可发起漏洞复测",
+                        "Automated application testing passed in "+run.getEnvironment()+"; vulnerability retest is now available","Gazellio Automation");
+            }
+            return;
+        }
+
         if(retest){
             for(DeploymentTarget target:targetsForRun(run)){
                 target.setStatus("SUCCEEDED");target.setProgress(100);target.setCompletedAt(Instant.now());
@@ -499,18 +600,13 @@ public class OrchestrationService {
         }
 
         if (task != null) {
-            Asset source = assets.findById(task.getAssetId()).orElseThrow();
             EnvironmentType env = EnvironmentType.valueOf(run.getEnvironment());
-            List<Asset> targetAssets = assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env);
-            if (targetAssets.isEmpty() && source.getEnvironment() == env) {
-                targetAssets = List.of(source);
-            }
-
-            for (Asset a : targetAssets) {
+            boolean isolated=dep!=null&&"ISOLATED_VALIDATION".equalsIgnoreCase(dep.getSelectionMode());
+            for (DeploymentTarget target : isolated?List.<DeploymentTarget>of():deploymentRows) {
                 AssetPatchState st = assetPatchStates
-                        .findByAssetIdAndPatchId(a.getId(), task.getPatchId())
+                        .findByAssetIdAndPatchId(target.getAssetId(), task.getPatchId())
                         .orElseGet(AssetPatchState::new);
-                st.setAssetId(a.getId());
+                st.setAssetId(target.getAssetId());
                 st.setPatchId(task.getPatchId());
                 st.setInstalled(true);
                 st.setVerified(false);
@@ -568,8 +664,8 @@ public class OrchestrationService {
     public RunView rollback(Long id){
         OrchestrationRun r = requireRun(id);
         OrchestrationTemplate template=templates.findById(r.getTemplateId()).orElse(null);
-        if(template!=null&&"RETEST".equalsIgnoreCase(template.getType())){
-            throw new ResponseStatusException(HttpStatus.CONFLICT,"Retest runs do not install packages and cannot be rolled back");
+        if(template!=null&&Set.of("RETEST","APPLICATION_TEST").contains(template.getType().toUpperCase(Locale.ROOT))){
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Validation runs do not install packages and cannot be rolled back");
         }
         r.setStatus(RunStatus.ROLLED_BACK);
         r.setCompletedAt(Instant.now());
@@ -577,16 +673,12 @@ public class OrchestrationService {
 
         RemediationTask task = r.getTaskId()==null?null:tasks.findById(r.getTaskId()).orElse(null);
         if (task != null) {
-            Asset source = assets.findById(task.getAssetId()).orElse(null);
-            if (source != null) {
-                EnvironmentType env = EnvironmentType.valueOf(r.getEnvironment());
-                for (Asset a : assets.findByBusinessServiceAndEnvironment(source.getBusinessService(), env)) {
-                    assetPatchStates.findByAssetIdAndPatchId(a.getId(), task.getPatchId()).ifPresent(st -> {
+            for (DeploymentTarget target : targetsForRun(r)) {
+                    assetPatchStates.findByAssetIdAndPatchId(target.getAssetId(), task.getPatchId()).ifPresent(st -> {
                         st.setInstalled(false);
                         st.setVerified(false);
                         assetPatchStates.save(st);
                     });
-                }
             }
 
             task.setStage(switch (r.getEnvironment()) {

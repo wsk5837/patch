@@ -66,6 +66,7 @@ class PerformanceSmokeTest {
     @Autowired PatchRepository patchRepository;
     @Autowired ApprovalRequestRepository approvalRequestRepository;
     @Autowired ApprovalStepRepository approvalStepRepository;
+    @Autowired com.gazellio.platform.repository.DeploymentTargetRepository deploymentTargetRepository;
     @Autowired AccessControlService accessControl;
     @Autowired com.gazellio.platform.repository.UserAccountRepository userAccounts;
     @Autowired PasswordEncoder passwordEncoder;
@@ -248,6 +249,7 @@ class PerformanceSmokeTest {
     void patchInstallationAndRetestUseDifferentAutomationTemplates() {
         var templateViews = orchestration.templates();
         var install = templateViews.stream().filter(t -> "PATCH-STANDARD".equals(t.code())).findFirst().orElseThrow();
+        var applicationTest = templateViews.stream().filter(t -> "APP-VALIDATION".equals(t.code())).findFirst().orElseThrow();
         var retest = templateViews.stream().filter(t -> "PATCH-RETEST".equals(t.code())).findFirst().orElseThrow();
         Set<String> installCodes = install.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
         Set<String> retestCodes = retest.steps().stream().map(s -> s.code()).collect(Collectors.toSet());
@@ -255,6 +257,9 @@ class PerformanceSmokeTest {
         assertTrue(installCodes.containsAll(Set.of("PACKAGE_READY", "VERIFY", "INSTALL", "HEALTH", "EVIDENCE")));
         assertFalse(installCodes.contains("DOWNLOAD"));
         assertFalse(installCodes.contains("RESCAN"));
+        assertEquals("APPLICATION_TEST",applicationTest.type());
+        assertTrue(applicationTest.steps().stream().map(s->s.code()).collect(Collectors.toSet())
+                .containsAll(Set.of("HEALTH","SMOKE","TRANSACTION","REGRESSION","EVIDENCE")));
         assertTrue(retestCodes.containsAll(Set.of("INSTALL_STATE", "VERSION_PROBE", "VULN_PROBE", "EFFECT_CHECK")));
         assertFalse(retestCodes.contains("DOWNLOAD"));
         assertFalse(retestCodes.contains("INSTALL"));
@@ -274,6 +279,45 @@ class PerformanceSmokeTest {
         assertNull(retestRun.deploymentId());
         assertEquals("PATCH-RETEST", retestRun.templateCode());
         assertFalse(retestRun.targets().isEmpty());
+    }
+
+    @Test
+    void singleFindingRunNeverExpandsIntoBusinessServiceAssets() {
+        RemediationTask sourceTask=taskRepository.findAll().stream()
+                .filter(task->assetRepository.findById(task.getAssetId()).map(a->a.getEnvironment()==com.gazellio.platform.model.Enums.EnvironmentType.PROD).orElse(false))
+                .findFirst().orElseThrow();
+        var run=orchestration.startPatchRun(sourceTask,"PROD","Single finding production execution");
+        var targets=deploymentTargetRepository.findByRunIdOrderByAssetIdAsc(run.id());
+        assertEquals(1,targets.size());
+        assertEquals(sourceTask.getAssetId(),targets.getFirst().getAssetId());
+    }
+
+    @Test
+    void automatedApplicationTestIsASeparateGateBeforeVulnerabilityRetest() {
+        Asset testAsset=assetRepository.findAll().stream()
+                .filter(a->a.getEnvironment()==com.gazellio.platform.model.Enums.EnvironmentType.TEST)
+                .filter(a->"ONLINE".equals(a.getAgentStatus()))
+                .findFirst().orElseThrow();
+        Finding finding=findingRepository.findAll().stream().findFirst().orElseThrow();
+        var patch=patchRepository.findAll().stream().findFirst().orElseThrow();
+        RemediationTask task=taskRepository.save(RemediationTask.builder()
+                .taskNo("RMD-APP-TEST-"+UUID.randomUUID()).findingId(finding.getId()).assetId(testAsset.getId())
+                .patchId(patch.getId()).priority("P2").stage(com.gazellio.platform.model.Enums.TaskStage.APP_VERIFY)
+                .status(com.gazellio.platform.model.Enums.TaskStatus.IN_PROGRESS).build());
+
+        var started=orchestration.startApplicationTestRun(task,"TEST");
+        assertEquals(com.gazellio.platform.model.Enums.TaskStage.APP_VERIFY,
+                taskRepository.findById(task.getId()).orElseThrow().getStage());
+        assertEquals(1,deploymentTargetRepository.findByRunIdOrderByAssetIdAsc(started.id()).size());
+
+        for(int i=0;i<applicationTestStepCount()+1;i++)orchestration.advanceRuns();
+        assertEquals(com.gazellio.platform.model.Enums.TaskStage.TEST_RESCAN,
+                taskRepository.findById(task.getId()).orElseThrow().getStage());
+    }
+
+    private int applicationTestStepCount(){
+        return orchestration.templates().stream().filter(t->"APP-VALIDATION".equals(t.code()))
+                .findFirst().orElseThrow().steps().size();
     }
 
     @Test
