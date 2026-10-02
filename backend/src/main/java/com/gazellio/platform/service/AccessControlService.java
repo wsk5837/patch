@@ -42,7 +42,8 @@ public class AccessControlService {
         return new UserView(user.getId(),user.getUsername(),user.getDisplayName(),user.getEmail(),user.getDepartment(),
                 user.getEmployeeNo(),user.getPhone(),user.getAccountType(),code,
                 role==null?null:role.getId(),role==null?code:role.getNameZh(),role==null?code:role.getNameEn(),
-                user.isEnabled(),user.isLocked(),user.getFailedLoginAttempts(),s(user.getLastLoginAt()),
+                user.isEnabled(),user.isLocked(),user.getFailedLoginAttempts(),user.isMfaEnabled(),
+                user.isMfaEnabled()&&user.getMfaVerifiedAt()!=null,s(user.getLastLoginAt()),
                 s(user.getPasswordChangedAt()),s(user.getCreatedAt()),new ArrayList<>(permissions(user)),
                 assigned.stream().map(AccessRole::getId).toList(),assigned.stream().map(r->new UserRoleSummary(
                         r.getId(),r.getCode(),r.getNameZh(),r.getNameEn(),r.getDataScope())).toList());
@@ -66,7 +67,8 @@ public class AccessControlService {
                 .accountType(accountType(req.accountType()))
                 .passwordHash(encoder.encode(req.password()==null||req.password().isBlank()?INITIAL_PASSWORD:req.password()))
                 .passwordChangedAt(Instant.now()).role(legacyRole(role.getCode())).accessRoleId(role.getId())
-                .enabled(req.enabled()==null||req.enabled()).updatedAt(Instant.now()).build();
+                .enabled(req.enabled()==null||req.enabled()).mfaEnabled(Boolean.TRUE.equals(req.mfaEnabled()))
+                .updatedAt(Instant.now()).build();
         users.save(user);replaceUserRoles(user.getId(),assigned);audit.log("USER",user.getId(),"CREATE","创建用户并分配 "+assigned.size()+" 个角色 "+user.getUsername(),"Created user and assigned "+assigned.size()+" roles "+user.getUsername(),currentUser.name());return userView(user);
     }
     @Transactional public UserView updateUser(Long id,UserSaveRequest req){
@@ -77,10 +79,14 @@ public class AccessControlService {
         user.setDepartment(trim(req.department()));user.setEmployeeNo(trim(req.employeeNo()));user.setPhone(trim(req.phone()));
         user.setAccountType(accountType(req.accountType()));user.setAccessRoleId(role.getId());user.setRole(legacyRole(role.getCode()));
         if(req.enabled()!=null)user.setEnabled(req.enabled());if(req.password()!=null&&!req.password().isBlank()){user.setPasswordHash(encoder.encode(req.password()));user.setPasswordChangedAt(Instant.now());}
+        if(req.mfaEnabled()!=null&&req.mfaEnabled()!=user.isMfaEnabled()){
+            user.setMfaEnabled(req.mfaEnabled());user.setMfaSecret(null);user.setMfaVerifiedAt(null);
+        }
         user.setUpdatedAt(Instant.now());
         users.save(user);replaceUserRoles(user.getId(),assigned);audit.log("USER",id,"UPDATE","更新用户与角色 "+user.getUsername(),"Updated user and roles "+user.getUsername(),currentUser.name());return userView(user);
     }
     @Transactional public UserView resetPassword(Long id){UserAccount user=requireUser(id);user.setPasswordHash(encoder.encode(INITIAL_PASSWORD));user.setPasswordChangedAt(Instant.now());user.setFailedLoginAttempts(0);user.setLocked(false);user.setUpdatedAt(Instant.now());users.save(user);audit.log("USER",id,"RESET_PASSWORD","重置用户初始密码","Reset user initial password",currentUser.name());return userView(user);}
+    @Transactional public UserView resetMfa(Long id){UserAccount user=requireUser(id);user.setMfaSecret(null);user.setMfaVerifiedAt(null);user.setUpdatedAt(Instant.now());users.save(user);audit.log("USER",id,"RESET_MFA","重置用户 MFA 绑定","Reset user MFA enrollment",currentUser.name());return userView(user);}
     @Transactional public UserView unlockUser(Long id){UserAccount user=requireUser(id);user.setLocked(false);user.setFailedLoginAttempts(0);user.setUpdatedAt(Instant.now());users.save(user);audit.log("USER",id,"UNLOCK","解锁用户 "+user.getUsername(),"Unlocked user "+user.getUsername(),currentUser.name());return userView(user);}
     @Transactional public void deleteUser(Long id){UserAccount user=requireUser(id);if("admin".equalsIgnoreCase(user.getUsername()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Bootstrap administrator cannot be deleted");userRoles.deleteByUserId(id);users.delete(user);audit.log("USER",id,"DELETE","删除用户 "+user.getUsername(),"Deleted user "+user.getUsername(),currentUser.name());}
 

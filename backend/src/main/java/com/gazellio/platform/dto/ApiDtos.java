@@ -9,15 +9,20 @@ import java.util.Map;
 public final class ApiDtos {
     private ApiDtos() {}
 
-    public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
+    public record LoginRequest(@NotBlank String username, @NotBlank String password, String otp) {
+        public LoginRequest(String username,String password){this(username,password,null);}
+    }
     public record UserView(Long id, String username, String displayName, String email, String department,
                            String employeeNo, String phone, String accountType, String role,
                            Long roleId, String roleNameZh, String roleNameEn, boolean enabled, boolean locked,
-                           Integer failedLoginAttempts, String lastLoginAt, String passwordChangedAt,
+                           Integer failedLoginAttempts, boolean mfaEnabled, boolean mfaEnrolled,
+                           String lastLoginAt, String passwordChangedAt,
                            String createdAt, List<String> permissions, List<Long> roleIds,
                            List<UserRoleSummary> roles) {}
     public record UserRoleSummary(Long id,String code,String nameZh,String nameEn,String dataScope) {}
-    public record LoginResponse(String token, UserView user) {}
+    public record LoginResponse(String token, UserView user, boolean mfaRequired,
+                                boolean mfaEnrollmentRequired, String mfaSetupKey,
+                                String mfaSetupUri) {}
     public record MessageResponse(String message) {}
     public record CisaKevSyncResult(String catalogVersion, String catalogReleasedAt, int catalogTotal,
                                     int matchedByPatchLibrary, int created, int updated, int withoutPatchMapping,
@@ -52,7 +57,12 @@ public final class ApiDtos {
     public record SettingsUpdateRequest(Map<String,String> values) {}
     public record UserSaveRequest(@NotBlank String username,@NotBlank String displayName,String email,
                                   String department,String employeeNo,String phone,String accountType,
-                                  Long roleId,List<Long> roleIds,Boolean enabled,String password) {}
+                                  Long roleId,List<Long> roleIds,Boolean enabled,String password,Boolean mfaEnabled) {
+        public UserSaveRequest(String username,String displayName,String email,String department,String employeeNo,
+                               String phone,String accountType,Long roleId,List<Long> roleIds,Boolean enabled,String password){
+            this(username,displayName,email,department,employeeNo,phone,accountType,roleId,roleIds,enabled,password,null);
+        }
+    }
     public record RoleSaveRequest(@NotBlank String code,@NotBlank String nameZh,@NotBlank String nameEn,
                                   String descriptionZh,String descriptionEn,String dataScope,
                                   Boolean enabled,@NotNull List<String> permissions) {}

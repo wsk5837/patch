@@ -18,6 +18,8 @@ public class AccessControlController {
  @PutMapping("/users/{id}") public UserView updateUser(@PathVariable Long id,@Valid @RequestBody UserSaveRequest req){return service.updateUser(id,req);}
  @PreAuthorize("hasAuthority('USER_CREDENTIAL_RESET')")
  @PostMapping("/users/{id}/reset-password") public UserView reset(@PathVariable Long id){return service.resetPassword(id);}
+ @PreAuthorize("hasAuthority('USER_CREDENTIAL_RESET')")
+ @PostMapping("/users/{id}/reset-mfa") public UserView resetMfa(@PathVariable Long id){return service.resetMfa(id);}
  @PreAuthorize("hasAuthority('USER_ACCOUNT_STATUS')")
  @PostMapping("/users/{id}/unlock") public UserView unlock(@PathVariable Long id){return service.unlockUser(id);}
  @PreAuthorize("hasAuthority('USER_MANAGE')")

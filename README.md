@@ -19,6 +19,8 @@ Gazellio 已从单文件 HTML 原型调整为可部署的前后端分离工程�
 
 首次同步 Blueprint 时，在 Render 为后端填写 Secret 环境变量 `CMDB_CLIENT_ID` 与 `CMDB_CLIENT_SECRET`。凭据只由 Java 后端读取，不要写入 Git、前端代码或浏览器本地存储。`CMDB_ENABLED=true` 时，后端启动后会通过只读 API 建立本地资产镜像；补丁执行状态和扫描结果仅保存在 Gazellio，不会回写公司 CMDB。
 
+MFA 采用标准 RFC 6238 TOTP。系统管理员可在“用户与角色”中为单个用户启用；用户下次登录时使用 Microsoft Authenticator、Google Authenticator 等应用完成绑定。Render Blueprint 会自动创建 `MFA_ENCRYPTION_KEY`，请不要在已有 MFA 绑定后删除或更换该值。
+
 演示用户均使用初始密码 `Gazellio@123`：`admin`、`security`、`ops`、`appowner`、`approver`。首次登录后可由管理员在“系统设置 > 用户与角色”重置或修改用户密码。
 
 > Render 现在只在 `frontend/` 改动时构建静态站点，只在 `backend/` 改动时重建 Java 镜像。前端会在构建时自动取得 API 域名。根目录 Dockerfile 仅作为兼容的单镜像部署方案，Render 不再使用它。

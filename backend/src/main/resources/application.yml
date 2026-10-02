@@ -51,6 +51,7 @@ management:
 
 app:
   jwt-secret: ${JWT_SECRET:replace-this-secret-in-production-with-at-least-32-bytes}
+  mfa-encryption-key: ${MFA_ENCRYPTION_KEY:${JWT_SECRET:replace-this-secret-in-production-with-at-least-32-bytes}}
   jwt-hours: ${JWT_HOURS:12}
   seed-demo-data: ${SEED_DEMO_DATA:true}
   scheduler:

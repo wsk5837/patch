@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react'
-import {CheckSquare2,Network,Play,RefreshCw,ShieldCheck,SquareStack,UsersRound} from 'lucide-react'
-import {useNavigate} from 'react-router-dom'
+import {CheckSquare2,Network,Play,RefreshCw,Search,ShieldCheck,SquareStack,UsersRound} from 'lucide-react'
+import {useNavigate,useSearchParams} from 'react-router-dom'
 import {api} from '../api/client'
 import {useApiData} from '../utils/useApiData'
 import {useI18n} from '../contexts/I18nContext'
@@ -15,15 +15,17 @@ const typeKeys={DATABASE:'database',MIDDLEWARE:'middleware',APPLICATION_PLATFORM
 const typeLabel=(t,value)=>t(typeKeys[value]||value)
 
 export default function BatchPatchPage(){
- const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate();const {has}=useAuth();const canDeploy=has('PATCH_DEPLOY')||has('AUTOMATION_EXECUTE')
+ const {t,pick,localize}=useI18n();const toast=useToast();const nav=useNavigate();const [params]=useSearchParams();const {has}=useAuth();const canDeploy=has('PATCH_DEPLOY')||has('AUTOMATION_EXECUTE')
+ const sourceAssetId=params.get('asset'),sourceCidr=params.get('cidr')
  const {data:patches=[],loading:patchLoading}=useApiData('/api/patches',{initial:[]})
  const {data:changes=[]}=useApiData('/api/work-orders/changes',{initial:[]})
  const {data:scopeOptions={networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],assetTypes:[],businessServices:[],osNames:[]}})
  const {data:runtimeSettings}=useApiData('/api/settings')
- const [form,setForm]=useState(initialForm),[preview,setPreview]=useState(null),[excluded,setExcluded]=useState(new Set()),[busy,setBusy]=useState(false)
+ const [form,setForm]=useState(initialForm),[preview,setPreview]=useState(null),[excluded,setExcluded]=useState(new Set()),[busy,setBusy]=useState(false),[segmentQuery,setSegmentQuery]=useState(''),[sourceAsset,setSourceAsset]=useState(null),[sourceResolved,setSourceResolved]=useState(!sourceAssetId)
  const initializedSegments=useRef(false),initializedPolicy=useRef(false)
  useEffect(()=>{if(!form.patchId&&patches.length){const preferred=patches.find(p=>/openssh/i.test(`${p.product||''} ${p.patchId||''}`))||patches[0];setForm(v=>({...v,patchId:String(preferred.id)}))}},[patches,form.patchId])
- useEffect(()=>{if(!initializedSegments.current&&scopeOptions.networkSegments?.length){initializedSegments.current=true;setForm(v=>({...v,cidrs:scopeOptions.networkSegments.slice(0,1)}))}},[scopeOptions.networkSegments])
+ useEffect(()=>{if(!sourceAssetId)return;let active=true;api(`/api/assets/${sourceAssetId}`).then(value=>{if(active)setSourceAsset(value)}).catch(()=>{}).finally(()=>{if(active)setSourceResolved(true)});return()=>{active=false}},[sourceAssetId])
+ useEffect(()=>{if(initializedSegments.current||!sourceResolved||!scopeOptions.networkSegments?.length)return;initializedSegments.current=true;const requested=sourceCidr||sourceAsset?.networkSegment,preferred=requested&&scopeOptions.networkSegments.includes(requested)?requested:scopeOptions.networkSegments[0];setForm(v=>({...v,cidrs:preferred?[preferred]:[]}));if(requested)setSegmentQuery(requested)},[scopeOptions.networkSegments,sourceAsset,sourceCidr,sourceResolved])
  useEffect(()=>{if(runtimeSettings&&!initializedPolicy.current){initializedPolicy.current=true;setForm(v=>({...v,batchSize:Number(runtimeSettings.batchSize||v.batchSize),concurrency:Number(runtimeSettings.batchConcurrency||v.concurrency),failureThreshold:Number(runtimeSettings.autoRollbackThreshold||v.failureThreshold),maintenanceWindow:runtimeSettings.maintenanceWindow||v.maintenanceWindow}))}},[runtimeSettings])
  const cidrs=()=>form.cidrs
  const toggleCidr=cidr=>{setForm(v=>({...v,cidrs:v.cidrs.includes(cidr)?v.cidrs.filter(x=>x!==cidr):[...v.cidrs,cidr]}));setPreview(null)}
@@ -36,12 +38,13 @@ export default function BatchPatchPage(){
  const visibleSelected=useMemo(()=>preview?.assets?.filter(a=>!excluded.has(a.id)).length||0,[preview,excluded])
  const totalSelected=Math.max(0,(preview?.selectedCount||0)-excluded.size)
  const selectedPatch=patches.find(p=>String(p.id)===String(form.patchId))
+ const visibleSegments=useMemo(()=>{const query=segmentQuery.trim().toLowerCase();return (scopeOptions.networkSegments||[]).filter(cidr=>!query||cidr.toLowerCase().includes(query))},[scopeOptions.networkSegments,segmentQuery])
  return <>
   <PageHeader title={t('batchPatch')}>{canDeploy&&<><button className="btn" disabled={busy||productionScope&&!form.changeOrderId} onClick={previewScope}><RefreshCw size={15}/>{t('refreshPreview')}</button><button className="btn primary next-action" disabled={busy||!preview||totalSelected===0||productionScope&&!form.changeOrderId} onClick={execute}><Play size={15}/>{t('startBatchRun')}</button></>}</PageHeader>
   <div className="batch-layout">
    <section className="panel batch-scope-panel"><div className="panel-head"><h2><Network size={18}/>{t('assetScope')}</h2><StatusBadge tone="purple">CIDR</StatusBadge></div><div className="panel-body form-grid">
     <label className="form-field full"><span>{t('choosePatch')}</span><select value={form.patchId} onChange={e=>{setForm({...form,patchId:e.target.value});setPreview(null)}} disabled={patchLoading}>{patches.map(p=><option key={p.id} value={p.id}>{p.patchId} · {pick(p)}</option>)}</select></label>
-    <div className="form-field full"><span>{t('networkSegments')} · {t('selectedOf',form.cidrs.length,scopeOptions.networkSegments?.length||0)}</span><div className="segment-picker">{scopeOptions.networkSegments?.map(cidr=><button type="button" key={cidr} className={`segment-option ${form.cidrs.includes(cidr)?'selected':''}`} onClick={()=>toggleCidr(cidr)}><input type="checkbox" readOnly checked={form.cidrs.includes(cidr)}/><b>{cidr}</b></button>)}</div><div className="segment-actions"><button className="text-button" type="button" onClick={()=>{setForm({...form,cidrs:[...(scopeOptions.networkSegments||[])]});setPreview(null)}}>{t('selectAllSegments')}</button><button className="text-button" type="button" onClick={()=>{setForm({...form,cidrs:[]});setPreview(null)}}>{t('clearSegments')}</button></div></div>
+    <div className="form-field full"><span>{t('networkSegments')} · {t('selectedOf',form.cidrs.length,scopeOptions.networkSegments?.length||0)}</span>{sourceAsset&&form.cidrs.includes(sourceAsset.networkSegment)&&<small className="scope-source-hint">{t('sourceAssetScope')} · {localize(sourceAsset.name)} · {sourceAsset.networkSegment}</small>}<label className="segment-search"><Search size={14}/><input value={segmentQuery} onChange={e=>setSegmentQuery(e.target.value)} placeholder={t('searchNetworkSegments')}/></label><div className="segment-picker">{visibleSegments.map(cidr=><button type="button" key={cidr} className={`segment-option ${form.cidrs.includes(cidr)?'selected':''}`} onClick={()=>toggleCidr(cidr)}><input type="checkbox" readOnly checked={form.cidrs.includes(cidr)}/><b>{cidr}</b></button>)}{!visibleSegments.length&&<div className="segment-empty">{t('noMatchingSegments')}</div>}</div><div className="segment-actions"><button className="text-button" type="button" onClick={()=>{setForm({...form,cidrs:[...(scopeOptions.networkSegments||[])]});setPreview(null)}}>{t('selectAllSegments')}</button><button className="text-button" type="button" onClick={()=>{setForm({...form,cidrs:[]});setPreview(null)}}>{t('clearSegments')}</button></div></div>
     <label className="form-field"><span>{t('environment')}</span><select value={form.environment} onChange={e=>{setForm({...form,environment:e.target.value});setPreview(null)}}><option value="ALL">{t('all')}</option><option value="TEST">{t('test')}</option><option value="PREPROD">{t('preprod')}</option><option value="PROD">{t('production')}</option></select></label>
     <label className="form-field"><span>{t('assetType')}</span><select value={form.assetType} onChange={e=>{setForm({...form,assetType:e.target.value});setPreview(null)}}><option value="ALL">{t('all')}</option>{scopeOptions.assetTypes?.map(value=><option key={value} value={value}>{typeLabel(t,value)}</option>)}</select></label>
     <label className="form-field"><span>{t('os')}</span><select value={form.osName} onChange={e=>{setForm({...form,osName:e.target.value});setPreview(null)}}><option value="">{t('all')}</option>{scopeOptions.osNames?.map(value=><option key={value} value={value}>{value}</option>)}</select></label>

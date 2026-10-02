@@ -22,8 +22,15 @@ public class UserAccount {
     @Column(nullable=false) @Builder.Default private boolean enabled = true;
     @Column(nullable=false) @Builder.Default private boolean locked = false;
     @Column(nullable=false) @Builder.Default private Integer failedLoginAttempts = 0;
+    // Nullable during rolling upgrades so Hibernate does not attempt ADD COLUMN ... NOT NULL
+    // against an already populated Render database. Access is normalized to false below.
+    @Column(nullable=true) @Builder.Default private Boolean mfaEnabled = false;
+    @Column(length=500) private String mfaSecret;
+    private Instant mfaVerifiedAt;
     private Instant lastLoginAt;
     private Instant passwordChangedAt;
     @Column(nullable=false) @Builder.Default private Instant updatedAt = Instant.now();
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
+
+    public boolean isMfaEnabled(){return Boolean.TRUE.equals(mfaEnabled);}
 }

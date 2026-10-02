@@ -52,6 +52,10 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("user_accounts", "account_type", "varchar(30) default 'LOCAL'");
         addColumn("user_accounts", "locked", "boolean default false");
         addColumn("user_accounts", "failed_login_attempts", "integer default 0");
+        addColumn("user_accounts", "mfa_enabled", "boolean default false");
+        addColumn("user_accounts", "mfa_secret", "varchar(500)");
+        addColumn("user_accounts", "mfa_verified_at", "timestamp with time zone");
+        normalizeMfaEnabled();
         addColumn("user_accounts", "last_login_at", "timestamp with time zone");
         addColumn("user_accounts", "password_changed_at", "timestamp with time zone");
         addColumn("user_accounts", "updated_at", "timestamp with time zone default current_timestamp");
@@ -189,6 +193,13 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
                        )
                     """);
         }
+    }
+
+    private void normalizeMfaEnabled() {
+        if (!columnExists("user_accounts", "mfa_enabled")) return;
+        jdbc.update("update user_accounts set mfa_enabled = false where mfa_enabled is null");
+        jdbc.execute("alter table user_accounts alter column mfa_enabled set default false");
+        jdbc.execute("alter table user_accounts alter column mfa_enabled set not null");
     }
 
     private void normalizeAssetSource() {
