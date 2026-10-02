@@ -1,4 +1,4 @@
-import React,{useMemo,useState} from 'react'
+import React,{useEffect,useMemo,useState} from 'react'
 import {Database,RefreshCw,RotateCw} from 'lucide-react'
 import {useNavigate} from 'react-router-dom'
 import {api} from '../api/client'
@@ -13,12 +13,16 @@ import {assetTypeLabel,cmdbClassLabel,envLabel,fmtDate} from '../utils/format'
 
 export default function AssetsPage(){
  const {t,lang,localize}=useI18n(),{has}=useAuth(),toast=useToast(),nav=useNavigate()
- const {data=[],loading,reload}=useApiData('/api/assets',{initial:[]})
+ const [q,setQ]=useState(''),[env,setEnv]=useState('ALL'),[ciClass,setCiClass]=useState('ALL'),[page,setPage]=useState(1),[syncing,setSyncing]=useState(false)
+ const query=new URLSearchParams({page:String(page-1),size:'30'});if(q.trim())query.set('q',q.trim());if(env!=='ALL')query.set('environment',env);if(ciClass!=='ALL')query.set('ciClass',ciClass)
+ const {data:pageData={items:[],totalElements:0,page:1,totalPages:1},loading,reload}=useApiData('/api/assets/page?'+query.toString(),{initial:{items:[],totalElements:0,page:1,totalPages:1}})
+ const data=pageData.items||[]
+ const {data:scope={networkSegments:[],assetTypes:[],businessServices:[],osNames:[],cmdbClasses:[]}}=useApiData('/api/assets/scope-options',{initial:{networkSegments:[],assetTypes:[],businessServices:[],osNames:[],cmdbClasses:[]}})
  const {data:cmdb={},reload:reloadCmdb}=useApiData('/api/cmdb/status',{initial:{configured:false,syncing:false,classes:[]},poll:15000})
- const [q,setQ]=useState(''),[env,setEnv]=useState('ALL'),[ciClass,setCiClass]=useState('ALL'),[syncing,setSyncing]=useState(false)
- const classOptions=useMemo(()=>[...new Map(data.map(x=>[x.cmdbClassKey||x.assetType,{key:x.cmdbClassKey||x.assetType,name:x.cmdbClassName,assetType:x.assetType}])).values()].sort((a,b)=>(a.name||a.key).localeCompare(b.name||b.key)),[data])
- const rows=useMemo(()=>data.filter(a=>(!q||(`${a.assetCode} ${a.name} ${a.ipAddress} ${a.networkSegment} ${a.businessService} ${a.ownerName} ${a.installedProducts} ${a.cmdbClassName}`).toLowerCase().includes(q.toLowerCase()))&&(env==='ALL'||a.environment===env)&&(ciClass==='ALL'||(a.cmdbClassKey||a.assetType)===ciClass)),[data,q,env,ciClass])
- const synchronizedCount=useMemo(()=>data.filter(x=>x.sourceSystem==='CMDB').length,[data])
+ const classOptions=useMemo(()=>scope.cmdbClasses?.length?scope.cmdbClasses.map(x=>({key:x.key,name:x.name,assetType:x.key})):(scope.assetTypes||[]).map(x=>({key:x,name:null,assetType:x})),[scope])
+ const rows=data
+ const synchronizedCount=pageData.totalElements||0
+ useEffect(()=>setPage(1),[q,env,ciClass])
  const typeLabel=r=>r.cmdbClassKey?cmdbClassLabel(t,r.cmdbClassKey,r.cmdbClassName):assetTypeLabel(t,r.assetType)
  const sync=async()=>{setSyncing(true);try{const result=await api('/api/cmdb/sync',{method:'POST',timeout:120000});await Promise.all([reload(),reloadCmdb()]);toast.push(t('cmdbSyncResult',result.imported||0,result.updated||0))}catch(e){toast.push(e.message||t('operationFailed'),'red')}finally{setSyncing(false)}}
  const cols=[
@@ -39,6 +43,6 @@ export default function AssetsPage(){
   <PageHeader title={t('assetManagement')}><button className="btn" onClick={()=>{reload();reloadCmdb()}}><RefreshCw size={15}/>{t('refresh')}</button>{has('ASSET_SYNC')&&<button className="btn primary" disabled={!cmdb.configured||syncing||cmdb.syncing} onClick={sync}><RotateCw className={syncing||cmdb.syncing?'spin':''} size={15}/>{syncing||cmdb.syncing?t('syncingAssets'):t('syncAssets')}</button>}</PageHeader>
   <div className={`cmdb-status-bar status-${String(cmdb.lastStatus||'NOT_RUN').toLowerCase()}`}><Database size={18}/><div><b>{t('assetDataSync')}</b><span>{cmdb.configured?t(`cmdbStatus_${cmdb.lastStatus||'NOT_RUN'}`):t('assetSourceNotConfigured')}</span></div><span className="cmdb-status-stat"><b>{synchronizedCount}</b><small>{t('managedAssets')}</small></span><span className="cmdb-status-stat"><b>{classOptions.length}</b><small>{t('configurationItemTypes')}</small></span><span className="cmdb-status-stat"><b>{fmtDate(cmdb.lastCompletedAt,lang)}</b><small>{t('lastSync')}</small></span></div>
   <div className="toolbar"><input className="search-input" value={q} onChange={e=>setQ(e.target.value)} placeholder={`${t('search')} ${t('asset')}`}/><select value={ciClass} onChange={e=>setCiClass(e.target.value)}><option value="ALL">{t('all')} · {t('configurationItemType')}</option>{classOptions.map(x=><option value={x.key} key={x.key}>{x.name?cmdbClassLabel(t,x.key,x.name):assetTypeLabel(t,x.assetType)}</option>)}</select><select value={env} onChange={e=>setEnv(e.target.value)}><option value="ALL">{t('all')} · {t('environment')}</option><option value="PROD">{t('production')}</option><option value="PREPROD">{t('preprod')}</option><option value="TEST">{t('test')}</option><option value="DEV">{t('development')}</option></select><span className="toolbar-count">{rows.length}</span></div>
-  <DataTable columns={cols} rows={rows} onRowClick={r=>nav(`/assets/${r.id}`)} empty={loading?t('loading'):(cmdb.configured?t('noSynchronizedAssets'):t('noData'))} pageSize={30}/>
+  <DataTable columns={cols} rows={rows} onRowClick={r=>nav(`/assets/${r.id}`)} empty={loading?t('loading'):(cmdb.configured?t('noSynchronizedAssets'):t('noData'))} pageSize={30} page={pageData.page||page} totalPages={pageData.totalPages||1} onPageChange={setPage}/>
  </>
 }

@@ -163,6 +163,8 @@ public class ViewService {
                     s(f.getLastSeenAt()), f.getEvidence(), evidenceProof(f,a,v), f.getFalsePositiveReason(), f.getExemptionReason(),
                     s(f.getExemptionExpiresAt()), f.getCompensatingControl(), f.getResidualRisk(),
                     f.getExemptionApprovedBy(), s(f.getExemptionApprovedAt()),
+                    f.getExemptionRequestId(), f.getExemptionStatus(), f.getBaseRiskScore(),
+                    f.getRiskFormulaVersion(), f.getRiskFactors(),
                     f.getSecurityIncidentId(), incident==null?null:s(incident.getDueAt()),
                     patchCodesByCve.getOrDefault(f.getCveId(), List.of()),
                     patchCandidatesByCve.getOrDefault(f.getCveId(), List.of())

@@ -37,4 +37,9 @@ public class Finding {
     @Column(columnDefinition="TEXT") private String residualRisk;
     @Column(length=120) private String exemptionApprovedBy;
     private Instant exemptionApprovedAt;
+    private Long exemptionRequestId;
+    @Column(length=30) private String exemptionStatus;
+    @Column(length=40) private String riskFormulaVersion;
+    @Column(columnDefinition="TEXT") private String riskFactors;
+    private Double baseRiskScore;
 }

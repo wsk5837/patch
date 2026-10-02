@@ -103,9 +103,16 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("findings", "residual_risk", "text");
         addColumn("findings", "exemption_approved_by", "varchar(120)");
         addColumn("findings", "exemption_approved_at", "timestamp with time zone");
+        addColumn("findings", "exemption_request_id", "bigint");
+        addColumn("findings", "exemption_status", "varchar(30)");
+        addColumn("findings", "risk_formula_version", "varchar(80)");
+        addColumn("findings", "risk_factors", "text");
+        addColumn("findings", "base_risk_score", "double precision");
         addColumn("scan_jobs", "automation_run_id", "bigint");
         addColumn("audit_events", "source_ip", "varchar(80)");
         addColumn("audit_events", "user_agent", "varchar(500)");
+        addColumn("audit_events", "previous_hash", "varchar(64)");
+        addColumn("audit_events", "event_hash", "varchar(64)");
 
         addColumn("patches", "applicability_rule", "text");
         addColumn("patches", "applicability_rule_en", "text");
@@ -133,6 +140,10 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("patch_deployments", "failure_threshold", "double precision default 5.0");
         addColumn("patch_deployments", "total_batches", "integer default 1");
         addColumn("patch_deployments", "scope_summary", "text");
+        addColumn("deployment_targets", "retry_count", "integer default 0");
+        addColumn("deployment_targets", "max_retries", "integer default 2");
+        addColumn("deployment_targets", "failure_reason", "text");
+        addColumn("deployment_targets", "result_code", "varchar(80)");
 
         addColumn("remediation_tasks", "security_incident_id", "bigint");
         addColumn("remediation_tasks", "change_order_id", "bigint");

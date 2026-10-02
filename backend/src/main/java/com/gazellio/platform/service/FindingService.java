@@ -1,11 +1,13 @@
 package com.gazellio.platform.service;
 
 import com.gazellio.platform.dto.ApiDtos.*;
+import com.gazellio.platform.dto.ComplianceDtos.ExceptionCreateRequest;
 import com.gazellio.platform.model.*;
 import com.gazellio.platform.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class FindingService {
     private final AuditService audit;
     private final CurrentUserService currentUser;
     private final WorkOrderService workOrders;
+    private final ComplianceService compliance;
 
     public VulnerabilityPageView library(String q,String severity,Boolean kev,Boolean patchAvailable,int page,int size){
         Severity sev=null; if(severity!=null&&!severity.isBlank()&&!severity.equalsIgnoreCase("ALL")) try{sev=Severity.valueOf(severity.toUpperCase());}catch(Exception ignored){}
@@ -108,6 +111,23 @@ public class FindingService {
     }
     public FindingView get(Long id){return view.finding(findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND)));}
 
+    public PagedView<FindingView> page(String status,String severity,String q,Long assetId,int page,int size){
+        int safePage=Math.max(0,page),safeSize=Math.max(1,Math.min(100,size));
+        Specification<Finding> spec=(root,query,cb)->{
+            var sq=query.subquery(Long.class);var asset=sq.from(Asset.class);sq.select(asset.get("id")).where(cb.equal(asset.get("id"),root.get("assetId")),cb.isTrue(asset.get("active")));return cb.exists(sq);
+        };
+        if(assetId!=null)spec=spec.and((root,query,cb)->cb.equal(root.get("assetId"),assetId));
+        if(status!=null&&!status.isBlank()&&!"ALL".equalsIgnoreCase(status)){FindingStatus selected=FindingStatus.valueOf(status.toUpperCase());spec=spec.and((root,query,cb)->cb.equal(root.get("status"),selected));}
+        if(severity!=null&&!severity.isBlank()&&!"ALL".equalsIgnoreCase(severity)){Severity selected=Severity.valueOf(severity.toUpperCase());spec=spec.and((root,query,cb)->{var sq=query.subquery(String.class);var vuln=sq.from(VulnerabilityDefinition.class);sq.select(vuln.get("cveId")).where(cb.equal(vuln.get("cveId"),root.get("cveId")),cb.equal(vuln.get("severity"),selected));return cb.exists(sq);});}
+        if(q!=null&&!q.isBlank()){String pattern="%"+q.trim().toLowerCase(Locale.ROOT)+"%";spec=spec.and((root,query,cb)->{
+            var assetSq=query.subquery(Long.class);var asset=assetSq.from(Asset.class);assetSq.select(asset.get("id")).where(cb.equal(asset.get("id"),root.get("assetId")),cb.or(cb.like(cb.lower(asset.get("name")),pattern),cb.like(cb.lower(asset.get("assetCode")),pattern),cb.like(cb.lower(asset.get("businessService")),pattern),cb.like(cb.lower(asset.get("ownerName")),pattern)));
+            var vulnSq=query.subquery(String.class);var vuln=vulnSq.from(VulnerabilityDefinition.class);vulnSq.select(vuln.get("cveId")).where(cb.equal(vuln.get("cveId"),root.get("cveId")),cb.or(cb.like(cb.lower(vuln.get("titleZh")),pattern),cb.like(cb.lower(vuln.get("titleEn")),pattern)));
+            return cb.or(cb.like(cb.lower(root.get("cveId")),pattern),cb.exists(assetSq),cb.exists(vulnSq));
+        });}
+        var result=findings.findAll(spec,PageRequest.of(safePage,safeSize,Sort.by(Sort.Order.desc("riskScore"),Sort.Order.desc("lastSeenAt"))));
+        return new PagedView<>(view.findingViews(result.getContent()),result.getTotalElements(),result.getNumber()+1,result.getSize(),Math.max(1,result.getTotalPages()));
+    }
+
     @Transactional
     public FindingView confirm(Long id, FindingActionRequest req){
         Finding f=findings.findById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -140,17 +160,10 @@ public class FindingService {
         String residualRisk=req.residualRisk();
         if(control==null||control.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Compensating control is required");
         if(residualRisk==null||residualRisk.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Residual risk assessment is required");
-        Instant expires=Instant.now().plus(Duration.ofDays(30));
-        if(req.expiresAt()!=null&&!req.expiresAt().isBlank()){
-            try{expires=LocalDate.parse(req.expiresAt()).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();}
-            catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid exemption expiry date");}
-        }
-        f.setStatus(FindingStatus.EXEMPTED);f.setExemptionReason(reason.trim());f.setCompensatingControl(control.trim());
-        f.setResidualRisk(residualRisk.trim());f.setExemptedAt(Instant.now());f.setExemptionExpiresAt(expires);
-        f.setExemptionApprovedBy(currentUser.name());f.setExemptionApprovedAt(Instant.now());findings.save(f);
-        incidents.findByFindingId(id).ifPresent(i->{i.setStatus(IncidentStatus.EXEMPTED);i.setDecisionReason(reason);i.setUpdatedAt(Instant.now());incidents.save(i);});
-        audit.log("FINDING",f.getId(),"EXEMPT","漏洞已豁免至 "+expires,"Finding exempted until "+expires,currentUser.name());
-        return view.finding(f);
+        String expires=req.expiresAt();
+        if(expires==null||expires.isBlank())expires=LocalDate.now(ZoneOffset.UTC).plusDays(30).toString();
+        compliance.requestException(new ExceptionCreateRequest(id,reason,control,residualRisk,expires));
+        return view.finding(findings.findById(id).orElseThrow());
     }
 
     @Transactional

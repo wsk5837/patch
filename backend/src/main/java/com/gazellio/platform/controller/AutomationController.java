@@ -1,6 +1,8 @@
 package com.gazellio.platform.controller;
 
 import com.gazellio.platform.dto.ApiDtos.*;
+import com.gazellio.platform.dto.ComplianceDtos.TargetResultRequest;
+import com.gazellio.platform.model.DeploymentTarget;
 import com.gazellio.platform.service.BatchPatchService;
 import com.gazellio.platform.service.OrchestrationService;
 import lombok.RequiredArgsConstructor;
@@ -34,4 +36,8 @@ public class AutomationController {
     @PostMapping("/batch/preview") public BatchScopePreview preview(@RequestBody BatchScopeRequest request){return batchPatch.preview(request);}
     @PreAuthorize("hasAnyAuthority('PATCH_DEPLOY','AUTOMATION_EXECUTE')")
     @PostMapping("/batch/runs") public BatchRunResult execute(@RequestBody BatchScopeRequest request){return batchPatch.execute(request);}
+    @PreAuthorize("hasAnyAuthority('PATCH_DEPLOY','AUTOMATION_RUN_CONTROL','AUTOMATION_EXECUTE')")
+    @PostMapping("/runs/{runId}/targets/{targetId}/result") public DeploymentTarget targetResult(@PathVariable Long runId,@PathVariable Long targetId,@jakarta.validation.Valid @RequestBody TargetResultRequest request){return batchPatch.recordTargetResult(runId,targetId,request.status(),request.resultCode(),request.message(),request.failureReason());}
+    @PreAuthorize("hasAnyAuthority('PATCH_DEPLOY','AUTOMATION_RUN_CONTROL','AUTOMATION_EXECUTE')")
+    @PostMapping("/runs/{runId}/targets/{targetId}/retry") public DeploymentTarget retryTarget(@PathVariable Long runId,@PathVariable Long targetId){return batchPatch.retryTarget(runId,targetId);}
 }

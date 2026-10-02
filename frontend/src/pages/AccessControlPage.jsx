@@ -13,7 +13,7 @@ import StatusBadge from '../components/StatusBadge'
 
 const emptyUser={username:'',displayName:'',email:'',department:'',employeeNo:'',phone:'',accountType:'LOCAL',roleId:'',roleIds:[],enabled:true,password:'',mfaEnabled:false}
 const emptyRole={code:'',nameZh:'',nameEn:'',descriptionZh:'',descriptionEn:'',dataScope:'ALL',enabled:true,permissions:[]}
-const permissionGroups=['DASHBOARD','VULNERABILITY','SCAN','ASSET','INCIDENT','CHANGE','TASK','PATCH','APPROVAL','AUTOMATION','REPORT','AUDIT','SETTINGS','USER']
+const permissionGroups=['DASHBOARD','VULNERABILITY','SCAN','ASSET','INCIDENT','CHANGE','TASK','PATCH','APPROVAL','AUTOMATION','REPORT','AUDIT','COMPLIANCE','EXCEPTION','RISK','REGULATORY','LIFECYCLE','SETTINGS','USER']
 
 export default function AccessControlPage(){
  const {t,lang}=useI18n(),toast=useToast(),{has}=useAuth()

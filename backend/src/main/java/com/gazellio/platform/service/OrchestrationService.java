@@ -423,6 +423,7 @@ public class OrchestrationService {
             PatchDeployment activeDeployment=run.getDeploymentId()==null?null:deployments.findById(run.getDeploymentId()).orElse(null);
             Integer activeBatch=batchNumber(next.getCode());
             for (DeploymentTarget target : targetsForRun(run)) {
+                if("FAILED".equals(target.getStatus())||"RETRY_PENDING".equals(target.getStatus()))continue;
                 if(activeDeployment!=null&&"CIDR".equalsIgnoreCase(activeDeployment.getSelectionMode())&&activeBatch!=null){
                     int targetBatch=target.getBatchNo()==null?1:target.getBatchNo();
                     if(targetBatch<activeBatch){
@@ -461,17 +462,23 @@ public class OrchestrationService {
                 : tasks.findById(run.getTaskId()).orElse(null);
 
         if (dep != null) {
-            dep.setStatus(DeploymentStatus.SUCCEEDED);
+            List<DeploymentTarget> deploymentRows=targetsForRun(run);
+            long failures=deploymentRows.stream().filter(t->"FAILED".equals(t.getStatus())).count();
+            if(failures>0){run.setStatus(RunStatus.FAILED);runs.save(run);}
+            dep.setStatus(failures>0?DeploymentStatus.FAILED:DeploymentStatus.SUCCEEDED);
             dep.setProgress(100);
-            dep.setSuccessCount(dep.getTargetCount());
+            dep.setSuccessCount((int)deploymentRows.stream().filter(t->!"FAILED".equals(t.getStatus())).count());
+            dep.setFailureCount((int)failures);
             dep.setCompletedAt(Instant.now());
             deployments.save(dep);
-            for (DeploymentTarget target : targetsForRun(run)) {
+            for (DeploymentTarget target : deploymentRows) {
+                if("FAILED".equals(target.getStatus()))continue;
                 target.setStatus("SUCCEEDED"); target.setProgress(100); target.setCompletedAt(Instant.now());
                 target.setMessage("补丁安装、健康检查与证据回写完成"); deploymentTargets.save(target);
             }
             if(task==null&&"CIDR".equalsIgnoreCase(dep.getSelectionMode())){
-                for(DeploymentTarget target:targetsForRun(run)){
+                for(DeploymentTarget target:deploymentRows){
+                    if("FAILED".equals(target.getStatus()))continue;
                     AssetPatchState state=assetPatchStates.findByAssetIdAndPatchId(target.getAssetId(),dep.getPatchId())
                             .orElseGet(AssetPatchState::new);
                     state.setAssetId(target.getAssetId());state.setPatchId(dep.getPatchId());state.setInstalled(true);

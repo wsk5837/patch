@@ -38,6 +38,7 @@ public class ScanService {
     private final AuditService audit;
     private final ViewService view;
     private final SettingsService settings;
+    private final RiskAssessmentService riskAssessment;
     private final AssetEligibilityPolicy eligibility;
     private final Map<String,ZonedDateTime> scheduledSlots=new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -209,24 +210,20 @@ public class ScanService {
         VulnerabilityDefinition v=vulns.findById(cveId).orElseThrow();
         Finding f=findings.findByAssetIdAndCveId(asset.getId(),cveId).orElse(null);
         if(f==null){
-            f=Finding.builder().assetId(asset.getId()).cveId(cveId).scanJobId(scanJobId).status(FindingStatus.NEW).riskScore(risk(v,asset)).ownerId(asset.getOwnerId()).ownerName(asset.getOwnerName()).evidence(evidence).build();
+            RiskAssessmentService.Assessment assessment=riskAssessment.assess(v,asset);
+            f=Finding.builder().assetId(asset.getId()).cveId(cveId).scanJobId(scanJobId).status(FindingStatus.NEW)
+                    .riskScore(assessment.score()).baseRiskScore(assessment.score()).riskFormulaVersion(assessment.version())
+                    .riskFactors(assessment.factors()).ownerId(asset.getOwnerId()).ownerName(asset.getOwnerName()).evidence(evidence).build();
         } else {
-            f.setScanJobId(scanJobId); f.setLastSeenAt(Instant.now()); f.setOccurrences(f.getOccurrences()+1); f.setEvidence(evidence); f.setRiskScore(risk(v,asset));
+            RiskAssessmentService.Assessment assessment=riskAssessment.assess(v,asset);
+            f.setScanJobId(scanJobId); f.setLastSeenAt(Instant.now()); f.setOccurrences(f.getOccurrences()+1); f.setEvidence(evidence);
+            f.setBaseRiskScore(assessment.score());f.setRiskScore(assessment.score());f.setRiskFormulaVersion(assessment.version());f.setRiskFactors(assessment.factors());
             if(f.getStatus()==FindingStatus.RESOLVED) { f.setStatus(FindingStatus.REOPENED); f.setResolvedAt(null); }
             if(f.getStatus()==FindingStatus.EXEMPTED && f.getExemptionExpiresAt()!=null && !f.getExemptionExpiresAt().isAfter(Instant.now())) { f.setStatus(FindingStatus.REOPENED); f.setExemptedAt(null); f.setExemptionExpiresAt(null); f.setExemptionReason(null); f.setCompensatingControl(null); f.setResidualRisk(null); f.setExemptionApprovedBy(null); f.setExemptionApprovedAt(null); }
         }
         // A scanner only records evidence. Creating an ITSM security incident is
         // a separate human decision made when the finding is confirmed.
         return findings.save(f);
-    }
-
-    private double risk(VulnerabilityDefinition v,Asset a){
-        double score=v.getCvss()==null?5.0:v.getCvss();
-        score += Math.max(0,a.getCriticality()-3)*0.3;
-        if(v.isKev()) score += 0.6;
-        if(Boolean.TRUE.equals(a.getInternetExposed())) score += 0.8;
-        if(a.getEnvironment()==EnvironmentType.PROD) score += 0.2;
-        return Math.round(Math.min(10.0,score)*10.0)/10.0;
     }
 
     private String scanEvidence(Asset asset,VulnerabilityDefinition vulnerability,ScanJob scan){

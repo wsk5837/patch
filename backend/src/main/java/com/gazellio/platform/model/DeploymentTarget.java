@@ -24,4 +24,8 @@ public class DeploymentTarget {
     private Instant startedAt;
     private Instant completedAt;
     @Column(columnDefinition = "TEXT") private String message;
+    @Builder.Default private Integer retryCount = 0;
+    @Builder.Default private Integer maxRetries = 2;
+    @Column(columnDefinition="TEXT") private String failureReason;
+    @Column(length=80) private String resultCode;
 }

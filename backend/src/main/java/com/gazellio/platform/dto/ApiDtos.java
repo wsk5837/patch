@@ -9,6 +9,8 @@ import java.util.Map;
 public final class ApiDtos {
     private ApiDtos() {}
 
+    public record PagedView<T>(List<T> items,long totalElements,int page,int size,int totalPages) {}
+
     public record LoginRequest(@NotBlank String username, @NotBlank String password, String otp) {
         public LoginRequest(String username,String password){this(username,password,null);}
     }
@@ -144,7 +146,8 @@ public final class ApiDtos {
                               String evidence, FindingEvidenceView evidenceProof,
                               String falsePositiveReason, String exemptionReason, String exemptionExpiresAt,
                               String compensatingControl, String residualRisk, String exemptionApprovedBy,
-                              String exemptionApprovedAt,
+                              String exemptionApprovedAt, Long exemptionRequestId, String exemptionStatus,
+                              Double baseRiskScore, String riskFormulaVersion, String riskFactors,
                               Long securityIncidentId, String slaDueAt, List<String> availablePatches, List<PatchCandidateView> patchCandidates) {}
 
     public record ScanJobView(Long id, String jobNo, String name, String scanType, String targetType, String targetValue,
@@ -279,4 +282,5 @@ public final class ApiDtos {
                              Map<String,Long> severityDistribution, Map<String,Long> environmentDistribution,
                              Map<String,Long> deploymentStatusDistribution,List<TrendPointView> remediationTrend,
                              List<OwnerBacklogView> ownerBacklog,List<RiskAssetView> riskAssets) {}
+    public record ReportSnapshotView(Long id,String snapshotNo,int windowDays,String createdBy,String createdAt) {}
 }

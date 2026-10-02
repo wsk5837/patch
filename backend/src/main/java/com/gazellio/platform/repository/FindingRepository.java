@@ -7,8 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.*;
-public interface FindingRepository extends JpaRepository<Finding, Long> {
+public interface FindingRepository extends JpaRepository<Finding, Long>, JpaSpecificationExecutor<Finding> {
  interface AssetOpenCount { Long getAssetId(); long getTotal(); }
  interface CveAffectedCount { String getCveId(); long getTotal(); }
  interface SeverityCount { Severity getSeverity(); long getTotal(); }

@@ -89,6 +89,7 @@ public class BatchPatchService {
         deployments.save(deployment);
 
         List<DeploymentTarget> targetRows = new ArrayList<>();
+        int maxRetries=settings.intValue("batchMaxRetries",2,0,10);
         for (int index = 0; index < scope.targets.size(); index++) {
             Asset asset = scope.targets.get(index);
             int batchNo = index / batchSize + 1;
@@ -96,6 +97,7 @@ public class BatchPatchService {
             targetRows.add(DeploymentTarget.builder().deploymentId(deployment.getId()).runId(run.getId())
                     .assetId(asset.getId()).batchNo(batchNo).status(first ? "RUNNING" : "WAITING")
                     .progress(first ? 1 : 0).startedAt(first ? Instant.now() : null)
+                    .maxRetries(maxRetries)
                     .message(first ? "批次 1 · 前置检查" : "批次 " + batchNo + " · 等待执行").build());
         }
         deploymentTargets.saveAll(targetRows);
@@ -117,6 +119,47 @@ public class BatchPatchService {
                         (scope.change == null ? "" : ", change "+scope.change.getChangeNo()),
                 currentUser.name());
         return new BatchRunResult(run.getId(), run.getRunNo(), deployment.getId(), deployment.getDeploymentNo(), scope.targets.size(), totalBatches);
+    }
+
+    @Transactional
+    public DeploymentTarget recordTargetResult(Long runId,Long targetId,String status,String resultCode,String message,String failureReason){
+        DeploymentTarget target=deploymentTargets.findById(targetId).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Deployment target not found"));
+        if(!Objects.equals(target.getRunId(),runId))throw new ResponseStatusException(HttpStatus.CONFLICT,"Target does not belong to this run");
+        String normalized=value(status,"").toUpperCase(Locale.ROOT);
+        if(!Set.of("SUCCEEDED","FAILED").contains(normalized))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Target status must be SUCCEEDED or FAILED");
+        target.setStatus(normalized);target.setResultCode(value(resultCode,null));target.setMessage(value(message,normalized));target.setFailureReason("FAILED".equals(normalized)?value(failureReason,message):null);
+        target.setProgress("SUCCEEDED".equals(normalized)?100:Math.max(1,target.getProgress()==null?1:target.getProgress()));target.setCompletedAt(Instant.now());deploymentTargets.save(target);
+        PatchDeployment deployment=deployments.findById(target.getDeploymentId()).orElseThrow();
+        refreshCounts(deployment);
+        if("FAILED".equals(normalized)){
+            double ratio=deployment.getTargetCount()==null||deployment.getTargetCount()==0?100.0:deployment.getFailureCount()*100.0/deployment.getTargetCount();
+            if(ratio>=Optional.ofNullable(deployment.getFailureThreshold()).orElse(5.0))pauseForFailure(deployment,runId,ratio);
+        }
+        audit.log("BATCH_TARGET",target.getId(),normalized,"批量补丁目标返回 "+normalized,"Batch patch target reported "+normalized,currentUser.name());
+        return target;
+    }
+
+    @Transactional
+    public DeploymentTarget retryTarget(Long runId,Long targetId){
+        DeploymentTarget target=deploymentTargets.findById(targetId).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Deployment target not found"));
+        if(!Objects.equals(target.getRunId(),runId))throw new ResponseStatusException(HttpStatus.CONFLICT,"Target does not belong to this run");
+        if(!"FAILED".equals(target.getStatus()))throw new ResponseStatusException(HttpStatus.CONFLICT,"Only failed targets can be retried");
+        int retries=Optional.ofNullable(target.getRetryCount()).orElse(0),max=Optional.ofNullable(target.getMaxRetries()).orElse(2);
+        if(retries>=max)throw new ResponseStatusException(HttpStatus.CONFLICT,"Retry limit reached");
+        target.setRetryCount(retries+1);target.setStatus("RUNNING");target.setProgress(1);target.setStartedAt(Instant.now());target.setCompletedAt(null);target.setFailureReason(null);target.setResultCode(null);target.setMessage("重试 "+(retries+1)+" / "+max);deploymentTargets.save(target);
+        PatchDeployment deployment=deployments.findById(target.getDeploymentId()).orElseThrow();refreshCounts(deployment);
+        OrchestrationRun run=runs.findById(runId).orElseThrow();if(run.getStatus()==RunStatus.PAUSED){run.setStatus(RunStatus.RUNNING);runs.save(run);}if(deployment.getStatus()==DeploymentStatus.PAUSED){deployment.setStatus(DeploymentStatus.RUNNING);deployments.save(deployment);}
+        audit.log("BATCH_TARGET",target.getId(),"RETRY","重试批量补丁目标，第 "+(retries+1)+" 次","Retrying batch patch target, attempt "+(retries+1),currentUser.name());return target;
+    }
+
+    private void refreshCounts(PatchDeployment deployment){
+        long success=deploymentTargets.countByDeploymentIdAndStatus(deployment.getId(),"SUCCEEDED"),failed=deploymentTargets.countByDeploymentIdAndStatus(deployment.getId(),"FAILED");
+        deployment.setSuccessCount((int)success);deployment.setFailureCount((int)failed);deployments.save(deployment);
+    }
+    private void pauseForFailure(PatchDeployment deployment,Long runId,double ratio){
+        deployment.setStatus(DeploymentStatus.PAUSED);deployments.save(deployment);OrchestrationRun run=runs.findById(runId).orElseThrow();run.setStatus(RunStatus.PAUSED);runs.save(run);
+        for(DeploymentTarget row:deploymentTargets.findByRunIdOrderByAssetIdAsc(runId))if("WAITING".equals(row.getStatus())){row.setStatus("PAUSED");row.setMessage("失败率达到 "+String.format(Locale.ROOT,"%.1f",ratio)+"%，执行已暂停");deploymentTargets.save(row);}
+        audit.log("BATCH_PATCH",deployment.getId(),"AUTO_PAUSE","失败率达到阈值，批量执行已暂停","Failure threshold reached; batch execution paused","System");
     }
 
     private OrchestrationRunStep step(Long runId, int order, String code, String zh, String en, boolean running) {

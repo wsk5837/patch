@@ -91,13 +91,16 @@ public class DashboardReportService {
         return result;
     }
 
-    public ReportView report() {
+    public ReportView report(){return report(30);}
+
+    public ReportView report(int requestedDays) {
+        int days=Math.max(7,Math.min(365,requestedDays));
         Instant now = Instant.now();
         ReportView cached = cachedReport;
-        if (cached != null && now.isBefore(reportExpiresAt)) return cached;
+        if (cached != null && cached.reportingWindowDays()==days && now.isBefore(reportExpiresAt)) return cached;
         synchronized (this) {
             now = Instant.now();
-            if (cachedReport != null && now.isBefore(reportExpiresAt)) return cachedReport;
+            if (cachedReport != null && cachedReport.reportingWindowDays()==days && now.isBefore(reportExpiresAt)) return cachedReport;
             long totalRuns = runs.count();
             long succeededRuns = runs.countByStatusIn(List.of(RunStatus.SUCCEEDED));
             Map<String, Long> severity = new LinkedHashMap<>();
@@ -135,7 +138,7 @@ public class DashboardReportService {
                     .filter(Objects::nonNull).sorted((left,right)->{int byRisk=Double.compare(right.highestRisk(),left.highestRisk());return byRisk!=0?byRisk:Long.compare(right.openFindings(),left.openFindings());}).limit(8).toList();
 
             ReportView result = new ReportView(
-                    reportNow.toString(),30,assets.countByActiveTrue(),
+                    reportNow.toString(),days,assets.countByActiveTrue(),
                     vulns.count(),
                     findings.countActiveOpen(CLOSED_FINDINGS),
                     findings.countActiveByStatus(FindingStatus.RESOLVED),
@@ -156,7 +159,7 @@ public class DashboardReportService {
                     severity,
                     environment,
                     deploymentStatus,
-                    trend(allActive,reportNow,30),ownerBacklog,riskAssets
+                    trend(allActive,reportNow,days),ownerBacklog,riskAssets
             );
             cachedReport = result;
             reportExpiresAt = now.plus(REPORT_CACHE_TTL);

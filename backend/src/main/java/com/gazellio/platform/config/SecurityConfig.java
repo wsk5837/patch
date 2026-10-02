@@ -49,7 +49,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/api/auth/**", "/api/agent/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/access-control/**").hasAnyAuthority("USER_MANAGE","ROLE_MANAGE","USER_CREDENTIAL_RESET","USER_ACCOUNT_STATUS")
-                        .requestMatchers(HttpMethod.GET, "/api/dashboard/report").hasAuthority("REPORT_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/dashboard/report", "/api/dashboard/report/**").hasAuthority("REPORT_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/dashboard/**").hasAuthority("DASHBOARD_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/vulnerabilities/**").hasAuthority("VULNERABILITY_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/scans/**").hasAuthority("SCAN_VIEW")
@@ -62,12 +62,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/automation/**").hasAuthority("AUTOMATION_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/audit/**").hasAuthority("AUDIT_VIEW")
                         .requestMatchers(HttpMethod.GET, "/api/settings/**").hasAuthority("SETTINGS_VIEW")
+                        .requestMatchers(HttpMethod.GET, "/api/compliance/**").hasAuthority("COMPLIANCE_VIEW")
                         .requestMatchers("/api/**").authenticated()
                         .requestMatchers(
                                 "/", "/index.html", "/favicon.ico", "/gazellio-logo.png", "/assets/**", "/error",
                                 "/login", "/vulnerabilities/**", "/scans/**", "/assets", "/patches/**",
                                 "/tasks/**", "/approvals/**", "/automation/**", "/reports/**", "/audit/**",
-                                "/settings/**"
+                                "/settings/**", "/compliance/**"
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class)

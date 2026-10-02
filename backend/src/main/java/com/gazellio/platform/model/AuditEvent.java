@@ -16,5 +16,7 @@ public class AuditEvent {
     @Column(length=120) private String actor;
     @Column(length=80) private String sourceIp;
     @Column(length=500) private String userAgent;
+    @Column(length=64) private String previousHash;
+    @Column(length=64) private String eventHash;
     @Column(nullable=false) @Builder.Default private Instant createdAt = Instant.now();
 }

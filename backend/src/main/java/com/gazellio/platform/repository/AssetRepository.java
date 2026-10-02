@@ -4,9 +4,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import java.util.*;
 import com.gazellio.platform.model.Enums.EnvironmentType;
-public interface AssetRepository extends JpaRepository<Asset, Long> {
+public interface AssetRepository extends JpaRepository<Asset, Long>, JpaSpecificationExecutor<Asset> {
  Optional<Asset> findByAssetCode(String assetCode); List<Asset> findByActiveTrueOrderByNameAsc();
  Optional<Asset> findByCmdbItemId(String cmdbItemId); List<Asset> findBySourceSystem(String sourceSystem);
  List<Asset> findBySourceSystemAndActiveTrueOrderByNameAsc(String sourceSystem);

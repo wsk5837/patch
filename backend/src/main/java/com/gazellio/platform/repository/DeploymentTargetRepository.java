@@ -11,4 +11,5 @@ public interface DeploymentTargetRepository extends JpaRepository<DeploymentTarg
     List<DeploymentTarget> findByDeploymentIdInOrderByDeploymentIdAscAssetIdAsc(Collection<Long> deploymentIds);
     List<DeploymentTarget> findByRunIdOrderByAssetIdAsc(Long runId);
     List<DeploymentTarget> findByRunIdInOrderByRunIdAscAssetIdAsc(Collection<Long> runIds);
+    long countByDeploymentIdAndStatus(Long deploymentId,String status);
 }

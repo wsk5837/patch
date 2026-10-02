@@ -1,12 +1,16 @@
 package com.gazellio.platform.service;
 import com.gazellio.platform.dto.ApiDtos.AssetScopeOptions;
 import com.gazellio.platform.dto.ApiDtos.AssetView;
+import com.gazellio.platform.dto.ApiDtos.PagedView;
 import com.gazellio.platform.dto.ApiDtos.CmdbClassOption;
 import com.gazellio.platform.config.CmdbProperties;
 import com.gazellio.platform.model.Asset;
 import com.gazellio.platform.repository.AssetRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -23,6 +27,16 @@ public class AssetService {
     private final AssetEligibilityPolicy eligibility;
 
     public List<AssetView> list(){return view.assetViews(managedAssets());}
+    public PagedView<AssetView> page(String q,String environment,String ciClass,int page,int size){
+        int safePage=Math.max(0,page),safeSize=Math.max(1,Math.min(100,size));
+        Specification<Asset> spec=(root,query,cb)->cb.isTrue(root.get("active"));
+        if(cmdbProperties.externalInventory())spec=spec.and((root,query,cb)->cb.equal(root.get("sourceSystem"),"CMDB"));
+        if(environment!=null&&!environment.isBlank()&&!"ALL".equalsIgnoreCase(environment))spec=spec.and((root,query,cb)->cb.equal(root.get("environment"),com.gazellio.platform.model.Enums.EnvironmentType.valueOf(environment.toUpperCase())));
+        if(ciClass!=null&&!ciClass.isBlank()&&!"ALL".equalsIgnoreCase(ciClass))spec=spec.and((root,query,cb)->cb.or(cb.equal(root.get("cmdbClassKey"),ciClass),cb.equal(root.get("assetType"),ciClass)));
+        if(q!=null&&!q.isBlank()){String pattern="%"+q.trim().toLowerCase()+"%";spec=spec.and((root,query,cb)->cb.or(cb.like(cb.lower(root.get("assetCode")),pattern),cb.like(cb.lower(root.get("name")),pattern),cb.like(cb.lower(root.get("ipAddress")),pattern),cb.like(cb.lower(root.get("networkSegment")),pattern),cb.like(cb.lower(root.get("businessService")),pattern),cb.like(cb.lower(root.get("ownerName")),pattern),cb.like(cb.lower(root.get("installedProducts")),pattern),cb.like(cb.lower(root.get("cmdbClassName")),pattern)));}
+        var result=assets.findAll(spec,PageRequest.of(safePage,safeSize,Sort.by(Sort.Order.asc("name"),Sort.Order.asc("id"))));
+        return new PagedView<>(view.assetViews(result.getContent()),result.getTotalElements(),result.getNumber()+1,result.getSize(),Math.max(1,result.getTotalPages()));
+    }
     public List<AssetView> scanTargets(){return view.assetViews(managedAssets().stream().filter(eligibility::scannable).toList());}
     public AssetView get(Long id){return view.asset(assets.findById(id).orElseThrow());}
 
