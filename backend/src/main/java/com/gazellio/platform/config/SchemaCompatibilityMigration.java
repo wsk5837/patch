@@ -113,6 +113,7 @@ public class SchemaCompatibilityMigration implements ApplicationRunner {
         addColumn("audit_events", "user_agent", "varchar(500)");
         addColumn("audit_events", "previous_hash", "varchar(64)");
         addColumn("audit_events", "event_hash", "varchar(64)");
+        addColumn("audit_events", "hash_version", "varchar(20)");
 
         addColumn("patches", "applicability_rule", "text");
         addColumn("patches", "applicability_rule_en", "text");
